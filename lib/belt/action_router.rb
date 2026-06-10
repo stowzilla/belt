@@ -110,6 +110,10 @@ module Belt
     end
 
     def resolve_controller(controller_name)
+      # Check registry first (gems register their controllers here)
+      registered = Belt.controller_registry[controller_name.to_s]
+      return registered if registered
+
       namespace_module = Object.const_get(@namespace_module_name)
 
       if controller_name.include?("/")

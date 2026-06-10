@@ -201,6 +201,17 @@ error_response("Not found", 404)                        # 404 JSON error
 html_response("<h1>Hello</h1>")                         # 200 HTML with CORS
 ```
 
+## Controller Registry
+
+Gems can register controllers so Belt's `ActionRouter` discovers them without requiring a shim in the host app:
+
+```ruby
+# In your gem's initializer or boot file
+Belt.register_controller("s3arch_dashboard", S3arch::Dashboard::S3archController)
+```
+
+The router checks the registry before falling back to namespace lookup. This lets gems ship their own controllers that inherit from `BeltController::Base`.
+
 ## Belt::Observability
 
 Belt provides global `Belt::Observability::Logger` and `Belt::Observability::Metrics` facades that are set automatically by `Belt::LambdaHandler`. Access them from anywhere:

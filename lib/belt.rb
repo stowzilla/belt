@@ -10,6 +10,16 @@ module Belt
   class AuthenticationError < StandardError; end
   class RecordNotFound < StandardError; end
   class ActionNotFound < StandardError; end
+
+  @controller_registry = {}
+
+  def self.register_controller(name, klass)
+    @controller_registry[name.to_s] = klass
+  end
+
+  def self.controller_registry
+    @controller_registry
+  end
 end
 
 require_relative "belt_controller/base"
