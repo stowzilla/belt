@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.4
+
+- Added `Belt::Holster` — Belt's equivalent of Rails Engines. Gems subclass `Belt::Holster` to provide controllers, models, routes, and schema via convention.
+- Added `Belt.all_controller_paths`, `Belt.all_models_paths`, `Belt.all_routes_paths`, `Belt.all_schema_paths` aggregation methods
+- `Belt::ActionRouter` now searches holster controller paths automatically
+
 ## 0.0.3
 
 - Added `Belt::LambdaHandler` — module for Lambda entry points with observability, CORS preflight, JSON parsing, and error wrapping

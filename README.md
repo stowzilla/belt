@@ -201,16 +201,59 @@ error_response("Not found", 404)                        # 404 JSON error
 html_response("<h1>Hello</h1>")                         # 200 HTML with CORS
 ```
 
-## Controller Discovery
+## Holsters (Belt's Engines)
 
-Belt discovers controllers by scanning `Belt.controller_paths`. Gems that ship their own controllers just add their path:
+Holsters are Belt's equivalent of Rails Engines. A holster lets a gem provide its own controllers, models, routes, and schema — all discovered automatically via convention.
+
+### Creating a Holster
+
+In your gem, subclass `Belt::Holster`:
 
 ```ruby
-# In your gem's entry point
-Belt.controller_paths << File.expand_path("lambda/controllers", __dir__)
+# lib/s3arch/holster.rb
+module S3arch
+  class Holster < Belt::Holster
+  end
+end
 ```
 
-The router checks the app's namespace module first, then scans `controller_paths` for gem-provided controllers. No registration needed — just put your controller files in the right directory and Belt finds them.
+That's it. Belt discovers all `Holster` subclasses at boot. By convention, it expects:
+
+```
+your-gem/
+├── infrastructure/
+│   ├── routes.tf.rb      # Holster's route definitions
+│   └── schema.tf.rb      # Holster's DynamoDB tables
+└── lambda/
+    ├── controllers/      # Holster's controllers
+    └── models/           # Holster's models
+```
+
+No configuration needed if you follow the convention. Belt resolves paths relative to your gem's root (two directories up from the holster file).
+
+### Customizing Paths
+
+If your gem uses a different layout, override any path:
+
+```ruby
+module MyGem
+  class Holster < Belt::Holster
+    self.gem_root = File.expand_path("..", __dir__)
+    self.controllers_path = File.join(gem_root, "app", "controllers")
+  end
+end
+```
+
+### How Belt Uses Holsters
+
+- **Controllers**: `Belt::ActionRouter` searches holster controller paths automatically
+- **Routes**: `Belt.all_routes_paths` collects all holster `routes.tf.rb` files for the Terraform provider
+- **Schema**: `Belt.all_schema_paths` collects all holster `schema.tf.rb` files for the Terraform provider
+- **Models**: `Belt.all_models_paths` collects all holster model directories
+
+## Controller Discovery
+
+Belt discovers controllers from the app's namespace module first, then searches `Belt.all_controller_paths` — which includes both app-defined paths and holster-provided paths. No registration needed.
 
 ## Belt::Observability
 

@@ -139,7 +139,7 @@ module Belt
                     "#{controller_name}_controller.rb"
                   end
 
-      Belt.controller_paths.each do |path|
+      Belt.all_controller_paths.each do |path|
         full_path = File.join(path, file_name)
         if File.exist?(full_path)
           require full_path
