@@ -11,14 +11,10 @@ module Belt
   class RecordNotFound < StandardError; end
   class ActionNotFound < StandardError; end
 
-  @controller_registry = {}
+  @controller_paths = []
 
-  def self.register_controller(name, klass)
-    @controller_registry[name.to_s] = klass
-  end
-
-  def self.controller_registry
-    @controller_registry
+  def self.controller_paths
+    @controller_paths
   end
 end
 

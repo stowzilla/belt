@@ -110,12 +110,19 @@ module Belt
     end
 
     def resolve_controller(controller_name)
-      # Check registry first (gems register their controllers here)
-      registered = Belt.controller_registry[controller_name.to_s]
-      return registered if registered
+      # Try namespace module first (app's own controllers)
+      begin
+        namespace_module = Object.const_get(@namespace_module_name)
+        return resolve_from_module(namespace_module, controller_name)
+      rescue NameError
+        # Fall through to controller_paths lookup
+      end
 
-      namespace_module = Object.const_get(@namespace_module_name)
+      # Scan controller_paths (gem-provided controllers via convention)
+      resolve_from_paths(controller_name)
+    end
 
+    def resolve_from_module(namespace_module, controller_name)
       if controller_name.include?("/")
         parts = controller_name.split("/")
         parent = namespace_module.const_get(parts[0].split("_").map(&:capitalize).join)
@@ -123,6 +130,26 @@ module Belt
       else
         namespace_module.const_get("#{controller_name.split('_').map(&:capitalize).join}Controller")
       end
+    end
+
+    def resolve_from_paths(controller_name)
+      file_name = if controller_name.include?("/")
+                    "#{controller_name}_controller.rb"
+                  else
+                    "#{controller_name}_controller.rb"
+                  end
+
+      Belt.controller_paths.each do |path|
+        full_path = File.join(path, file_name)
+        if File.exist?(full_path)
+          require full_path
+          # After requiring, try to find the constant
+          class_name = controller_name.split(/[_\/]/).map(&:capitalize).join + "Controller"
+          return Object.const_get(class_name) if Object.const_defined?(class_name)
+        end
+      end
+
+      raise Belt::ActionNotFound, "Controller not found: #{controller_name}"
     end
 
     def error_response(message, status_code, event = nil)
