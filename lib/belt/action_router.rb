@@ -87,13 +87,16 @@ module Belt
     end
 
     def path_to_regex(pattern)
-      regex_str = pattern
-        .gsub(/\{[^}]+\}/, "___PARAM___")
-        .gsub(/[.+?^${}()|\\]/) { |c| "\\#{c}" }
-        .gsub("[", '\[').gsub("]", '\]')
-        .gsub("___PARAM___", "([^/]+)")
+      segments = pattern.split("/")
+      regex_parts = segments.map do |seg|
+        if seg =~ /\A\{[^}]+\}\z/
+          "([^/]+)"
+        else
+          Regexp.escape(seg)
+        end
+      end
 
-      Regexp.new("^#{regex_str}$")
+      Regexp.new("\\A#{regex_parts.join('/')}\\z")
     end
 
     def dispatch_to_controller(route_info, event, body)
