@@ -1,11 +1,15 @@
 # Changelog
 
-## 0.0.2 (2026-06-10)
+## 0.0.3
 
-- Add BeltController::Base with callbacks, strong parameters, error handling, and CORS
-- Add activeitem, lambda_loadout, and s3arch as dependencies
-- Fix conflicting VERSION constants
+- Added `Belt::LambdaHandler` — module for Lambda entry points with observability, CORS preflight, JSON parsing, and error wrapping
+- Added `Belt::ActionRouter` — request routing to controllers based on route manifests
+- Added `Belt::Observability` — global Logger and Metrics facades for access from anywhere in the codebase
 
-## 0.1.0 (2026-05-18)
+## 0.0.2
 
-- Initial release — namespace claim
+- Renamed base class to `BeltController::Base` (mirrors `ActionController::Base`)
+- Added `BeltController::Base` with callbacks, strong params, CORS, error handling
+- Added `ActionController::Parameters` (strong params without Rails)
+- Added response helpers and CORS origin resolution
+- Bundled dependencies: activeitem, lambda_loadout, s3arch

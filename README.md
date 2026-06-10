@@ -5,6 +5,8 @@ A Rails-inspired framework for building serverless Ruby applications on AWS Lamb
 Belt bundles everything you need to go from zero to production:
 
 - **BeltController** — callbacks, strong parameters, error handling, CORS
+- **Belt::LambdaHandler** — Lambda entry point with observability, CORS preflight, error wrapping
+- **Belt::ActionRouter** — request routing to controllers from route manifests
 - **ActiveItem** — DynamoDB ORM (queries, validations, associations, transactions)
 - **Lambda Loadout** — structured logging, CloudWatch metrics (EMF), error alerting
 - **S3arch** — full-text search via SQLite FTS5, stored on S3, queried from Lambda
@@ -35,8 +37,11 @@ my-app/
 ├── lambda/
 │   ├── controllers/
 │   │   └── posts_controller.rb
-│   └── models/
-│       └── post.rb
+│   ├── models/
+│   │   └── post.rb
+│   ├── lib/
+│   │   └── routes.rb
+│   └── api.rb              # Lambda entry point
 ├── Gemfile
 └── Gemfile.lock
 ```
@@ -82,7 +87,30 @@ class PostsController < BeltController::Base
 end
 ```
 
-### 4. Configure the Belt Terraform provider
+### 4. Lambda entry point
+
+Use `Belt::LambdaHandler` to get automatic observability, CORS preflight handling, and error wrapping:
+
+```ruby
+require "belt"
+
+include Belt::LambdaHandler
+
+ROUTER = Belt::ActionRouter.new(routes: Routes::API, namespace: "api")
+
+def execute(path:, body:, event:)
+  ROUTER.route(event: event, body: body)
+end
+```
+
+That's it. `lambda_handler` is automatically your Lambda function handler. It:
+- Initializes structured logging and CloudWatch metrics
+- Handles OPTIONS preflight requests
+- Parses JSON request bodies
+- Catches unhandled errors and returns proper CORS-enabled error responses
+- Calls your `execute` method for routing
+
+### 5. Configure the Belt Terraform provider
 
 The Belt Terraform provider (formerly Dispatcher) handles Lambda packaging, API Gateway routing, and IAM permissions.
 
@@ -132,24 +160,6 @@ The provider will:
 - Generate IAM policies for DynamoDB table access
 - Set up CloudWatch log groups
 
-### 5. Observability (Lambda Loadout)
-
-Lambda Loadout is included automatically. Use it in your Lambda handler entry point:
-
-```ruby
-require "belt"
-require "lambda_loadout"
-
-LOGGER = LambdaLoadout::Logger.new(service: "my-app")
-METRICS = LambdaLoadout::Metrics.new(namespace: "MyApp", service: "my-app")
-
-def handler(event:, context:)
-  LambdaLoadout.with_logging_and_metrics(LOGGER, METRICS, context, event: event) do
-    # Your router dispatches to controllers here
-  end
-end
-```
-
 ## BeltController Features
 
 ### Callbacks
@@ -191,11 +201,23 @@ error_response("Not found", 404)                        # 404 JSON error
 html_response("<h1>Hello</h1>")                         # 200 HTML with CORS
 ```
 
+## Belt::Observability
+
+Belt provides global `Belt::Observability::Logger` and `Belt::Observability::Metrics` facades that are set automatically by `Belt::LambdaHandler`. Access them from anywhere:
+
+```ruby
+Belt::Observability::Logger.info("Something happened", user_id: "123")
+Belt::Observability::Metrics.track_event("OrderCreated", model: "Order")
+```
+
 ## Environment Variables
 
 | Variable | Purpose |
 |----------|---------|
 | `ENVIRONMENT` | Controls verbose error responses (`dev*`, `local`, `test`) |
+| `BELT_METRICS_NAMESPACE` | CloudWatch metrics namespace (default: `Belt`) |
+| `ACTION` | Service name for logging (falls back to function name) |
+| `ERROR_NOTIFICATION_TOPIC_ARN` | SNS topic for error alerts |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated origins (overrides domain vars) |
 | `CUSTOMER_APP_DOMAIN` | Primary app domain for CORS |
 | `OPS_APP_DOMAIN` | Internal tools domain for CORS |
