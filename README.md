@@ -4,7 +4,7 @@ A Rails-inspired framework for building serverless Ruby applications on AWS Lamb
 
 Belt bundles everything you need to go from zero to production:
 
-- **ApplicationController** — callbacks, strong parameters, error handling, CORS
+- **BeltController** — callbacks, strong parameters, error handling, CORS
 - **ActiveItem** — DynamoDB ORM (queries, validations, associations, transactions)
 - **Lambda Loadout** — structured logging, CloudWatch metrics (EMF), error alerting
 - **S3arch** — full-text search via SQLite FTS5, stored on S3, queried from Lambda
@@ -61,7 +61,7 @@ end
 ```ruby
 require "belt"
 
-class PostsController < Belt::ApplicationController
+class PostsController < BeltController::Base
   before_action :authenticate!
 
   def index
@@ -150,12 +150,12 @@ def handler(event:, context:)
 end
 ```
 
-## ApplicationController Features
+## BeltController Features
 
 ### Callbacks
 
 ```ruby
-class AdminController < Belt::ApplicationController
+class AdminController < BeltController::Base
   before_action :authenticate!
   before_action :require_admin!, except: [:health]
   skip_before_action :authenticate!, only: [:health]
@@ -171,7 +171,7 @@ params.require(:user).permit(:name, :email, address: [:street, :city])
 ### Error Handling
 
 ```ruby
-class ApiController < Belt::ApplicationController
+class ApiController < BeltController::Base
   rescue_from MyCustomError, with: :handle_custom
 
   private

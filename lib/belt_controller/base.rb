@@ -2,18 +2,14 @@
 
 require "json"
 require "cgi"
-require_relative "parameters"
-require_relative "helpers/response"
-require_relative "helpers/error_logging"
-require_relative "helpers/cors_origin"
+require_relative "../belt/parameters"
+require_relative "../belt/helpers/response"
+require_relative "../belt/helpers/error_logging"
+require_relative "../belt/helpers/cors_origin"
 
-module Belt
-  class AuthenticationError < StandardError; end
-  class RecordNotFound < StandardError; end
-  class ActionNotFound < StandardError; end
-
-  class ApplicationController
-    include Helpers::Response
+module BeltController
+  class Base
+    include Belt::Helpers::Response
 
     attr_reader :event, :body
 
