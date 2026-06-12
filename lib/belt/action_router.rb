@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-require "json"
-require_relative "helpers/cors_origin"
+require 'json'
+require_relative 'helpers/cors_origin'
 
 module Belt
   # Routes incoming requests to controllers based on a route manifest.
@@ -20,37 +20,35 @@ module Belt
     end
 
     def route(event:, body:)
-      method = event["httpMethod"]
-      full_path = event["path"]
+      method = event['httpMethod']
+      full_path = event['path']
       match_path = strip_namespace_prefix(full_path)
 
       route_info = find_route(method, match_path)
 
       unless route_info
-        Belt::Observability::Logger.instance&.warn("Route not found", method: method, path: full_path)
-        return error_response("Not found", 404, event)
+        Belt::Observability::Logger.instance&.warn('Route not found', method: method, path: full_path)
+        return error_response('Not found', 404, event)
       end
 
       path_params = extract_path_params(route_info[:pattern], match_path)
-      event["pathParameters"] = (event["pathParameters"] || {}).merge(path_params)
+      event['pathParameters'] = (event['pathParameters'] || {}).merge(path_params)
 
       dispatch_to_controller(route_info, event, body)
     end
 
     def find_route(method, path)
-      path_segments = path.split("/")
+      path_segments = path.split('/')
       @routes.find { |r| r[:verb] == method && segments_match?(r[:segments], path_segments) }
     end
 
     def extract_path_params(pattern, actual_path)
-      pattern_segments = pattern.split("/")
-      path_segments = actual_path.split("/")
+      pattern_segments = pattern.split('/')
+      path_segments = actual_path.split('/')
       params = {}
 
       pattern_segments.each_with_index do |seg, i|
-        if seg.start_with?("{") && seg.end_with?("}")
-          params[seg[1..-2]] = path_segments[i]
-        end
+        params[seg[1..-2]] = path_segments[i] if seg.start_with?('{') && seg.end_with?('}')
       end
 
       params
@@ -59,12 +57,12 @@ module Belt
     private
 
     def strip_namespace_prefix(path)
-      return "/" if path.nil?
+      return '/' if path.nil?
 
       prefix = "/#{@namespace}"
       if path.start_with?(prefix)
-        stripped = path.sub(prefix, "")
-        stripped.empty? ? "/" : stripped
+        stripped = path.sub(prefix, '')
+        stripped.empty? ? '/' : stripped
       else
         path
       end
@@ -76,19 +74,19 @@ module Belt
     end
 
     def route_specificity(pattern)
-      segments = pattern.split("/").reject(&:empty?)
-      param_count = segments.count { |s| s.start_with?("{") }
+      segments = pattern.split('/').reject(&:empty?)
+      param_count = segments.count { |s| s.start_with?('{') }
       [param_count, -segments.length, pattern]
     end
 
     def build_route_entry(route)
-      pattern = route[:path] || route["path"]
+      pattern = route[:path] || route['path']
       {
-        verb: route[:verb] || route["verb"],
+        verb: route[:verb] || route['verb'],
         pattern: pattern,
-        segments: pattern.split("/"),
-        controller: route[:controller] || route["controller"],
-        action: route[:action] || route["action"]
+        segments: pattern.split('/'),
+        controller: route[:controller] || route['controller'],
+        action: route[:action] || route['action']
       }
     end
 
@@ -96,7 +94,7 @@ module Belt
       return false unless pattern_segments.length == path_segments.length
 
       pattern_segments.each_with_index do |seg, i|
-        next if seg.start_with?("{") && seg.end_with?("}")
+        next if seg.start_with?('{') && seg.end_with?('}')
         return false unless seg == path_segments[i]
       end
 
@@ -107,7 +105,7 @@ module Belt
       controller_class = resolve_controller(route_info[:controller])
       controller = controller_class.new(event: event, body: body)
 
-      controller_name = controller_class.name.split("::").last.gsub("Controller", "")
+      controller_name = controller_class.name.split('::').last.gsub('Controller', '')
       Belt::Observability::Logger.instance&.info("Processing by #{controller_name}##{route_info[:action]}")
 
       controller.dispatch(route_info[:action].to_sym)
@@ -127,9 +125,9 @@ module Belt
     end
 
     def resolve_from_module(namespace_module, controller_name)
-      if controller_name.include?("/")
-        parts = controller_name.split("/")
-        parent = namespace_module.const_get(parts[0].split("_").map(&:capitalize).join)
+      if controller_name.include?('/')
+        parts = controller_name.split('/')
+        parent = namespace_module.const_get(parts[0].split('_').map(&:capitalize).join)
         parent.const_get("#{parts[1].split('_').map(&:capitalize).join}Controller")
       else
         namespace_module.const_get("#{controller_name.split('_').map(&:capitalize).join}Controller")
@@ -137,20 +135,18 @@ module Belt
     end
 
     def resolve_from_paths(controller_name)
-      file_name = if controller_name.include?("/")
-                    "#{controller_name}_controller.rb"
-                  else
-                    "#{controller_name}_controller.rb"
-                  end
+      if controller_name.include?('/')
+      end
+      file_name = "#{controller_name}_controller.rb"
 
       Belt.all_controller_paths.each do |path|
         full_path = File.join(path, file_name)
-        if File.exist?(full_path)
-          require full_path
-          # After requiring, try to find the constant
-          class_name = controller_name.split(/[_\/]/).map(&:capitalize).join + "Controller"
-          return Object.const_get(class_name) if Object.const_defined?(class_name)
-        end
+        next unless File.exist?(full_path)
+
+        require full_path
+        # After requiring, try to find the constant
+        class_name = "#{controller_name.split(%r{[_/]}).map(&:capitalize).join}Controller"
+        return Object.const_get(class_name) if Object.const_defined?(class_name)
       end
 
       raise Belt::ActionNotFound, "Controller not found: #{controller_name}"
@@ -159,11 +155,11 @@ module Belt
     def error_response(message, status_code, event = nil)
       origin = Belt::Helpers::CorsOrigin.resolve_origin(Belt::Helpers::CorsOrigin.origin_from_event(event))
       headers = {
-        "Access-Control-Allow-Headers" => "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
-        "Access-Control-Allow-Methods" => "GET,POST,PUT,DELETE,PATCH,OPTIONS",
-        "Content-Type" => "application/json"
+        'Access-Control-Allow-Headers' => 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+        'Access-Control-Allow-Methods' => 'GET,POST,PUT,DELETE,PATCH,OPTIONS',
+        'Content-Type' => 'application/json'
       }
-      headers["Access-Control-Allow-Origin"] = origin if origin
+      headers['Access-Control-Allow-Origin'] = origin if origin
       { statusCode: status_code, headers: headers, body: JSON.generate(error: message) }
     end
   end

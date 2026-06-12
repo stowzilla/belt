@@ -10,23 +10,22 @@ module Belt
 
         if logger
           logger.error(message,
-            error_class: error.class.name,
-            error_message: error.message,
-            backtrace: filtered_backtrace,
-            backtrace_full: error.backtrace&.first(20),
-            **context
-          )
+                       error_class: error.class.name,
+                       error_message: error.message,
+                       backtrace: filtered_backtrace,
+                       backtrace_full: error.backtrace&.first(20),
+                       **context)
         else
-          require "json"
+          require 'json'
           puts JSON.generate({
-            level: "ERROR",
-            message: message,
-            error_class: error.class.name,
-            error_message: error.message,
-            backtrace: filtered_backtrace,
-            timestamp: Time.now.utc.iso8601,
-            **context
-          })
+                               level: 'ERROR',
+                               message: message,
+                               error_class: error.class.name,
+                               error_message: error.message,
+                               backtrace: filtered_backtrace,
+                               timestamp: Time.now.utc.iso8601,
+                               **context
+                             })
         end
       end
 
@@ -34,7 +33,7 @@ module Belt
         return [] if backtrace.nil? || backtrace.empty?
 
         app_patterns = [%r{/var/task/}, %r{lambda/}, %r{controllers/}, %r{models/}, %r{lib/}, %r{helpers/}]
-        exclude_patterns = [%r{/var/runtime/}, %r{/opt/ruby/}, %r{/gems/}, %r{rubygems}, %r{<internal:}]
+        exclude_patterns = [%r{/var/runtime/}, %r{/opt/ruby/}, %r{/gems/}, /rubygems/, /<internal:/]
 
         app_lines = []
         lib_lines = []

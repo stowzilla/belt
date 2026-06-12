@@ -1,0 +1,50 @@
+AllCops:
+  NewCops: enable
+  TargetRubyVersion: 3.2
+  SuggestExtensions: false
+
+Metrics/MethodLength:
+  Max: 25
+  CountAsOne: ['array', 'hash', 'heredoc']
+  Exclude:
+    - 'lib/belt/lambda_handler.rb'
+
+Metrics/AbcSize:
+  Max: 40
+
+Metrics/CyclomaticComplexity:
+  Max: 15
+
+Metrics/PerceivedComplexity:
+  Max: 15
+
+Metrics/ClassLength:
+  Max: 250
+
+Metrics/BlockLength:
+  Exclude:
+    - 'spec/**/*'
+
+Style/Documentation:
+  Enabled: false
+
+Style/SafeNavigationChainLength:
+  Enabled: false
+
+Style/OptionalBooleanParameter:
+  Enabled: false
+
+Lint/DuplicateBranch:
+  Enabled: false
+
+Lint/DuplicateMethods:
+  Enabled: false
+
+Lint/SuppressedException:
+  Enabled: false
+
+Lint/EmptyConditionalBody:
+  Enabled: false
+
+Gemspec/RequiredRubyVersion:
+  Enabled: false

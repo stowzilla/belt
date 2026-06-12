@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
-require "json"
-require "cgi"
-require_relative "../belt/parameters"
-require_relative "../belt/helpers/response"
-require_relative "../belt/helpers/error_logging"
-require_relative "../belt/helpers/cors_origin"
+require 'json'
+require 'cgi'
+require_relative '../belt/parameters'
+require_relative '../belt/helpers/response'
+require_relative '../belt/helpers/error_logging'
+require_relative '../belt/helpers/cors_origin'
 
 module BeltController
   class Base
@@ -86,13 +86,9 @@ module BeltController
     rescue_from ActionController::ParameterMissing, with: :handle_parameter_missing
     rescue_from ActionController::UnpermittedParameters, with: :handle_unpermitted_parameters
 
-    if defined?(ActiveItem::RecordNotFound)
-      rescue_from ActiveItem::RecordNotFound, with: :handle_not_found
-    end
+    rescue_from ActiveItem::RecordNotFound, with: :handle_not_found if defined?(ActiveItem::RecordNotFound)
 
-    if defined?(ActiveModel::ValidationError)
-      rescue_from ActiveModel::ValidationError, with: :handle_validation_error
-    end
+    rescue_from ActiveModel::ValidationError, with: :handle_validation_error if defined?(ActiveModel::ValidationError)
 
     def initialize(event:, body:)
       @event = event
@@ -125,13 +121,14 @@ module BeltController
     end
 
     def authenticate!
-      user_id = event.dig("requestContext", "authorizer", "claims", "sub")
-      raise Belt::AuthenticationError, "Authentication required" unless user_id
+      user_id = event.dig('requestContext', 'authorizer', 'claims', 'sub')
+      raise Belt::AuthenticationError, 'Authentication required' unless user_id
+
       @current_user_id = user_id
     end
 
     def current_user_id
-      @current_user_id ||= event.dig("requestContext", "authorizer", "claims", "sub")
+      @current_user_id ||= event.dig('requestContext', 'authorizer', 'claims', 'sub')
     end
 
     def user_groups
@@ -139,11 +136,11 @@ module BeltController
     end
 
     def admin?
-      user_groups.include?("Admin")
+      user_groups.include?('Admin')
     end
 
     def employee?
-      user_groups.include?("Employee")
+      user_groups.include?('Employee')
     end
 
     def action_name
@@ -155,8 +152,9 @@ module BeltController
     def run_before_actions(action_sym)
       self.class.all_before_actions.each do |callback|
         next if callback[:only] && !callback[:only].include?(action_sym)
-        next if callback[:except] && callback[:except].include?(action_sym)
+        next if callback[:except]&.include?(action_sym)
         next if should_skip_callback?(callback[:method], action_sym)
+
         send(callback[:method])
       end
     end
@@ -164,7 +162,8 @@ module BeltController
     def run_after_actions(action_sym)
       self.class.all_after_actions.each do |callback|
         next if callback[:only] && !callback[:only].include?(action_sym)
-        next if callback[:except] && callback[:except].include?(action_sym)
+        next if callback[:except]&.include?(action_sym)
+
         send(callback[:method])
       end
     end
@@ -172,6 +171,7 @@ module BeltController
     def should_skip_callback?(method_name, action_sym)
       self.class.all_skipped_before_actions.any? do |skip|
         next false unless skip[:method] == method_name
+
         if skip[:only]
           skip[:only].include?(action_sym)
         elsif skip[:except]
@@ -184,22 +184,23 @@ module BeltController
 
     def handle_exception(exception, context = {})
       if @current_action
-        controller_name = self.class.name.split("::").last.sub("Controller", "").downcase
+        controller_name = self.class.name.split('::').last.sub('Controller', '').downcase
         context[:action] ||= "#{controller_name}##{@current_action}"
       end
-      context[:resource_id] ||= params["id"] if params["id"]
+      context[:resource_id] ||= params['id'] if params['id']
 
       handler = find_rescue_handler(exception.class)
       if handler
         send(handler, exception, context)
       else
-        handle_error_and_respond(exception, "Internal server error", context, 500)
+        handle_error_and_respond(exception, 'Internal server error', context, 500)
       end
     end
 
     def find_rescue_handler(exception_class)
       handlers = self.class.all_rescue_handlers
       return handlers[exception_class] if handlers[exception_class]
+
       exception_class.ancestors.each do |ancestor|
         break if ancestor == Object
         return handlers[ancestor] if handlers[ancestor]
@@ -212,11 +213,11 @@ module BeltController
     end
 
     def handle_validation_error(exception, _context = {})
-      error_response(exception.model.errors.full_messages.join(", "), 400)
+      error_response(exception.model.errors.full_messages.join(', '), 400)
     end
 
     def handle_not_found(exception, _context = {})
-      error_response(exception.message.to_s.empty? ? "Record not found" : exception.message, 404)
+      error_response(exception.message.to_s.empty? ? 'Record not found' : exception.message, 404)
     end
 
     def handle_action_not_found(exception, _context = {})
@@ -224,7 +225,7 @@ module BeltController
     end
 
     def handle_authentication_error(exception, _context = {})
-      error_response(exception.message.to_s.empty? ? "Authentication required" : exception.message, 401)
+      error_response(exception.message.to_s.empty? ? 'Authentication required' : exception.message, 401)
     end
 
     def handle_parameter_missing(exception, _context = {})
@@ -232,25 +233,25 @@ module BeltController
     end
 
     def handle_unpermitted_parameters(exception, _context = {})
-      error_response("Unpermitted parameters: #{exception.params.join(", ")}", 400)
+      error_response("Unpermitted parameters: #{exception.params.join(', ')}", 400)
     end
 
     def build_params
       path_params = extract_path_params(@event)
-      query_params = @event["queryStringParameters"] || {}
+      query_params = @event['queryStringParameters'] || {}
       merged = query_params.merge(@raw_body).merge(path_params)
       ActionController::Parameters.new(merged)
     end
 
     def extract_path_params(event)
-      (event["pathParameters"] || {}).transform_keys { |key| key.to_s.gsub(/([A-Z])/, '_\1').downcase.sub(/^_/, "") }
+      (event['pathParameters'] || {}).transform_keys { |key| key.to_s.gsub(/([A-Z])/, '_\1').downcase.sub(/^_/, '') }
                                      .transform_values { |v| CGI.unescape(v.to_s) }
     end
 
     def deep_transform_keys_to_snake_case(value)
       case value
       when Hash
-        value.transform_keys { |key| key.to_s.gsub(/([A-Z])/, '_\1').downcase.sub(/^_/, "") }
+        value.transform_keys { |key| key.to_s.gsub(/([A-Z])/, '_\1').downcase.sub(/^_/, '') }
              .transform_values { |v| deep_transform_keys_to_snake_case(v) }
       when Array
         value.map { |item| deep_transform_keys_to_snake_case(item) }
@@ -260,19 +261,22 @@ module BeltController
     end
 
     def extract_user_groups
-      groups = event.dig("requestContext", "authorizer", "claims", "cognito:groups")
+      groups = event.dig('requestContext', 'authorizer', 'claims', 'cognito:groups')
       return parse_groups(groups) if groups
+
       []
     end
 
     def parse_groups(groups)
       return groups if groups.is_a?(Array)
       return [] unless groups.is_a?(String)
+
       begin
         parsed = JSON.parse(groups)
         return parsed if parsed.is_a?(Array)
-      rescue JSON::ParserError; end
-      groups.split(",").map(&:strip)
+      rescue JSON::ParserError
+      end
+      groups.split(',').map(&:strip)
     end
   end
 end

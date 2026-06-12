@@ -50,11 +50,11 @@ module Belt
         end
 
         def track_event(event_name, **dimensions)
-          instance&.add_metric(name: event_name, unit: "Count", value: 1)
+          instance&.add_metric(name: event_name, unit: 'Count', value: 1)
           dimensions.each { |k, v| instance&.add_dimension(name: k.to_s, value: v.to_s) }
         end
 
-        def track_value(metric_name, value, unit: "None", **dimensions)
+        def track_value(metric_name, value, unit: 'None', **dimensions)
           instance&.add_metric(name: metric_name, unit: unit, value: value)
           dimensions.each { |k, v| instance&.add_dimension(name: k.to_s, value: v.to_s) }
         end

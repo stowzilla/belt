@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-require_relative "error_logging"
-require_relative "cors_origin"
+require_relative 'error_logging'
+require_relative 'cors_origin'
 
 module Belt
   module Helpers
@@ -10,12 +10,12 @@ module Belt
         event = @event if event.nil? && instance_variable_defined?(:@event)
         origin = CorsOrigin.resolve_origin(CorsOrigin.origin_from_event(event))
         headers = {
-          "Access-Control-Allow-Headers" => "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
-          "Access-Control-Allow-Methods" => "GET,POST,PUT,DELETE,PATCH,OPTIONS",
-          "Access-Control-Max-Age" => "300",
-          "Content-Type" => "application/json"
+          'Access-Control-Allow-Headers' => 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+          'Access-Control-Allow-Methods' => 'GET,POST,PUT,DELETE,PATCH,OPTIONS',
+          'Access-Control-Max-Age' => '300',
+          'Content-Type' => 'application/json'
         }
-        headers["Access-Control-Allow-Origin"] = origin if origin
+        headers['Access-Control-Allow-Origin'] = origin if origin
         headers
       end
 
@@ -34,8 +34,8 @@ module Belt
       def html_response(html, status_code = 200)
         event = @event if instance_variable_defined?(:@event)
         origin = CorsOrigin.resolve_origin(CorsOrigin.origin_from_event(event))
-        headers = { "Content-Type" => "text/html; charset=utf-8" }
-        headers["Access-Control-Allow-Origin"] = origin if origin
+        headers = { 'Content-Type' => 'text/html; charset=utf-8' }
+        headers['Access-Control-Allow-Origin'] = origin if origin
         { statusCode: status_code, headers: headers, body: html }
       end
 
@@ -45,7 +45,7 @@ module Belt
           error_details = {
             type: error.class.name, message: error.message,
             backtrace: ErrorLogging.filter_backtrace(error.backtrace || []),
-            environment: ENV["ENVIRONMENT"]
+            environment: ENV.fetch('ENVIRONMENT', nil)
           }
           error_details[:context] = context unless context.empty?
           error_response(message, status_code, error_details)
@@ -57,8 +57,8 @@ module Belt
       private
 
       def verbose_errors_enabled?
-        env = ENV["ENVIRONMENT"]&.downcase || ""
-        env.start_with?("dev") || env == "local" || env == "test"
+        env = ENV['ENVIRONMENT']&.downcase || ''
+        env.start_with?('dev') || env == 'local' || env == 'test'
       end
 
       def log_error(message, error, context = {})
