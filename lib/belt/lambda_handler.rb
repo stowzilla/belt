@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-require "json"
-require "lambda_loadout"
-require_relative "observability"
-require_relative "helpers/response"
+require 'json'
+require 'lambda_loadout'
+require_relative 'observability'
+require_relative 'helpers/response'
 
 module Belt
   # Lambda handler module — include in your Lambda entry point to get automatic
@@ -39,39 +39,36 @@ module Belt
         context,
         event: event,
         error_notification_config: {
-          sns_topic_arn: ENV["ERROR_NOTIFICATION_TOPIC_ARN"]
+          sns_topic_arn: ENV.fetch('ERROR_NOTIFICATION_TOPIC_ARN', nil)
         }
       ) do
-        logger.info("Lambda invoked",
-          http_method: event["httpMethod"],
-          path: event["path"],
-          source_ip: event.dig("requestContext", "identity", "sourceIp")
-        )
+        logger.info('Lambda invoked',
+                    http_method: event['httpMethod'],
+                    path: event['path'],
+                    source_ip: event.dig('requestContext', 'identity', 'sourceIp'))
 
-        if event["httpMethod"] == "OPTIONS"
-          return { statusCode: 200, headers: cors_headers(event), body: "{}" }
-        end
+        return { statusCode: 200, headers: cors_headers(event), body: '{}' } if event['httpMethod'] == 'OPTIONS'
 
         begin
-          body = JSON.parse(event["body"] || "{}")
+          body = JSON.parse(event['body'] || '{}')
         rescue JSON::ParserError
-          return error_response("Invalid JSON in request body")
+          return error_response('Invalid JSON in request body')
         end
 
         begin
-          result = execute(path: event["path"], body: body, event: event)
-          logger.info("Request completed", status_code: result[:statusCode], path: event["path"])
+          result = execute(path: event['path'], body: body, event: event)
+          logger.info('Request completed', status_code: result[:statusCode], path: event['path'])
           result
-        rescue => e
-          handle_error_and_respond(e, "Unhandled error during request processing",
-            { path: event["path"], method: event["httpMethod"] })
+        rescue StandardError => e
+          handle_error_and_respond(e, 'Unhandled error during request processing',
+                                   { path: event['path'], method: event['httpMethod'] })
         end
       end
-    rescue => e
-      Belt::Helpers::ErrorLogging.log_error(@logger, "Unhandled Lambda error", e,
-        { phase: "lambda_handler", path: event&.dig("path") })
+    rescue StandardError => e
+      Belt::Helpers::ErrorLogging.log_error(@logger, 'Unhandled Lambda error', e,
+                                            { phase: 'lambda_handler', path: event&.dig('path') })
 
-      body = { error: "Internal server error" }
+      body = { error: 'Internal server error' }
       if verbose_errors_enabled?
         body[:message] = e.message
         body[:type] = e.class.name
@@ -84,11 +81,11 @@ module Belt
     private
 
     def init_observability(context:)
-      service_name = ENV["ACTION"] || context.function_name.split("-").last
+      service_name = ENV['ACTION'] || context.function_name.split('-').last
 
       @logger = LambdaLoadout::Logger.new(service: service_name)
       @metrics = LambdaLoadout::Metrics.new(
-        namespace: ENV["BELT_METRICS_NAMESPACE"] || "Belt",
+        namespace: ENV['BELT_METRICS_NAMESPACE'] || 'Belt',
         service: service_name
       )
 

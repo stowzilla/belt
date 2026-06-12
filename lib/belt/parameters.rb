@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-require "date"
-require "json"
+require 'date'
+require 'json'
 
 # Rails-like Strong Parameters for Lambda controllers.
 # Provides secure parameter filtering without requiring Rails.
@@ -34,8 +34,8 @@ module ActionController
       @params[key.to_s]
     end
 
-    def fetch(key, *args, &block)
-      @params.fetch(key.to_s, *args, &block)
+    def fetch(key, *, &)
+      @params.fetch(key.to_s, *, &)
     end
 
     def key?(key)
@@ -50,8 +50,8 @@ module ActionController
       @params.values
     end
 
-    def each(&block)
-      @params.each(&block)
+    def each(&)
+      @params.each(&)
     end
 
     def empty?
@@ -64,9 +64,8 @@ module ActionController
 
     def require(key)
       value = @params[key.to_s]
-      if value.nil? || (value.respond_to?(:empty?) && value.empty?)
-        raise ParameterMissing.new(key)
-      end
+      raise ParameterMissing, key if value.nil? || (value.respond_to?(:empty?) && value.empty?)
+
       value.is_a?(Hash) ? Parameters.new(value) : value
     end
 
@@ -82,6 +81,7 @@ module ActionController
           filter.each do |key, nested_filter|
             key = key.to_s
             next unless @params.key?(key)
+
             permitted_params[key] = permit_nested(@params[key], nested_filter)
           end
         end
@@ -95,7 +95,8 @@ module ActionController
     end
 
     def to_h
-      raise UnpermittedParameters.new(@params.keys) unless @permitted
+      raise UnpermittedParameters, @params.keys unless @permitted
+
       deep_to_h(@params)
     end
 
@@ -120,7 +121,8 @@ module ActionController
 
     def normalize_keys(hash)
       return {} unless hash.is_a?(Hash)
-      hash.transform_keys { |key| key.to_s.gsub(/([A-Z])/, '_\1').downcase.sub(/^_/, "") }
+
+      hash.transform_keys { |key| key.to_s.gsub(/([A-Z])/, '_\1').downcase.sub(/^_/, '') }
     end
 
     def permit_nested(value, filter)
@@ -139,6 +141,7 @@ module ActionController
         elsif filter.is_a?(Array)
           value.map do |item|
             next item unless item.is_a?(Hash)
+
             Parameters.new(item).permit(*filter).to_unsafe_h
           end
         else
