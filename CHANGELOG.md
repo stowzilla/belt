@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.5
+
+- Eliminated regex from `Belt::ActionRouter` — uses pure segment-by-segment string comparison (resolves CodeQL alerts)
+
 ## 0.0.4
 
 - Added `Belt::Holster` — Belt's equivalent of Rails Engines. Gems subclass `Belt::Holster` to provide controllers, models, routes, and schema via convention.
