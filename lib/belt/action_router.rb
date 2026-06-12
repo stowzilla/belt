@@ -38,17 +38,22 @@ module Belt
     end
 
     def find_route(method, path)
-      @routes.find { |r| r[:verb] == method && r[:regex].match?(path) }
+      path_segments = path.split("/")
+      @routes.find { |r| r[:verb] == method && segments_match?(r[:segments], path_segments) }
     end
 
     def extract_path_params(pattern, actual_path)
-      param_names = pattern.scan(/\{([^}]+)\}/).flatten
-      return {} if param_names.empty?
+      pattern_segments = pattern.split("/")
+      path_segments = actual_path.split("/")
+      params = {}
 
-      match = path_to_regex(pattern).match(actual_path)
-      return {} unless match
+      pattern_segments.each_with_index do |seg, i|
+        if seg.start_with?("{") && seg.end_with?("}")
+          params[seg[1..-2]] = path_segments[i]
+        end
+      end
 
-      param_names.zip(match.captures).to_h
+      params
     end
 
     private
@@ -77,26 +82,25 @@ module Belt
     end
 
     def build_route_entry(route)
+      pattern = route[:path] || route["path"]
       {
         verb: route[:verb] || route["verb"],
-        pattern: route[:path] || route["path"],
-        regex: path_to_regex(route[:path] || route["path"]),
+        pattern: pattern,
+        segments: pattern.split("/"),
         controller: route[:controller] || route["controller"],
         action: route[:action] || route["action"]
       }
     end
 
-    def path_to_regex(pattern)
-      segments = pattern.split("/")
-      regex_parts = segments.map do |seg|
-        if seg =~ /\A\{[^}]+\}\z/
-          "([^/]+)"
-        else
-          Regexp.escape(seg)
-        end
+    def segments_match?(pattern_segments, path_segments)
+      return false unless pattern_segments.length == path_segments.length
+
+      pattern_segments.each_with_index do |seg, i|
+        next if seg.start_with?("{") && seg.end_with?("}")
+        return false unless seg == path_segments[i]
       end
 
-      Regexp.new("\\A#{regex_parts.join('/')}\\z")
+      true
     end
 
     def dispatch_to_controller(route_info, event, body)
