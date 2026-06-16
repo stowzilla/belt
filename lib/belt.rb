@@ -12,30 +12,43 @@ module Belt
   class ActionNotFound < StandardError; end
 
   @controller_paths = []
-  @gem_controller_paths = []
-  @gem_model_paths = []
 
   class << self
-    attr_reader :controller_paths, :gem_controller_paths, :gem_model_paths
+    attr_reader :controller_paths
 
-    # Register a gem's controller directory so ActionRouter can resolve its controllers
-    def register_controllers(path)
-      @gem_controller_paths << path unless @gem_controller_paths.include?(path)
+    # Auto-discover lambda/controllers dirs in all loaded gems
+    def gem_controller_paths
+      @gem_controller_paths ||= discover_gem_paths('lambda/controllers')
     end
 
-    # Register a gem's model directory for autoloading by the host app
-    def register_models(path)
-      @gem_model_paths << path unless @gem_model_paths.include?(path)
+    # Auto-discover lambda/models dirs in all loaded gems
+    def gem_model_paths
+      @gem_model_paths ||= discover_gem_paths('lambda/models')
     end
 
-    # All controller paths: app-defined + gem-registered
+    # All controller paths: app-defined + gem-discovered
     def all_controller_paths
-      controller_paths + gem_controller_paths.select { |p| File.directory?(p) }
+      controller_paths + gem_controller_paths
     end
 
     # All gem model paths that exist on disk
     def all_model_paths
-      gem_model_paths.select { |p| File.directory?(p) }
+      gem_model_paths
+    end
+
+    # Reset cached paths (useful in tests)
+    def reset_gem_paths!
+      @gem_controller_paths = nil
+      @gem_model_paths = nil
+    end
+
+    private
+
+    def discover_gem_paths(subdir)
+      Gem::Specification.each.filter_map do |spec|
+        path = File.join(spec.gem_dir, subdir)
+        path if File.directory?(path)
+      end
     end
   end
 end

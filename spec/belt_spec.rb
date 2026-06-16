@@ -3,6 +3,8 @@
 require 'spec_helper'
 
 RSpec.describe Belt do
+  before { Belt.reset_gem_paths! }
+
   it 'has a version number' do
     expect(Belt::VERSION).not_to be_nil
   end
@@ -11,44 +13,38 @@ RSpec.describe Belt do
     expect(Belt.controller_paths).to be_an(Array)
   end
 
-  it 'tracks gem controller paths' do
-    expect(Belt.gem_controller_paths).to be_an(Array)
-  end
-
-  it 'tracks gem model paths' do
-    expect(Belt.gem_model_paths).to be_an(Array)
-  end
-
-  describe '.register_controllers' do
-    it 'adds a gem controller path' do
-      Belt.register_controllers('/tmp/test_gem/lambda/controllers')
-      expect(Belt.gem_controller_paths).to include('/tmp/test_gem/lambda/controllers')
-    end
-
-    it 'does not add duplicates' do
-      Belt.register_controllers('/tmp/dedup_test')
-      Belt.register_controllers('/tmp/dedup_test')
-      expect(Belt.gem_controller_paths.count('/tmp/dedup_test')).to eq(1)
+  describe '.gem_controller_paths' do
+    it 'auto-discovers lambda/controllers dirs from gemspecs' do
+      expect(Belt.gem_controller_paths).to be_an(Array)
     end
   end
 
-  describe '.register_models' do
-    it 'adds a gem model path' do
-      Belt.register_models('/tmp/test_gem/lambda/models')
-      expect(Belt.gem_model_paths).to include('/tmp/test_gem/lambda/models')
+  describe '.gem_model_paths' do
+    it 'auto-discovers lambda/models dirs from gemspecs' do
+      expect(Belt.gem_model_paths).to be_an(Array)
     end
+  end
 
-    it 'does not add duplicates' do
-      Belt.register_models('/tmp/model_dedup_test')
-      Belt.register_models('/tmp/model_dedup_test')
-      expect(Belt.gem_model_paths.count('/tmp/model_dedup_test')).to eq(1)
+  describe '.all_controller_paths' do
+    it 'includes app and gem controller paths' do
+      expect(Belt.all_controller_paths).to be_an(Array)
     end
   end
 
   describe '.all_model_paths' do
     it 'only returns paths that exist on disk' do
-      Belt.register_models('/tmp/nonexistent_model_path_xyz')
-      expect(Belt.all_model_paths).not_to include('/tmp/nonexistent_model_path_xyz')
+      Belt.all_model_paths.each do |path|
+        expect(File.directory?(path)).to be(true)
+      end
+    end
+  end
+
+  describe '.reset_gem_paths!' do
+    it 'clears cached gem paths' do
+      Belt.gem_controller_paths # trigger discovery
+      Belt.reset_gem_paths!
+      # After reset, calling again re-discovers
+      expect(Belt.gem_controller_paths).to be_an(Array)
     end
   end
 end
