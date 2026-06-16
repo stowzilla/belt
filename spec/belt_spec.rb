@@ -11,7 +11,20 @@ RSpec.describe Belt do
     expect(Belt.controller_paths).to be_an(Array)
   end
 
-  it 'tracks holsters' do
-    expect(Belt.holsters).to be_an(Array)
+  it 'tracks gem controller paths' do
+    expect(Belt.gem_controller_paths).to be_an(Array)
+  end
+
+  describe '.register_controllers' do
+    it 'adds a gem controller path' do
+      Belt.register_controllers('/tmp/test_gem/lambda/controllers')
+      expect(Belt.gem_controller_paths).to include('/tmp/test_gem/lambda/controllers')
+    end
+
+    it 'does not add duplicates' do
+      Belt.register_controllers('/tmp/dedup_test')
+      Belt.register_controllers('/tmp/dedup_test')
+      expect(Belt.gem_controller_paths.count('/tmp/dedup_test')).to eq(1)
+    end
   end
 end
