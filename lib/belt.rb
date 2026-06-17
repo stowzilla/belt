@@ -45,7 +45,7 @@ module Belt
     private
 
     def discover_gem_paths(subdir)
-      Gem::Specification.each.filter_map do |spec|
+      Gem.loaded_specs.each_value.filter_map do |spec|
         path = File.join(spec.gem_dir, subdir)
         path if File.directory?(path)
       end
