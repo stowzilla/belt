@@ -2,12 +2,13 @@
 
 require 'fileutils'
 require 'erb'
+require_relative 'environment_command'
 
 module Belt
   module CLI
     class GenerateCommand
       TEMPLATE_DIR = File.expand_path('../../templates/generate', __dir__)
-      GENERATORS = %w[resource model controller].freeze
+      GENERATORS = %w[resource model controller environment].freeze
 
       def self.run(args)
         generator = args.shift
@@ -18,7 +19,12 @@ module Belt
           puts "  belt generate resource post title:string content:text status:string"
           puts "  belt generate model comment body:text author:string"
           puts "  belt generate controller comments"
+          puts "  belt generate environment dev01"
           exit 1
+        end
+
+        if generator == 'environment'
+          return Belt::CLI::EnvironmentCommand.run(args)
         end
 
         name = args.shift

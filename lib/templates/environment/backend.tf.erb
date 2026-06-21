@@ -1,0 +1,8 @@
+terraform {
+  backend "s3" {
+    bucket  = "<%= @app_name %>-terraform-state"
+    key     = "<%= @env_name %>/terraform.tfstate"
+    region  = "us-east-1"
+    encrypt = true
+  }
+}
