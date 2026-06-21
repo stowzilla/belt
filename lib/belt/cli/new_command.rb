@@ -53,6 +53,7 @@ module Belt
         %W[
           #{@app_name}/lambda/controllers/#{@app_name}
           #{@app_name}/lambda/models
+          #{@app_name}/lambda/models/concerns
           #{@app_name}/lambda/lib/routes
           #{@app_name}/lambda/spec
           #{@app_name}/infrastructure
@@ -64,6 +65,8 @@ module Belt
           'Gemfile.erb' => "#{@app_name}/Gemfile",
           'lambda/Gemfile.erb' => "#{@app_name}/lambda/Gemfile",
           'lambda/api.rb.erb' => "#{@app_name}/lambda/#{@app_name}.rb",
+          'lambda/models/application_record.rb.erb' => "#{@app_name}/lambda/models/application_record.rb",
+          'lambda/models/concerns/timestampable.rb.erb' => "#{@app_name}/lambda/models/concerns/timestampable.rb",
           'lambda/controllers/application_controller.rb.erb' => "#{@app_name}/lambda/controllers/#{@app_name}/application_controller.rb",
           'lambda/lib/routes/routes.rb.erb' => "#{@app_name}/lambda/lib/routes/#{@app_name}_routes.rb",
           'infrastructure/routes.tf.rb.erb' => "#{@app_name}/infrastructure/routes.tf.rb",

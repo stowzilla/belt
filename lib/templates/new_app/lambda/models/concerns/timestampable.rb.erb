@@ -1,0 +1,23 @@
+# frozen_string_literal: true
+
+module Concerns
+  module Timestampable
+    def self.included(base)
+      base.attr_accessor :created_at, :updated_at
+      base.set_callback :create, :before, :set_timestamps
+      base.set_callback :update, :before, :set_updated_at
+    end
+
+    private
+
+    def set_timestamps
+      now = Time.now.utc.iso8601
+      self.created_at ||= now
+      self.updated_at = now
+    end
+
+    def set_updated_at
+      self.updated_at = Time.now.utc.iso8601
+    end
+  end
+end
