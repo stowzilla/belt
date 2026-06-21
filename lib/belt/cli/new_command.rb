@@ -72,6 +72,7 @@ module Belt
           'infrastructure/routes.tf.rb.erb' => "#{@app_name}/infrastructure/routes.tf.rb",
           'infrastructure/schema.tf.rb.erb' => "#{@app_name}/infrastructure/schema.tf.rb",
           'README.md.erb' => "#{@app_name}/README.md",
+          'AGENTS.md.erb' => "#{@app_name}/AGENTS.md",
           'gitignore.erb' => "#{@app_name}/.gitignore"
         }
       end

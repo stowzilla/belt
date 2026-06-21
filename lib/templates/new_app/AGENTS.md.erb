@@ -1,0 +1,130 @@
+# AGENTS.md — <%= @module_name %>
+
+This file explains the project structure, tooling, and conventions for AI agents working in this codebase.
+
+## Stack
+
+- **Belt** — CLI and runtime framework (like Rails for serverless). Provides Lambda handler, action router, controller base class, and CLI tooling.
+- **ActiveItem** — ActiveRecord-like ORM for DynamoDB. Models inherit from `ActiveItem::Base`.
+- **Dispatcher** — Terraform provider that reads a Ruby DSL (`routes.tf.rb`) and creates API Gateway + Lambda + IAM infrastructure.
+- **Lambda Loadout** — Lambda cold-start optimizer (auto-required by Belt).
+
+## Project Structure
+
+```
+<%= @app_name %>/
+├── lambda/
+│   ├── <%= @app_name %>.rb                          # Lambda entry point
+│   ├── controllers/<%= @app_name %>/                # Controllers (namespaced)
+│   │   └── application_controller.rb   # Base controller
+│   ├── models/                         # ActiveItem models
+│   │   ├── application_record.rb       # Base model
+│   │   └── concerns/                   # Shared model concerns
+│   ├── lib/routes/                     # Route manifests (auto-generated)
+│   └── Gemfile                         # Lambda-specific dependencies
+├── infrastructure/
+│   ├── routes.tf.rb                    # API routes (Dispatcher DSL)
+│   ├── schema.tf.rb                    # Model schema definitions
+│   └── <env>/                          # Per-environment Terraform configs
+├── Gemfile                             # Project-level dependencies
+└── AGENTS.md                           # This file
+```
+
+## Belt CLI Commands
+
+```bash
+belt new <app_name>                                    # Scaffold a new project
+belt generate resource <name> <field:type ...>         # Generate model + controller + routes
+belt generate model <name> <field:type ...>            # Generate model only
+belt generate controller <name>                        # Generate controller only
+belt generate environment <env_name>                   # Generate Terraform environment directory
+belt setup state                                       # Create/select S3 state bucket
+belt setup tables <env>                                # Generate DynamoDB table definitions from schema
+belt init <env>                                        # terraform init
+belt plan <env>                                        # terraform plan
+belt apply <env>                                       # terraform apply
+belt destroy <env>                                     # terraform destroy
+belt output <env>                                      # terraform output
+```
+
+## How Routing Works
+
+1. `infrastructure/routes.tf.rb` defines routes using a DSL:
+   ```ruby
+   TerraDispatch.routes.draw do
+     namespace :<%= @app_name %> do
+       resources :things, tables: [:things]
+     end
+   end
+   ```
+
+2. Dispatcher creates an API Gateway where the namespace becomes a base path mapping. URLs look like:
+   ```
+   https://api.<env>.example.com/<%= @app_name %>/things
+   ```
+
+3. The Lambda entry point (`lambda/<%= @app_name %>.rb`) uses `Belt::ActionRouter` to dispatch requests to controllers based on the route manifest in `lambda/lib/routes/`.
+
+4. `resources :things` generates: `GET /things`, `POST /things`, `GET /things/:id`, `PUT /things/:id`, `DELETE /things/:id`. **PUT, not PATCH.**
+
+## How Models Work
+
+Models use ActiveItem (DynamoDB ORM):
+
+```ruby
+class Post < ApplicationRecord
+  attr_accessor :title, :content, :status
+end
+```
+
+Table names resolve as `{APP_NAME}-{ENVIRONMENT}-{pluralized_model}` (e.g., `<%= @app_name %>-wups-posts`).
+
+Key ActiveItem methods: `create!`, `find`, `where`, `update`, `destroy`, `all`, `count`, `exists?`.
+
+## How Controllers Work
+
+Controllers inherit from `BeltController::Base`:
+
+```ruby
+module <%= @module_name %>Controllers
+  class ThingsController < ApplicationController
+    def index
+      items = Thing.all
+      success_response(things: items.map(&:to_h))
+    end
+
+    def show
+      item = Thing.find(params[:id])
+      success_response(thing: item.to_h)
+    end
+
+    def create
+      item = Thing.create!(params.slice(:title, :content))
+      success_response(thing: item.to_h, status: 201)
+    end
+  end
+end
+```
+
+`params` contains merged path parameters and parsed JSON body. Use `success_response` and `error_response` helpers.
+
+## Deployment Flow
+
+```bash
+export AWS_PROFILE=<your_profile>
+belt setup state                  # One-time: create S3 state bucket
+belt generate environment <env>   # One-time: scaffold Terraform configs
+belt setup tables <env>           # Generate DynamoDB table resources
+belt init <env>                   # Initialize Terraform
+belt apply <env>                  # Deploy everything
+```
+
+## Adding a New Resource
+
+```bash
+belt generate resource comment body:text author:string post_id:string
+belt setup tables <env>
+belt apply <env>
+```
+
+This creates the model, controller, updates routes + schema, generates the DynamoDB table definition, and deploys.
