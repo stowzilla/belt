@@ -32,6 +32,7 @@ resource "dispatcher" "main" {
   source            = "${path.module}/../routes.tf.rb"
   app_name          = var.app_name
   lambda_source_dir = "${path.module}/../../lambda"
+  lambda_shared_dirs = ["controllers", "helpers", "lib", "models", "templates"]
   frontend_urls     = ["http://localhost:3000"]
   friendly_errors   = true
 }
