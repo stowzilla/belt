@@ -6,6 +6,7 @@ require_relative 'cli/generate_command'
 require_relative 'cli/frontend_command'
 require_relative 'cli/frontend_setup_command'
 require_relative 'cli/frontend_deploy_command'
+require_relative 'cli/views_command'
 require_relative 'cli/setup_command'
 require_relative 'cli/terraform_command'
 
@@ -66,6 +67,7 @@ module Belt
           new <app_name> [--frontend react]           Create a new Belt application
           generate <resource|model|controller> <name> Generate components
           generate frontend <react|vue|svelte>        Scaffold a frontend app
+          generate views <resource> [fields...]       Generate React pages for REST actions
           generate environment <name>                 Create a new environment
           setup state                                 Create/select S3 state bucket
           setup tables <env>                          Generate DynamoDB tables from schema

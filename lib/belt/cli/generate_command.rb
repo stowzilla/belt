@@ -4,12 +4,13 @@ require 'fileutils'
 require 'erb'
 require_relative 'environment_command'
 require_relative 'frontend_command'
+require_relative 'views_command'
 
 module Belt
   module CLI
     class GenerateCommand
       TEMPLATE_DIR = File.expand_path('../../templates/generate', __dir__)
-      GENERATORS = %w[resource model controller environment frontend].freeze
+      GENERATORS = %w[resource model controller environment frontend views].freeze
 
       def self.run(args)
         generator = args.shift
@@ -32,14 +33,19 @@ module Belt
           return Belt::CLI::FrontendCommand.run(args)
         end
 
+        if generator == 'views'
+          return Belt::CLI::ViewsCommand.run(args)
+        end
+
         name = args.shift
         if name.nil? || name.empty?
           puts "Usage: belt generate #{generator} <name> [field:type ...]"
           exit 1
         end
 
+        skip_views = args.delete('--skip-views')
         fields = args.map { |arg| parse_field(arg) }
-        new(generator, name, fields).generate
+        new(generator, name, fields, skip_views: skip_views).generate
       end
 
       def self.parse_field(arg)
@@ -47,10 +53,11 @@ module Belt
         { name: name, type: type || 'string' }
       end
 
-      def initialize(generator, name, fields)
+      def initialize(generator, name, fields, skip_views: false)
         @generator = generator
         @name = name.downcase.gsub(/[^a-z0-9_]/, '_')
         @fields = fields
+        @skip_views = skip_views
         @app_name = detect_app_name
         @module_name = @app_name.split(/[-_]/).map(&:capitalize).join
         @resource_name = @name.end_with?('s') ? @name : "#{@name}s"
@@ -73,6 +80,7 @@ module Belt
         generate_controller
         inject_routes
         inject_schema
+        generate_views_if_frontend
         puts "\n✓ Resource '#{@singular_name}' generated!"
         puts "\nFiles created/updated:"
         puts "  lambda/models/#{@singular_name}.rb"
@@ -80,6 +88,7 @@ module Belt
         puts "  infrastructure/routes.tf.rb (updated)"
         puts "  infrastructure/schema.tf.rb (updated)"
         puts "  lambda/lib/routes/#{@app_name}_routes.rb (updated)"
+        puts "  frontend/src/pages/#{@resource_name}/ (views)" if Dir.exist?('frontend/src')
       end
 
       def generate_model
@@ -191,6 +200,13 @@ module Belt
         # Fallback: infer from controller directory
         controller_dirs = Dir.glob('lambda/controllers/*/').map { |d| File.basename(d) }
         controller_dirs.reject { |d| d == '.' }.first || File.basename(Dir.pwd)
+      end
+
+      def generate_views_if_frontend
+        return unless Dir.exist?('frontend/src')
+        return if @skip_views
+
+        Belt::CLI::ViewsCommand.new(@name, @fields).generate
       end
     end
   end

@@ -1,0 +1,26 @@
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { apiClient } from '../../lib/apiClient'
+import <%= @class_name %>Form from './<%= @class_name %>Form'
+
+export default function <%= @class_name %>New() {
+  const navigate = useNavigate()
+  const [error, setError] = useState(null)
+
+  async function handleSubmit(attrs) {
+    try {
+      const data = await apiClient('/<%= @resource_name %>', { method: 'POST', body: attrs })
+      navigate(`/<%= @resource_name %>/${data.<%= @singular_name %>.id}`)
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
+  return (
+    <main style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
+      <h1>New <%= @class_name %></h1>
+      {error && <p style={{ color: 'red' }}>{error}</p>}
+      <<%= @class_name %>Form onSubmit={handleSubmit} />
+    </main>
+  )
+}

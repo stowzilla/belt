@@ -1,0 +1,38 @@
+import { useEffect, useState } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { apiClient } from '../../lib/apiClient'
+import <%= @class_name %>Form from './<%= @class_name %>Form'
+
+export default function <%= @class_name %>Edit() {
+  const { id } = useParams()
+  const navigate = useNavigate()
+  const [<%= @singular_name %>, set<%= @class_name %>] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    apiClient(`/<%= @resource_name %>/${id}`)
+      .then(data => set<%= @class_name %>(data.<%= @singular_name %>))
+      .finally(() => setLoading(false))
+  }, [id])
+
+  async function handleSubmit(attrs) {
+    try {
+      await apiClient(`/<%= @resource_name %>/${id}`, { method: 'PUT', body: attrs })
+      navigate(`/<%= @resource_name %>/${id}`)
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
+  if (loading) return <p>Loading...</p>
+  if (!<%= @singular_name %>) return <p><%= @class_name %> not found.</p>
+
+  return (
+    <main style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
+      <h1>Edit <%= @class_name %></h1>
+      {error && <p style={{ color: 'red' }}>{error}</p>}
+      <<%= @class_name %>Form initialValues={<%= @singular_name %>} onSubmit={handleSubmit} submitLabel="Update" />
+    </main>
+  )
+}
