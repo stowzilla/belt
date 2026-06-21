@@ -3,6 +3,7 @@
 require_relative 'version'
 require_relative 'cli/new_command'
 require_relative 'cli/generate_command'
+require_relative 'cli/setup_command'
 
 module Belt
   module CLI
@@ -10,6 +11,7 @@ module Belt
       'new' => Belt::CLI::NewCommand,
       'generate' => Belt::CLI::GenerateCommand,
       'g' => Belt::CLI::GenerateCommand,
+      'setup' => Belt::CLI::SetupCommand,
       '--version' => ->(_args) { puts "Belt #{Belt::VERSION}" },
       '-v' => ->(_args) { puts "Belt #{Belt::VERSION}" }
     }.freeze
@@ -43,12 +45,14 @@ module Belt
         Commands:
           new <app_name>                              Create a new Belt application
           generate <resource|model|controller> <name> [field:type ...]  Generate components
+          setup state                                 Create S3 bucket for Terraform state
           --version                                   Show Belt version
 
         Examples:
           belt new blog
           belt generate resource post title:string content:text status:string
           belt g model comment body:text author:string
+          belt setup state
       USAGE
     end
   end
