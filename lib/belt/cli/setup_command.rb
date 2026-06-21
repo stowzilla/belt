@@ -328,17 +328,24 @@ module Belt
       # --- Backend config ---
 
       def update_backend_config
-        env_dir = @env_name ? "infrastructure/#{@env_name}" : nil
-        return unless env_dir && Dir.exist?(env_dir)
+        dirs = if @env_name
+                 [File.join('infrastructure', @env_name)]
+               else
+                 Dir.glob('infrastructure/*/').select { |d| File.exist?(File.join(d, 'backend.tf')) }
+               end
 
-        backend_file = File.join(env_dir, 'backend.tf')
-        return unless File.exist?(backend_file)
+        dirs.each do |env_dir|
+          next unless Dir.exist?(env_dir)
 
-        content = File.read(backend_file)
-        updated = content.gsub(/bucket\s*=\s*"[^"]+"/, "bucket  = \"#{@bucket_name}\"")
-        if updated != content
-          File.write(backend_file, updated)
-          puts "  update  #{backend_file} → bucket = \"#{@bucket_name}\""
+          backend_file = File.join(env_dir, 'backend.tf')
+          next unless File.exist?(backend_file)
+
+          content = File.read(backend_file)
+          updated = content.gsub(/bucket\s*=\s*"[^"]+"/, "bucket  = \"#{@bucket_name}\"")
+          if updated != content
+            File.write(backend_file, updated)
+            puts "  update  #{backend_file} → bucket = \"#{@bucket_name}\""
+          end
         end
       end
 
