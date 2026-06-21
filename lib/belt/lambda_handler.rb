@@ -25,6 +25,19 @@ module Belt
 
     def self.included(base)
       base.instance_variable_set(:@belt_lambda_handler_included, true)
+      # Auto-register controllers directory relative to the including file's location
+      caller_file = caller_locations(1, 1)&.first&.path
+      if caller_file
+        controllers_dir = File.join(File.dirname(caller_file), 'controllers')
+        if File.directory?(controllers_dir)
+          # Register both the base and all namespace subdirs
+          Belt.controller_paths << controllers_dir
+          Dir.children(controllers_dir).each do |child|
+            subdir = File.join(controllers_dir, child)
+            Belt.controller_paths << subdir if File.directory?(subdir)
+          end
+        end
+      end
     end
 
     # API Gateway Lambda handler.

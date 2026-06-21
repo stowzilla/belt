@@ -144,9 +144,15 @@ module Belt
         next unless File.exist?(full_path)
 
         require full_path
-        # After requiring, try to find the constant
+        # After requiring, try to find the constant (top-level or namespaced)
         class_name = "#{controller_name.split(%r{[_/]}).map(&:capitalize).join}Controller"
         return Object.const_get(class_name) if Object.const_defined?(class_name)
+
+        # Try under namespace module (e.g., BrablogControllers::PostsController)
+        if Object.const_defined?(@namespace_module_name)
+          ns = Object.const_get(@namespace_module_name)
+          return ns.const_get(class_name) if ns.const_defined?(class_name)
+        end
       end
 
       raise Belt::ActionNotFound, "Controller not found: #{controller_name}"
