@@ -29,7 +29,9 @@ module Belt
         build_frontend
         sync_to_s3
         invalidate_cloudfront
+        url = fetch_frontend_url
         puts "\n✅ Frontend deployed to #{@env}!"
+        puts "   #{url}" if url
       end
 
       private
@@ -95,6 +97,11 @@ module Belt
 
       def fetch_distribution_id
         output = `cd #{@env_dir} && terraform output -raw frontend_distribution_id 2>/dev/null`
+        $?.success? && !output.strip.empty? ? output.strip : nil
+      end
+
+      def fetch_frontend_url
+        output = `cd #{@env_dir} && terraform output -raw frontend_url 2>/dev/null`
         $?.success? && !output.strip.empty? ? output.strip : nil
       end
 
