@@ -27,3 +27,11 @@ provider "dispatcher" {
   environment = var.environment
   aws_region  = var.aws_region
 }
+
+resource "dispatcher" "main" {
+  source            = "${path.module}/../routes.tf.rb"
+  app_name          = var.app_name
+  lambda_source_dir = "${path.module}/../../lambda"
+  frontend_urls     = ["http://localhost:3000"]
+  friendly_errors   = true
+}
