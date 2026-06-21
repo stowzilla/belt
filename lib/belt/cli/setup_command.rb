@@ -12,22 +12,37 @@ module Belt
 
         case subcommand
         when 'state'
-          new.create_state_bucket
+          new(args).create_state_bucket
         else
-          puts "Usage: belt setup state"
+          puts "Usage: belt setup state [env] [--bucket BUCKET_NAME]"
           puts "\nCreates an S3 bucket for Terraform state with security best practices:"
           puts "  • Versioning enabled"
           puts "  • AES-256 server-side encryption"
           puts "  • Public access fully blocked"
           puts "  • TLS-only bucket policy"
           puts "  • Lifecycle rules (90-day noncurrent expiration)"
+          puts "\nExamples:"
+          puts "  belt setup state              # Shared bucket: <app>-terraform-state"
+          puts "  belt setup state wups         # Env-specific bucket: <app>-terraform-state-wups"
+          puts "  belt setup state --bucket my-bucket  # Custom bucket name"
           exit 1
         end
       end
 
-      def initialize
+      def initialize(args = [])
         @app_name = detect_app_name
-        @bucket_name = "#{@app_name}-terraform-state"
+        @env_name = nil
+        @custom_bucket = nil
+
+        parse_args(args)
+
+        @bucket_name = if @custom_bucket
+                         @custom_bucket
+                       elsif @env_name
+                         "#{@app_name}-terraform-state-#{@env_name}"
+                       else
+                         "#{@app_name}-terraform-state"
+                       end
         @region = detect_region
       end
 
@@ -62,11 +77,46 @@ module Belt
         apply_lifecycle
         puts "  enable  lifecycle rules (90-day noncurrent expiration)"
 
+        update_backend_config if @env_name || @custom_bucket
+
         puts "\n✓ State bucket '#{@bucket_name}' is ready!"
-        puts "\n  You can now run: cd infrastructure/<env> && terraform init"
+        if @env_name
+          puts "\n  You can now run: cd infrastructure/#{@env_name} && terraform init"
+        else
+          puts "\n  You can now run: cd infrastructure/<env> && terraform init"
+        end
       end
 
       private
+
+      def parse_args(args)
+        while (arg = args.shift)
+          if arg == '--bucket'
+            @custom_bucket = args.shift
+            unless @custom_bucket
+              puts "✗ --bucket requires a value"
+              exit 1
+            end
+          elsif !arg.start_with?('-')
+            @env_name = arg
+          end
+        end
+      end
+
+      def update_backend_config
+        env_dir = @env_name ? "infrastructure/#{@env_name}" : nil
+        return unless env_dir && Dir.exist?(env_dir)
+
+        backend_file = File.join(env_dir, 'backend.tf')
+        return unless File.exist?(backend_file)
+
+        content = File.read(backend_file)
+        updated = content.gsub(/bucket\s*=\s*"[^"]+"/, "bucket  = \"#{@bucket_name}\"")
+        if updated != content
+          File.write(backend_file, updated)
+          puts "  update  #{backend_file} → bucket = \"#{@bucket_name}\""
+        end
+      end
 
       def aws_configured?
         system("aws sts get-caller-identity > /dev/null 2>&1")
