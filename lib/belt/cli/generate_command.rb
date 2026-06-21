@@ -3,12 +3,13 @@
 require 'fileutils'
 require 'erb'
 require_relative 'environment_command'
+require_relative 'frontend_command'
 
 module Belt
   module CLI
     class GenerateCommand
       TEMPLATE_DIR = File.expand_path('../../templates/generate', __dir__)
-      GENERATORS = %w[resource model controller environment].freeze
+      GENERATORS = %w[resource model controller environment frontend].freeze
 
       def self.run(args)
         generator = args.shift
@@ -25,6 +26,10 @@ module Belt
 
         if generator == 'environment'
           return Belt::CLI::EnvironmentCommand.run(args)
+        end
+
+        if generator == 'frontend'
+          return Belt::CLI::FrontendCommand.run(args)
         end
 
         name = args.shift

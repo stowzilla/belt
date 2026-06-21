@@ -9,19 +9,33 @@ module Belt
       TEMPLATE_DIR = File.expand_path('../../templates/new_app', __dir__)
 
       def self.run(args)
-        app_name = args.shift
+        app_name = nil
+        frontend = nil
+
+        args.each do |arg|
+          if arg.start_with?('--frontend')
+            if arg.include?('=')
+              frontend = arg.split('=', 2).last
+            else
+              frontend = args[args.index(arg) + 1]
+            end
+          elsif !arg.start_with?('-')
+            app_name ||= arg
+          end
+        end
 
         if app_name.nil? || app_name.empty?
-          puts "Usage: belt new <app_name>"
+          puts "Usage: belt new <app_name> [--frontend react|vue|svelte]"
           exit 1
         end
 
-        new(app_name).generate
+        new(app_name, frontend: frontend).generate
       end
 
-      def initialize(app_name)
+      def initialize(app_name, frontend: nil)
         @app_name = app_name.gsub(/[^a-z0-9_-]/i, '_').downcase
         @module_name = @app_name.split(/[-_]/).map(&:capitalize).join
+        @frontend = frontend
       end
 
       def generate
@@ -32,11 +46,15 @@ module Belt
 
         puts "Creating new Belt application: #{@app_name}"
         create_structure
+        generate_frontend if @frontend
         init_git
         puts "\n✓ #{@app_name} created successfully!"
         puts "\nNext steps:"
         puts "  cd #{@app_name}"
         puts "  bundle install"
+        if @frontend
+          puts "  cd frontend && npm install && npm run dev"
+        end
         puts "  # Define your models in infrastructure/schema.tf.rb"
         puts "  # Define your routes in infrastructure/routes.tf.rb"
         puts "  # Add controllers in lambda/controllers/#{@app_name}/"
@@ -96,6 +114,12 @@ module Belt
           system('git', 'commit', '-m', 'Initial commit', '--quiet')
         end
         puts "  init    #{@app_name}/.git/"
+      end
+
+      def generate_frontend
+        Dir.chdir(@app_name) do
+          Belt::CLI::FrontendCommand.new(@frontend).generate
+        end
       end
     end
   end

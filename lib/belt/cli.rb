@@ -3,6 +3,9 @@
 require_relative 'version'
 require_relative 'cli/new_command'
 require_relative 'cli/generate_command'
+require_relative 'cli/frontend_command'
+require_relative 'cli/frontend_setup_command'
+require_relative 'cli/frontend_deploy_command'
 require_relative 'cli/setup_command'
 require_relative 'cli/terraform_command'
 
@@ -13,6 +16,15 @@ module Belt
       'generate' => Belt::CLI::GenerateCommand,
       'g' => Belt::CLI::GenerateCommand,
       'setup' => Belt::CLI::SetupCommand,
+      'deploy' => ->(args) {
+        subcommand = args.shift
+        if subcommand == 'frontend'
+          Belt::CLI::FrontendDeployCommand.run(args)
+        else
+          puts "Usage: belt deploy frontend <environment>"
+          exit 1
+        end
+      },
       '--version' => ->(_args) { puts "Belt #{Belt::VERSION}" },
       '-v' => ->(_args) { puts "Belt #{Belt::VERSION}" }
     }.freeze
@@ -51,10 +63,14 @@ module Belt
         Usage: belt <command> [options]
 
         Commands:
-          new <app_name>                              Create a new Belt application
+          new <app_name> [--frontend react]           Create a new Belt application
           generate <resource|model|controller> <name> Generate components
+          generate frontend <react|vue|svelte>        Scaffold a frontend app
+          generate environment <name>                 Create a new environment
           setup state                                 Create/select S3 state bucket
           setup tables <env>                          Generate DynamoDB tables from schema
+          setup frontend <env>                        Generate S3 + CloudFront infrastructure
+          deploy frontend <env>                       Build and deploy frontend to AWS
           init <env>                                  terraform init for environment
           plan <env>                                  terraform plan for environment
           apply <env>                                 terraform apply for environment
@@ -63,12 +79,11 @@ module Belt
           --version                                   Show Belt version
 
         Examples:
-          belt new blog
+          belt new blog --frontend react
           belt generate resource post title:string content:text status:string
-          belt g model comment body:text author:string
-          belt setup state
-          belt init wups
-          belt plan wups
+          belt generate frontend react
+          belt setup frontend wups
+          belt deploy frontend wups
           belt apply wups
       USAGE
     end

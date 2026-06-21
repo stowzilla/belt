@@ -2,11 +2,12 @@
 
 require 'json'
 require_relative 'tables_command'
+require_relative 'frontend_setup_command'
 
 module Belt
   module CLI
     class SetupCommand
-      SUBCOMMANDS = %w[state tables].freeze
+      SUBCOMMANDS = %w[state tables frontend].freeze
 
       SECURITY_CHECKS = %i[versioning encryption public_access_block tls_policy].freeze
 
@@ -18,11 +19,14 @@ module Belt
           new(args).run_state_setup
         when 'tables'
           Belt::CLI::TablesCommand.run(args)
+        when 'frontend'
+          Belt::CLI::FrontendSetupCommand.run(args)
         else
-          puts "Usage: belt setup <state|tables> [options]"
+          puts "Usage: belt setup <state|tables|frontend> [options]"
           puts "\nSubcommands:"
-          puts "  state   Set up S3 bucket for Terraform state"
-          puts "  tables  Generate DynamoDB table definitions from schema.tf.rb"
+          puts "  state     Set up S3 bucket for Terraform state"
+          puts "  tables    Generate DynamoDB table definitions from schema.tf.rb"
+          puts "  frontend  Generate S3 + CloudFront infrastructure for frontend hosting"
           exit 1
         end
       end
