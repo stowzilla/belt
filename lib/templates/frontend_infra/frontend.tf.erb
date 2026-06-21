@@ -153,3 +153,7 @@ output "frontend_distribution_id" {
 output "frontend_url" {
   value = "https://${aws_cloudfront_distribution.frontend.domain_name}"
 }
+
+output "api_url" {
+  value = values(dispatcher.main.api_gateway_urls)[0]
+}
