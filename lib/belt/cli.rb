@@ -2,11 +2,14 @@
 
 require_relative 'version'
 require_relative 'cli/new_command'
+require_relative 'cli/generate_command'
 
 module Belt
   module CLI
     COMMANDS = {
       'new' => Belt::CLI::NewCommand,
+      'generate' => Belt::CLI::GenerateCommand,
+      'g' => Belt::CLI::GenerateCommand,
       '--version' => ->(_args) { puts "Belt #{Belt::VERSION}" },
       '-v' => ->(_args) { puts "Belt #{Belt::VERSION}" }
     }.freeze
@@ -38,11 +41,14 @@ module Belt
         Usage: belt <command> [options]
 
         Commands:
-          new <app_name>   Create a new Belt application
-          --version        Show Belt version
+          new <app_name>                              Create a new Belt application
+          generate <resource|model|controller> <name> [field:type ...]  Generate components
+          --version                                   Show Belt version
 
-        Example:
+        Examples:
           belt new blog
+          belt generate resource post title:string content:text status:string
+          belt g model comment body:text author:string
       USAGE
     end
   end

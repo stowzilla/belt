@@ -1,0 +1,59 @@
+# frozen_string_literal: true
+
+require_relative '../application_controller'
+require_relative '../../models/<%= @singular_name %>'
+
+module <%= @module_name %>Controllers
+  class <%= @class_name %>sController < ApplicationController
+    # GET /<%= @resource_name %>
+    def index
+      <%= @resource_name %> = <%= @class_name %>.all
+      success_response(<%= @resource_name %>: <%= @resource_name %>.map(&:to_h))
+    end
+
+    # POST /<%= @resource_name %>
+    def create
+      <%= @singular_name %> = <%= @class_name %>.new(<%= @fields.map { |f| "#{f[:name]}: params[:#{f[:name]}]" }.join(', ') %>)
+
+      if <%= @singular_name %>.save
+        success_response(<%= @singular_name %>: <%= @singular_name %>.to_h)
+      else
+        error_response(<%= @singular_name %>.errors.full_messages.join(', '), 422)
+      end
+    end
+
+    # GET /<%= @resource_name %>/:<%= @singular_name %>_id
+    def show
+      <%= @singular_name %> = <%= @class_name %>.find(params[:<%= @singular_name %>_id])
+      return error_response('<%= @class_name %> not found', 404) unless <%= @singular_name %>
+
+      success_response(<%= @singular_name %>: <%= @singular_name %>.to_h)
+    end
+
+    # PUT /<%= @resource_name %>/:<%= @singular_name %>_id
+    def update
+      <%= @singular_name %> = <%= @class_name %>.find(params[:<%= @singular_name %>_id])
+      return error_response('<%= @class_name %> not found', 404) unless <%= @singular_name %>
+
+      attrs = {}
+<% @fields.each do |field| -%>
+      attrs[:<%= field[:name] %>] = params[:<%= field[:name] %>] if params.key?(:<%= field[:name] %>)
+<% end -%>
+
+      if <%= @singular_name %>.update(attrs)
+        success_response(<%= @singular_name %>: <%= @singular_name %>.to_h)
+      else
+        error_response(<%= @singular_name %>.errors.full_messages.join(', '), 422)
+      end
+    end
+
+    # DELETE /<%= @resource_name %>/:<%= @singular_name %>_id
+    def destroy
+      <%= @singular_name %> = <%= @class_name %>.find(params[:<%= @singular_name %>_id])
+      return error_response('<%= @class_name %> not found', 404) unless <%= @singular_name %>
+
+      <%= @singular_name %>.destroy
+      success_response(message: '<%= @class_name %> deleted')
+    end
+  end
+end
