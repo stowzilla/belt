@@ -45,7 +45,8 @@ module Belt
 
       def build_frontend
         puts "📦 Installing dependencies..."
-        run!("cd frontend && npm ci")
+        install_cmd = File.exist?('frontend/package-lock.json') ? 'npm ci' : 'npm install'
+        run!("cd frontend && #{install_cmd}")
 
         puts "🏗️  Building frontend..."
         # Pass API URL from terraform output if available
