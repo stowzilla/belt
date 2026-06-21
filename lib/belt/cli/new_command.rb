@@ -32,6 +32,7 @@ module Belt
 
         puts "Creating new Belt application: #{@app_name}"
         create_structure
+        init_git
         puts "\n✓ #{@app_name} created successfully!"
         puts "\nNext steps:"
         puts "  cd #{@app_name}"
@@ -66,7 +67,8 @@ module Belt
           'lambda/lib/routes/routes.rb.erb' => "#{@app_name}/lambda/lib/routes/#{@app_name}_routes.rb",
           'infrastructure/routes.tf.rb.erb' => "#{@app_name}/infrastructure/routes.tf.rb",
           'infrastructure/schema.tf.rb.erb' => "#{@app_name}/infrastructure/schema.tf.rb",
-          'README.md.erb' => "#{@app_name}/README.md"
+          'README.md.erb' => "#{@app_name}/README.md",
+          'gitignore.erb' => "#{@app_name}/.gitignore"
         }
       end
 
@@ -80,6 +82,15 @@ module Belt
         content = ERB.new(File.read(template_path), trim_mode: '-').result(binding)
         File.write(dest_path, content)
         puts "  create  #{dest_path}"
+      end
+
+      def init_git
+        Dir.chdir(@app_name) do
+          system('git', 'init', '--quiet')
+          system('git', 'add', '.')
+          system('git', 'commit', '-m', 'Initial commit', '--quiet')
+        end
+        puts "  init    #{@app_name}/.git/"
       end
     end
   end
