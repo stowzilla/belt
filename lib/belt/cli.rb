@@ -54,6 +54,7 @@ module Belt
           new <app_name>                              Create a new Belt application
           generate <resource|model|controller> <name> Generate components
           setup state                                 Create/select S3 state bucket
+          setup tables <env>                          Generate DynamoDB tables from schema
           init <env>                                  terraform init for environment
           plan <env>                                  terraform plan for environment
           apply <env>                                 terraform apply for environment

@@ -1,11 +1,12 @@
 # frozen_string_literal: true
 
 require 'json'
+require_relative 'tables_command'
 
 module Belt
   module CLI
     class SetupCommand
-      SUBCOMMANDS = %w[state].freeze
+      SUBCOMMANDS = %w[state tables].freeze
 
       SECURITY_CHECKS = %i[versioning encryption public_access_block tls_policy].freeze
 
@@ -15,21 +16,13 @@ module Belt
         case subcommand
         when 'state'
           new(args).run_state_setup
+        when 'tables'
+          Belt::CLI::TablesCommand.run(args)
         else
-          puts "Usage: belt setup state [env] [--bucket BUCKET_NAME] [--select]"
-          puts "\nSets up an S3 bucket for Terraform state with security best practices."
-          puts "\nModes:"
-          puts "  belt setup state              # Auto-detect or create shared bucket"
-          puts "  belt setup state --select     # List buckets and pick one interactively"
-          puts "  belt setup state wups         # Env-specific bucket: <app>-terraform-state-wups"
-          puts "  belt setup state --bucket my-bucket  # Use/create a specific bucket"
-          puts "\nSecurity enforcement:"
-          puts "  • Versioning enabled"
-          puts "  • AES-256 server-side encryption"
-          puts "  • Public access fully blocked"
-          puts "  • TLS-only bucket policy"
-          puts "  • Lifecycle rules (90-day noncurrent expiration)"
-          puts "\nWill refuse to use buckets that fail security validation."
+          puts "Usage: belt setup <state|tables> [options]"
+          puts "\nSubcommands:"
+          puts "  state   Set up S3 bucket for Terraform state"
+          puts "  tables  Generate DynamoDB table definitions from schema.tf.rb"
           exit 1
         end
       end
