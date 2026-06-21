@@ -1,0 +1,13 @@
+# frozen_string_literal: true
+
+require 'belt'
+
+include Belt::LambdaHandler
+
+require_relative 'lib/routes/<%= @app_name %>_routes'
+
+ROUTER = Belt::ActionRouter.new(routes: Routes::<%= @module_name.upcase %>, namespace: '<%= @app_name %>')
+
+def execute(path:, body:, event:)
+  ROUTER.route(event: event, body: body)
+end

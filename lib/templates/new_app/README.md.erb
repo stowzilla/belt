@@ -1,0 +1,25 @@
+# <%= @module_name %>
+
+A serverless application built with [Belt](https://github.com/stowzilla/belt) and [ActiveItem](https://github.com/stowzilla/activeitem).
+
+## Structure
+
+```
+├── infrastructure/
+│   ├── routes.tf.rb        # API route definitions
+│   └── schema.tf.rb        # Model schema definitions
+└── lambda/
+    ├── api.rb              # Lambda entry point
+    ├── controllers/<%= @app_name %>/  # Controllers
+    ├── models/             # ActiveItem models
+    └── lib/routes/         # Route manifest
+```
+
+## Development
+
+```bash
+bundle install
+
+# Deploy
+cd infrastructure && terraform apply
+```

@@ -23,7 +23,9 @@ Gem::Specification.new do |spec|
   signing_key_path = File.expand_path('~/.ssh/gem-private_key.pem')
   spec.signing_key = signing_key_path if File.exist?(signing_key_path)
 
-  spec.files = Dir['lib/**/*', 'LICENSE.txt', 'README.md', 'CHANGELOG.md', 'certs/*']
+  spec.files = Dir['lib/**/*', 'exe/*', 'LICENSE.txt', 'README.md', 'CHANGELOG.md', 'certs/*']
+  spec.bindir = 'exe'
+  spec.executables = ['belt']
   spec.require_paths = ['lib']
 
   spec.add_dependency 'lambda_loadout', '~> 0.0'
