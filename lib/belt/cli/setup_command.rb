@@ -97,6 +97,8 @@ module Belt
               puts "✗ --bucket requires a value"
               exit 1
             end
+          elsif %w[--help -h].include?(arg)
+            self.class.run([]) # triggers help output
           elsif !arg.start_with?('-')
             @env_name = arg
           end
