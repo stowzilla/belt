@@ -62,7 +62,7 @@ module Belt
       def files
         {
           'Gemfile.erb' => "#{@app_name}/Gemfile",
-          'lambda/api.rb.erb' => "#{@app_name}/lambda/api.rb",
+          'lambda/api.rb.erb' => "#{@app_name}/lambda/#{@app_name}.rb",
           'lambda/controllers/application_controller.rb.erb' => "#{@app_name}/lambda/controllers/#{@app_name}/application_controller.rb",
           'lambda/lib/routes/routes.rb.erb' => "#{@app_name}/lambda/lib/routes/#{@app_name}_routes.rb",
           'infrastructure/routes.tf.rb.erb' => "#{@app_name}/infrastructure/routes.tf.rb",
