@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'version'
+require_relative 'cli/env_resolver'
 require_relative 'cli/new_command'
 require_relative 'cli/generate_command'
 require_relative 'cli/frontend_command'
@@ -79,6 +80,12 @@ module Belt
           destroy <env>                               terraform destroy for environment
           output <env>                                terraform output for environment
           --version                                   Show Belt version
+
+        Environment:
+          Set BELT_ENV to skip the <env> argument:
+            export BELT_ENV=wups
+            belt apply                  # uses BELT_ENV
+            belt apply dev01            # explicit arg wins
 
         Examples:
           belt new blog --frontend react

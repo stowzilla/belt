@@ -1,19 +1,23 @@
 # frozen_string_literal: true
 
+require_relative 'env_resolver'
+
 module Belt
   module CLI
     class TablesCommand
       SCHEMA_FILE = 'infrastructure/schema.tf.rb'
 
       def self.run(args)
-        env = args.shift
+        env = EnvResolver.resolve(args)
 
-        if env.nil? || env.start_with?('-')
+        if env.nil?
           puts "Usage: belt setup tables <environment>"
           puts "\nReads schema.tf.rb and generates dynamodb.tf in the environment directory."
+          puts "You can also set BELT_ENV to skip the environment argument."
           puts "\nExamples:"
           puts "  belt setup tables wups"
           puts "  belt setup tables dev01"
+          puts "  BELT_ENV=wups belt setup tables"
           exit 1
         end
 

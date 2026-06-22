@@ -2,6 +2,7 @@
 
 require 'fileutils'
 require 'erb'
+require_relative 'env_resolver'
 
 module Belt
   module CLI
@@ -9,14 +10,16 @@ module Belt
       TEMPLATE_DIR = File.expand_path('../../templates/frontend_infra', __dir__)
 
       def self.run(args)
-        env = args.shift
+        env = EnvResolver.resolve(args)
 
-        if env.nil? || env.start_with?('-')
+        if env.nil?
           puts "Usage: belt setup frontend <environment>"
           puts "\nGenerates S3 + CloudFront Terraform for frontend hosting."
+          puts "You can also set BELT_ENV to skip the environment argument."
           puts "\nExamples:"
           puts "  belt setup frontend wups"
           puts "  belt setup frontend dev01"
+          puts "  BELT_ENV=wups belt setup frontend"
           exit 1
         end
 

@@ -1,17 +1,21 @@
 # frozen_string_literal: true
 
+require_relative 'env_resolver'
+
 module Belt
   module CLI
     class FrontendDeployCommand
       def self.run(args)
-        env = args.shift
+        env = EnvResolver.resolve(args)
 
-        if env.nil? || env.start_with?('-')
+        if env.nil?
           puts "Usage: belt deploy frontend <environment>"
           puts "\nBuilds the frontend app and deploys to S3 + invalidates CloudFront."
+          puts "You can also set BELT_ENV to skip the environment argument."
           puts "\nExamples:"
           puts "  belt deploy frontend wups"
           puts "  belt deploy frontend dev01"
+          puts "  BELT_ENV=wups belt deploy frontend"
           exit 1
         end
 

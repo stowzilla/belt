@@ -1,18 +1,22 @@
 # frozen_string_literal: true
 
+require_relative 'env_resolver'
+
 module Belt
   module CLI
     class TerraformCommand
       ACTIONS = %w[init plan apply destroy output].freeze
 
       def self.run(action, args)
-        env = args.shift
+        env = EnvResolver.resolve(args)
 
-        if env.nil? || env.start_with?('-')
+        if env.nil?
           puts "Usage: belt #{action} <environment> [terraform flags...]"
+          puts "\nYou can also set BELT_ENV to skip the environment argument."
           puts "\nExamples:"
           puts "  belt #{action} wups"
           puts "  belt #{action} dev01"
+          puts "  BELT_ENV=wups belt #{action}"
           puts "  belt plan staging -target=module.lambda"
           puts "\nAvailable environments:"
           list_environments.each { |e| puts "  #{e}" }
