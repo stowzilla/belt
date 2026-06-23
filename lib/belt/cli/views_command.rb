@@ -118,7 +118,7 @@ module Belt
         end
 
         # Add routes before closing </Routes>
-        content.sub!(%r{(\s*</Routes>)}, "\n#{route_lines.join("\n")}\\1")
+        content.sub!(%r{([ \t]*</Routes>)}, "\n#{route_lines.join("\n")}\\1")
 
         File.write(app_jsx, content)
         puts "  update  #{app_jsx}"

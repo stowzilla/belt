@@ -1,10 +1,15 @@
 # frozen_string_literal: true
 
+require 'shellwords'
+require 'open3'
+require_relative 'app_detection'
 require_relative 'env_resolver'
 
 module Belt
   module CLI
     class FrontendDeployCommand
+      include AppDetection
+
       def self.run(args)
         env = EnvResolver.resolve(args)
 
@@ -51,14 +56,13 @@ module Belt
 
       def build_frontend
         puts "📦 Installing dependencies..."
-        install_cmd = File.exist?('frontend/package-lock.json') ? 'npm ci' : 'npm install'
-        run!("cd frontend && #{install_cmd}")
+        install_cmd = File.exist?('frontend/package-lock.json') ? %w[npm ci] : %w[npm install]
+        run!(*install_cmd, chdir: 'frontend')
 
         puts "🏗️  Building frontend..."
-        # Pass API URL from terraform output if available
         api_url = fetch_api_url
-        env_vars = api_url ? "VITE_API_URL=#{api_url} " : ""
-        run!("cd frontend && #{env_vars}npm run build")
+        env = api_url ? { 'VITE_API_URL' => api_url } : {}
+        run!(env, 'npm', 'run', 'build', chdir: 'frontend')
       end
 
       def sync_to_s3
@@ -68,13 +72,13 @@ module Belt
         puts "☁️  Deploying to S3... (#{bucket})"
 
         # Hashed assets get immutable cache headers
-        run!("aws s3 sync frontend/dist/ s3://#{bucket} --delete " \
-             "--size-only --cache-control 'public, max-age=31536000, immutable' " \
-             "--exclude 'index.html'")
+        run!('aws', 's3', 'sync', 'frontend/dist/', "s3://#{bucket}", '--delete',
+             '--size-only', '--cache-control', 'public, max-age=31536000, immutable',
+             '--exclude', 'index.html')
 
         # index.html always revalidates
-        run!("aws s3 cp frontend/dist/index.html s3://#{bucket}/index.html " \
-             "--cache-control 'no-cache'")
+        run!('aws', 's3', 'cp', 'frontend/dist/index.html', "s3://#{bucket}/index.html",
+             '--cache-control', 'no-cache')
       end
 
       def invalidate_cloudfront
@@ -85,43 +89,36 @@ module Belt
         end
 
         puts "🔄 Invalidating CloudFront cache..."
-        run!("aws cloudfront create-invalidation --distribution-id #{dist_id} --paths '/*' > /dev/null 2>&1")
+        run!('aws', 'cloudfront', 'create-invalidation', '--distribution-id', dist_id, '--paths', '/*',
+             out: File::NULL)
         puts "✅ CloudFront cache invalidated"
       end
 
       def fetch_api_url
-        output = `cd #{@env_dir} && terraform output -raw api_url 2>/dev/null`
-        $?.success? && !output.strip.empty? ? output.strip : nil
+        output, status = Open3.capture2('terraform', 'output', '-raw', 'api_url', chdir: @env_dir)
+        status.success? && !output.strip.empty? ? output.strip : nil
       end
 
       def fetch_bucket_name
-        output = `cd #{@env_dir} && terraform output -raw frontend_bucket_name 2>/dev/null`
-        $?.success? && !output.strip.empty? ? output.strip : nil
+        output, status = Open3.capture2('terraform', 'output', '-raw', 'frontend_bucket_name', chdir: @env_dir)
+        status.success? && !output.strip.empty? ? output.strip : nil
       end
 
       def fetch_distribution_id
-        output = `cd #{@env_dir} && terraform output -raw frontend_distribution_id 2>/dev/null`
-        $?.success? && !output.strip.empty? ? output.strip : nil
+        output, status = Open3.capture2('terraform', 'output', '-raw', 'frontend_distribution_id', chdir: @env_dir)
+        status.success? && !output.strip.empty? ? output.strip : nil
       end
 
       def fetch_frontend_url
-        output = `cd #{@env_dir} && terraform output -raw frontend_url 2>/dev/null`
-        $?.success? && !output.strip.empty? ? output.strip : nil
+        output, status = Open3.capture2('terraform', 'output', '-raw', 'frontend_url', chdir: @env_dir)
+        status.success? && !output.strip.empty? ? output.strip : nil
       end
 
-      def run!(cmd)
-        unless system(cmd)
-          abort "\n✗ Command failed: #{cmd}"
+      def run!(*args, **opts)
+        env = args.first.is_a?(Hash) ? args.shift : {}
+        unless system(env, *args, **opts)
+          abort "\n✗ Command failed: #{args.shelljoin}"
         end
-      end
-
-      def detect_app_name
-        routes_file = 'infrastructure/routes.tf.rb'
-        if File.exist?(routes_file)
-          match = File.read(routes_file).match(/namespace :(\w+)/)
-          return match[1] if match
-        end
-        File.basename(Dir.pwd)
       end
     end
   end

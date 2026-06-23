@@ -3,12 +3,15 @@
 require 'fileutils'
 require 'erb'
 require 'json'
+require_relative 'app_detection'
 
 module Belt
   module CLI
     class FrontendCommand
       TEMPLATE_DIR = File.expand_path('../../templates/frontend', __dir__)
       FRAMEWORKS = %w[react vue svelte].freeze
+
+      include AppDetection
 
       def self.run(args)
         framework = args.shift
@@ -76,15 +79,6 @@ module Belt
           end
           puts "  create  #{dest_path}"
         end
-      end
-
-      def detect_app_name
-        routes_file = 'infrastructure/routes.tf.rb'
-        if File.exist?(routes_file)
-          match = File.read(routes_file).match(/namespace :(\w+)/)
-          return match[1] if match
-        end
-        File.basename(Dir.pwd)
       end
     end
   end

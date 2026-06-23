@@ -2,11 +2,14 @@
 
 require 'fileutils'
 require 'erb'
+require_relative 'app_detection'
 
 module Belt
   module CLI
     class EnvironmentCommand
       TEMPLATE_DIR = File.expand_path('../../templates/environment', __dir__)
+
+      include AppDetection
 
       def self.run(args)
         env_name = args.shift
@@ -68,15 +71,6 @@ module Belt
         template_path = File.join(TEMPLATE_DIR, template_name)
         content = ERB.new(File.read(template_path), trim_mode: '-').result(binding)
         File.write(dest_path, content)
-      end
-
-      def detect_app_name
-        routes_file = 'infrastructure/routes.tf.rb'
-        if File.exist?(routes_file)
-          match = File.read(routes_file).match(/namespace :(\w+)/)
-          return match[1] if match
-        end
-        File.basename(Dir.pwd)
       end
     end
   end

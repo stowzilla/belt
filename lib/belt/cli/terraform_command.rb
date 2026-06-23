@@ -53,9 +53,9 @@ module Belt
       def run
         validate!
         env_dir = File.join(@infra_dir, @env)
-        cmd = ["terraform", @action, *@extra_args].join(' ')
-        puts "belt → #{cmd}  (in #{env_dir}/)"
-        Dir.chdir(env_dir) { exec(cmd) }
+        args = ['terraform', @action, *@extra_args]
+        puts "belt → #{args.join(' ')}  (in #{env_dir}/)"
+        Dir.chdir(env_dir) { exec(*args) }
       end
 
       private

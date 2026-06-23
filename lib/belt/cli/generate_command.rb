@@ -2,6 +2,7 @@
 
 require 'fileutils'
 require 'erb'
+require_relative 'app_detection'
 require_relative 'environment_command'
 require_relative 'frontend_command'
 require_relative 'views_command'
@@ -11,6 +12,8 @@ module Belt
     class GenerateCommand
       TEMPLATE_DIR = File.expand_path('../../templates/generate', __dir__)
       GENERATORS = %w[resource model controller environment frontend views].freeze
+
+      include AppDetection
 
       def self.run(args)
         generator = args.shift
@@ -132,7 +135,7 @@ module Belt
 
         id_param = "#{@singular_name}_id"
 
-        routes = [
+        new_routes = [
           "{ verb: 'GET', path: '/#{@resource_name}', controller: '#{@resource_name}', action: 'index' }",
           "{ verb: 'POST', path: '/#{@resource_name}', controller: '#{@resource_name}', action: 'create' }",
           "{ verb: 'GET', path: '/#{@resource_name}/{#{id_param}}', controller: '#{@resource_name}', action: 'show' }",
@@ -140,10 +143,17 @@ module Belt
           "{ verb: 'DELETE', path: '/#{@resource_name}/{#{id_param}}', controller: '#{@resource_name}', action: 'destroy' }"
         ]
 
-        route_lines = routes.map { |r| "    #{r}" }.join(",\n")
+        existing_content = File.read(manifest_file)
         constant = @app_name.upcase
 
-        # Rewrite the entire manifest cleanly
+        # Extract existing route entries (preserve routes from other resources)
+        existing_routes = existing_content.scan(/\{ verb: .+? \}/)
+
+        # Merge: replace routes for this resource, keep everything else
+        other_routes = existing_routes.reject { |r| r.include?("controller: '#{@resource_name}'") }
+        all_routes = other_routes + new_routes
+        route_lines = all_routes.map { |r| "    #{r}" }.join(",\n")
+
         content = <<~RUBY
           # frozen_string_literal: true
 
@@ -187,19 +197,6 @@ module Belt
         FileUtils.mkdir_p(File.dirname(dest_path))
         content = ERB.new(File.read(template_path), trim_mode: '-').result(binding)
         File.write(dest_path, content)
-      end
-
-      def detect_app_name
-        # Infer from routes file namespace or directory structure
-        routes_file = 'infrastructure/routes.tf.rb'
-        if File.exist?(routes_file)
-          match = File.read(routes_file).match(/namespace :(\w+)/)
-          return match[1] if match
-        end
-
-        # Fallback: infer from controller directory
-        controller_dirs = Dir.glob('lambda/controllers/*/').map { |d| File.basename(d) }
-        controller_dirs.reject { |d| d == '.' }.first || File.basename(Dir.pwd)
       end
 
       def generate_views_if_frontend

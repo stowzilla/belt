@@ -2,12 +2,15 @@
 
 require 'fileutils'
 require 'erb'
+require_relative 'app_detection'
 require_relative 'env_resolver'
 
 module Belt
   module CLI
     class FrontendSetupCommand
       TEMPLATE_DIR = File.expand_path('../../templates/frontend_infra', __dir__)
+
+      include AppDetection
 
       def self.run(args)
         env = EnvResolver.resolve(args)
@@ -55,15 +58,6 @@ module Belt
         content = ERB.new(File.read(template_path), trim_mode: '-').result(binding)
         File.write(dest, content)
         puts "  create  #{dest}"
-      end
-
-      def detect_app_name
-        routes_file = 'infrastructure/routes.tf.rb'
-        if File.exist?(routes_file)
-          match = File.read(routes_file).match(/namespace :(\w+)/)
-          return match[1] if match
-        end
-        File.basename(Dir.pwd)
       end
     end
   end

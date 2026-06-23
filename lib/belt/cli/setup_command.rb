@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 require 'json'
+require 'shellwords'
+require 'open3'
+require_relative 'app_detection'
 require_relative 'tables_command'
 require_relative 'frontend_setup_command'
 
@@ -10,6 +13,8 @@ module Belt
       SUBCOMMANDS = %w[state tables frontend].freeze
 
       SECURITY_CHECKS = %i[versioning encryption public_access_block tls_policy].freeze
+
+      include AppDetection
 
       def self.run(args)
         subcommand = args.shift
@@ -152,8 +157,8 @@ module Belt
       end
 
       def list_buckets
-        output = `aws s3api list-buckets --query "Buckets[].Name" --output json 2>/dev/null`
-        return [] unless $?.success?
+        output = safe_capture('aws', 's3api', 'list-buckets', '--query', 'Buckets[].Name', '--output', 'json')
+        return [] unless output
 
         JSON.parse(output)
       rescue JSON::ParserError
@@ -184,8 +189,8 @@ module Belt
       end
 
       def check_versioning(bucket)
-        output = `aws s3api get-bucket-versioning --bucket #{bucket} --output json 2>/dev/null`
-        return false unless $?.success?
+        output = safe_capture('aws', 's3api', 'get-bucket-versioning', '--bucket', bucket, '--output', 'json')
+        return false unless output
 
         data = JSON.parse(output)
         data['Status'] == 'Enabled'
@@ -194,8 +199,8 @@ module Belt
       end
 
       def check_encryption(bucket)
-        output = `aws s3api get-bucket-encryption --bucket #{bucket} --output json 2>/dev/null`
-        return false unless $?.success?
+        output = safe_capture('aws', 's3api', 'get-bucket-encryption', '--bucket', bucket, '--output', 'json')
+        return false unless output
 
         data = JSON.parse(output)
         rules = data.dig('ServerSideEncryptionConfiguration', 'Rules') || []
@@ -205,8 +210,8 @@ module Belt
       end
 
       def check_public_access_block(bucket)
-        output = `aws s3api get-public-access-block --bucket #{bucket} --output json 2>/dev/null`
-        return false unless $?.success?
+        output = safe_capture('aws', 's3api', 'get-public-access-block', '--bucket', bucket, '--output', 'json')
+        return false unless output
 
         data = JSON.parse(output)
         config = data['PublicAccessBlockConfiguration'] || {}
@@ -217,8 +222,8 @@ module Belt
       end
 
       def check_tls_policy(bucket)
-        output = `aws s3api get-bucket-policy --bucket #{bucket} --output json 2>/dev/null`
-        return false unless $?.success?
+        output = safe_capture('aws', 's3api', 'get-bucket-policy', '--bucket', bucket, '--output', 'json')
+        return false unless output
 
         data = JSON.parse(output)
         policy = JSON.parse(data['Policy'])
@@ -258,32 +263,34 @@ module Belt
       # --- AWS operations ---
 
       def aws_configured?
-        system("aws sts get-caller-identity > /dev/null 2>&1")
+        system('aws', 'sts', 'get-caller-identity', out: File::NULL, err: File::NULL)
       end
 
       def bucket_exists?(bucket)
-        system("aws s3api head-bucket --bucket #{bucket} 2>/dev/null")
+        system('aws', 's3api', 'head-bucket', '--bucket', bucket, err: File::NULL)
       end
 
       def create_bucket(bucket)
-        cmd = "aws s3api create-bucket --bucket #{bucket} --region #{@region}"
-        cmd += " --create-bucket-configuration LocationConstraint=#{@region}" unless @region == 'us-east-1'
-        run!(cmd)
+        args = ['aws', 's3api', 'create-bucket', '--bucket', bucket, '--region', @region]
+        args.push('--create-bucket-configuration', "LocationConstraint=#{@region}") unless @region == 'us-east-1'
+        run!(*args)
       end
 
       def enable_versioning(bucket)
-        run!("aws s3api put-bucket-versioning --bucket #{bucket} " \
-             "--versioning-configuration Status=Enabled")
+        run!('aws', 's3api', 'put-bucket-versioning', '--bucket', bucket,
+             '--versioning-configuration', 'Status=Enabled')
       end
 
       def enable_encryption(bucket)
-        run!("aws s3api put-bucket-encryption --bucket #{bucket} " \
-             "--server-side-encryption-configuration '{\"Rules\":[{\"ApplyServerSideEncryptionByDefault\":{\"SSEAlgorithm\":\"AES256\"},\"BucketKeyEnabled\":true}]}'")
+        config = '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"},"BucketKeyEnabled":true}]}'
+        run!('aws', 's3api', 'put-bucket-encryption', '--bucket', bucket,
+             '--server-side-encryption-configuration', config)
       end
 
       def block_public_access(bucket)
-        run!("aws s3api put-public-access-block --bucket #{bucket} " \
-             "--public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true")
+        run!('aws', 's3api', 'put-public-access-block', '--bucket', bucket,
+             '--public-access-block-configuration',
+             'BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true')
       end
 
       def apply_tls_policy(bucket)
@@ -298,7 +305,7 @@ module Belt
             Condition: { Bool: { 'aws:SecureTransport' => 'false' } }
           }]
         }
-        run!("aws s3api put-bucket-policy --bucket #{bucket} --policy '#{JSON.generate(policy)}'")
+        run!('aws', 's3api', 'put-bucket-policy', '--bucket', bucket, '--policy', JSON.generate(policy))
       end
 
       def apply_lifecycle(bucket)
@@ -311,15 +318,20 @@ module Belt
             AbortIncompleteMultipartUpload: { DaysAfterInitiation: 7 }
           }]
         }
-        run!("aws s3api put-bucket-lifecycle-configuration --bucket #{bucket} " \
-             "--lifecycle-configuration '#{JSON.generate(lifecycle)}'")
+        run!('aws', 's3api', 'put-bucket-lifecycle-configuration', '--bucket', bucket,
+             '--lifecycle-configuration', JSON.generate(lifecycle))
       end
 
-      def run!(cmd)
-        unless system(cmd)
-          puts "\n✗ Command failed: #{cmd}"
+      def run!(*args)
+        unless system(*args)
+          puts "\n✗ Command failed: #{args.shelljoin}"
           exit 1
         end
+      end
+
+      def safe_capture(*args)
+        output, status = Open3.capture2(*args, err: File::NULL)
+        status.success? ? output : nil
       end
 
       # --- Backend config ---
@@ -347,15 +359,6 @@ module Belt
       end
 
       # --- Detection ---
-
-      def detect_app_name
-        routes_file = 'infrastructure/routes.tf.rb'
-        if File.exist?(routes_file)
-          match = File.read(routes_file).match(/namespace :(\w+)/)
-          return match[1] if match
-        end
-        File.basename(Dir.pwd)
-      end
 
       def detect_region
         Dir.glob('infrastructure/*/backend.tf').each do |f|

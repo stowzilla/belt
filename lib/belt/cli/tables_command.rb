@@ -1,11 +1,14 @@
 # frozen_string_literal: true
 
+require_relative 'app_detection'
 require_relative 'env_resolver'
 
 module Belt
   module CLI
     class TablesCommand
       SCHEMA_FILE = 'infrastructure/schema.tf.rb'
+
+      include AppDetection
 
       def self.run(args)
         env = EnvResolver.resolve(args)
@@ -103,17 +106,6 @@ module Belt
 
       def table_name(model_name)
         "#{@app_name}-#{@env}-#{model_name}s"
-      end
-
-      def detect_app_name
-        if File.exist?(SCHEMA_FILE)
-          routes_file = 'infrastructure/routes.tf.rb'
-          if File.exist?(routes_file)
-            match = File.read(routes_file).match(/namespace :(\w+)/)
-            return match[1] if match
-          end
-        end
-        File.basename(Dir.pwd)
       end
 
       # Minimal DSL parser for schema.tf.rb
