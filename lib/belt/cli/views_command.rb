@@ -117,8 +117,11 @@ module Belt
           content.insert(end_of_line, "\n#{import_lines.join("\n")}")
         end
 
-        # Add routes before closing </Routes>
-        content.sub!(%r{([ \t]*</Routes>)}, "\n#{route_lines.join("\n")}\\1")
+        # Add routes before closing </Routes> (no regex — avoids polynomial backtracking)
+        close_idx = content.index('</Routes>')
+        if close_idx
+          content.insert(close_idx, "#{route_lines.join("\n")}\n")
+        end
 
         File.write(app_jsx, content)
         puts "  update  #{app_jsx}"
