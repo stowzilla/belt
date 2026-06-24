@@ -85,7 +85,7 @@ module Belt
             }
           end
         end
-        routes.sort_by { |r| [r[:path], verb_order(r[:verb])] }
+        routes.sort_by { |r| [r[:gateway], r[:path], verb_order(r[:verb])] }
       end
 
       def normalize_path(path)
@@ -187,14 +187,28 @@ module Belt
       def output_concise(routes)
         return puts("No routes defined.") if routes.empty?
 
+        multi_gateway = routes.map { |r| r[:gateway] }.uniq.length > 1
+
         verb_w = [routes.map { |r| r[:verb].length }.max, 6].max
         path_w = [routes.map { |r| r[:path].length }.max, 4].max
 
-        puts "#{'VERB'.ljust(verb_w)}  #{'PATH'.ljust(path_w)}  CONTROLLER#ACTION"
-        puts "-" * (verb_w + path_w + 30)
+        if multi_gateway
+          gw_w = [routes.map { |r| r[:gateway].length }.max, 7].max
+          lam_w = [routes.map { |r| r[:lambda].length }.max, 6].max
 
-        routes.each do |r|
-          puts "#{r[:verb].ljust(verb_w)}  #{r[:path].ljust(path_w)}  #{r[:controller]}##{r[:action]}"
+          puts "#{'VERB'.ljust(verb_w)}  #{'PATH'.ljust(path_w)}  #{'GATEWAY'.ljust(gw_w)}  #{'LAMBDA'.ljust(lam_w)}  CONTROLLER#ACTION"
+          puts "-" * (verb_w + path_w + gw_w + lam_w + 20)
+
+          routes.each do |r|
+            puts "#{r[:verb].ljust(verb_w)}  #{r[:path].ljust(path_w)}  #{r[:gateway].ljust(gw_w)}  #{r[:lambda].ljust(lam_w)}  #{r[:controller]}##{r[:action]}"
+          end
+        else
+          puts "#{'VERB'.ljust(verb_w)}  #{'PATH'.ljust(path_w)}  CONTROLLER#ACTION"
+          puts "-" * (verb_w + path_w + 30)
+
+          routes.each do |r|
+            puts "#{r[:verb].ljust(verb_w)}  #{r[:path].ljust(path_w)}  #{r[:controller]}##{r[:action]}"
+          end
         end
       end
 
