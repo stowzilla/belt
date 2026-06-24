@@ -1,0 +1,34 @@
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
+
+export default function <%= @class_name %>Form({ initialValues = {}, onSubmit, submitLabel = 'Create' }) {
+<% @fields.each do |field| -%>
+  const [<%= field[:name] %>, set<%= field[:name].split('_').map(&:capitalize).join %>] = useState(initialValues.<%= field[:name] %> || '')
+<% end -%>
+
+  function handleSubmit(e) {
+    e.preventDefault()
+    onSubmit({ <%= @fields.map { |f| f[:name] }.join(', ') %> })
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+<% @fields.each do |field| -%>
+      <div style={{ marginBottom: '1rem' }}>
+        <label style={{ display: 'block', marginBottom: '0.25rem' }}><%= field[:name].split('_').map(&:capitalize).join(' ') %></label>
+<% if field[:type] == 'text' -%>
+        <textarea value={<%= field[:name] %>} onChange={e => set<%= field[:name].split('_').map(&:capitalize).join %>(e.target.value)}
+          rows={6} style={{ width: '100%' }} />
+<% else -%>
+        <input type="text" value={<%= field[:name] %>} onChange={e => set<%= field[:name].split('_').map(&:capitalize).join %>(e.target.value)}
+          style={{ width: '100%', padding: '0.5rem' }} />
+<% end -%>
+      </div>
+<% end -%>
+
+      <button type="submit">{submitLabel}</button>
+      {' '}
+      <Link to="/<%= @resource_name %>">Cancel</Link>
+    </form>
+  )
+}

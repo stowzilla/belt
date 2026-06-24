@@ -1,0 +1,46 @@
+import { useEffect, useState } from 'react'
+import { useParams, Link, useNavigate } from 'react-router-dom'
+import { apiClient } from '../../lib/apiClient'
+
+export default function <%= @class_name %>Show() {
+  const { id } = useParams()
+  const navigate = useNavigate()
+  const [<%= @singular_name %>, set<%= @class_name %>] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    apiClient(`/<%= @resource_name %>/${id}`)
+      .then(data => set<%= @class_name %>(data.<%= @singular_name %>))
+      .finally(() => setLoading(false))
+  }, [id])
+
+  async function handleDelete() {
+    if (!confirm('Are you sure?')) return
+    await apiClient(`/<%= @resource_name %>/${id}`, { method: 'DELETE' })
+    navigate('/<%= @resource_name %>')
+  }
+
+  if (loading) return <p>Loading...</p>
+  if (!<%= @singular_name %>) return <p><%= @class_name %> not found.</p>
+
+  return (
+    <main style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
+      <Link to="/<%= @resource_name %>">&larr; Back to <%= @resource_name %></Link>
+<% @fields.each do |field| -%>
+<% if field[:type] == 'text' -%>
+      <div style={{ margin: '1rem 0', whiteSpace: 'pre-wrap' }}>{<%= @singular_name %>.<%= field[:name] %>}</div>
+<% else -%>
+      <p><strong><%= field[:name].split('_').map(&:capitalize).join(' ') %>:</strong> {<%= @singular_name %>.<%= field[:name] %>}</p>
+<% end -%>
+<% end -%>
+
+      <div style={{ marginTop: '1rem' }}>
+        <Link to={`/<%= @resource_name %>/${id}/edit`}>Edit</Link>
+        {' | '}
+        <button onClick={handleDelete} style={{ background: 'none', border: 'none', color: 'red', cursor: 'pointer' }}>
+          Delete
+        </button>
+      </div>
+    </main>
+  )
+}

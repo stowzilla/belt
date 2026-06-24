@@ -1,0 +1,39 @@
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { apiClient } from '../../lib/apiClient'
+
+export default function <%= @class_name %>sIndex() {
+  const [<%= @resource_name %>, set<%= @class_name %>s] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    apiClient('/<%= @resource_name %>')
+      .then(data => set<%= @class_name %>s(data.<%= @resource_name %> || []))
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <p>Loading...</p>
+
+  return (
+    <main style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h1><%= @class_name %>s</h1>
+        <Link to="/<%= @resource_name %>/new">New <%= @class_name %></Link>
+      </div>
+
+      {<%= @resource_name %>.length === 0 ? (
+        <p>No <%= @resource_name %> yet.</p>
+      ) : (
+        <ul style={{ listStyle: 'none', padding: 0 }}>
+          {<%= @resource_name %>.map(<%= @singular_name %> => (
+            <li key={<%= @singular_name %>.id} style={{ padding: '0.5rem 0', borderBottom: '1px solid #eee' }}>
+              <Link to={`/<%= @resource_name %>/${<%= @singular_name %>.id}`}>
+                {<%= @singular_name %>.<%= @fields.first&.dig(:name) || 'id' %>}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </main>
+  )
+}

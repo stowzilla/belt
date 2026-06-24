@@ -1,0 +1,64 @@
+# frozen_string_literal: true
+
+require 'fileutils'
+require 'erb'
+require_relative 'app_detection'
+require_relative 'env_resolver'
+
+module Belt
+  module CLI
+    class FrontendSetupCommand
+      TEMPLATE_DIR = File.expand_path('../../templates/frontend_infra', __dir__)
+
+      include AppDetection
+
+      def self.run(args)
+        env = EnvResolver.resolve(args)
+
+        if env.nil?
+          puts 'Usage: belt setup frontend <environment>'
+          puts "\nGenerates S3 + CloudFront Terraform for frontend hosting."
+          puts 'You can also set BELT_ENV to skip the environment argument.'
+          puts "\nExamples:"
+          puts '  belt setup frontend wups'
+          puts '  belt setup frontend dev01'
+          puts '  BELT_ENV=wups belt setup frontend'
+          exit 1
+        end
+
+        new(env).run
+      end
+
+      def initialize(env)
+        @env = env
+        @app_name = detect_app_name
+        @env_dir = "infrastructure/#{@env}"
+      end
+
+      def run
+        validate!
+        generate_frontend_tf
+        puts "\n✓ Frontend infrastructure generated for '#{@env}'!"
+        puts "\nRun `belt apply #{@env}` to create the S3 bucket and CloudFront distribution."
+        puts "Then `belt deploy frontend #{@env}` to build and deploy."
+      end
+
+      private
+
+      def validate!
+        return if Dir.exist?(@env_dir)
+
+        abort "Error: Environment '#{@env}' not found at #{@env_dir}/.\n" \
+              "Create it with: belt generate environment #{@env}"
+      end
+
+      def generate_frontend_tf
+        dest = File.join(@env_dir, 'frontend.tf')
+        template_path = File.join(TEMPLATE_DIR, 'frontend.tf.erb')
+        content = ERB.new(File.read(template_path), trim_mode: '-').result(binding)
+        File.write(dest, content)
+        puts "  create  #{dest}"
+      end
+    end
+  end
+end
