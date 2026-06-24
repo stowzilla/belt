@@ -10,6 +10,7 @@ require_relative 'cli/frontend_deploy_command'
 require_relative 'cli/views_command'
 require_relative 'cli/setup_command'
 require_relative 'cli/terraform_command'
+require_relative 'cli/routes_command'
 
 module Belt
   module CLI
@@ -17,6 +18,7 @@ module Belt
       'new' => Belt::CLI::NewCommand,
       'generate' => Belt::CLI::GenerateCommand,
       'g' => Belt::CLI::GenerateCommand,
+      'routes' => Belt::CLI::RoutesCommand,
       'setup' => Belt::CLI::SetupCommand,
       'deploy' => lambda { |args|
         subcommand = args.shift
@@ -68,6 +70,7 @@ module Belt
           generate frontend <react|vue|svelte>        Scaffold a frontend app
           generate views <resource> [fields...]       Generate React pages for REST actions
           generate environment <name>                 Create a new environment
+          routes [-g PATTERN] [-f json]               Show route definitions
           setup state                                 Create/select S3 state bucket
           setup tables <env>                          Generate DynamoDB tables from schema
           setup frontend <env>                        Generate S3 + CloudFront infrastructure
