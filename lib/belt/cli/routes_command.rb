@@ -81,7 +81,8 @@ module Belt
               lambda: route.lambda.to_s,
               controller: infer_controller(route, gateway),
               action: infer_action(route, gateway),
-              auth: route.auth.to_s
+              auth: route.auth.to_s,
+              tables: route.tables.map(&:to_s)
             }
           end
         end
