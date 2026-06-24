@@ -21,24 +21,18 @@ module Belt
         if generator.nil? || !GENERATORS.include?(generator)
           puts "Usage: belt generate <#{GENERATORS.join('|')}> <name> [field:type ...]"
           puts "\nExamples:"
-          puts "  belt generate resource post title:string content:text status:string"
-          puts "  belt generate model comment body:text author:string"
-          puts "  belt generate controller comments"
-          puts "  belt generate environment dev01"
+          puts '  belt generate resource post title:string content:text status:string'
+          puts '  belt generate model comment body:text author:string'
+          puts '  belt generate controller comments'
+          puts '  belt generate environment dev01'
           exit 1
         end
 
-        if generator == 'environment'
-          return Belt::CLI::EnvironmentCommand.run(args)
-        end
+        return Belt::CLI::EnvironmentCommand.run(args) if generator == 'environment'
 
-        if generator == 'frontend'
-          return Belt::CLI::FrontendCommand.run(args)
-        end
+        return Belt::CLI::FrontendCommand.run(args) if generator == 'frontend'
 
-        if generator == 'views'
-          return Belt::CLI::ViewsCommand.run(args)
-        end
+        return Belt::CLI::ViewsCommand.run(args) if generator == 'views'
 
         name = args.shift
         if name.nil? || name.empty?
@@ -88,8 +82,8 @@ module Belt
         puts "\nFiles created/updated:"
         puts "  lambda/models/#{@singular_name}.rb"
         puts "  lambda/controllers/#{@app_name}/#{@resource_name}_controller.rb"
-        puts "  infrastructure/routes.tf.rb (updated)"
-        puts "  infrastructure/schema.tf.rb (updated)"
+        puts '  infrastructure/routes.tf.rb (updated)'
+        puts '  infrastructure/schema.tf.rb (updated)'
         puts "  lambda/lib/routes/#{@app_name}_routes.rb (updated)"
         puts "  frontend/src/pages/#{@resource_name}/ (views)" if Dir.exist?('frontend/src')
       end
@@ -107,15 +101,15 @@ module Belt
       end
 
       def inject_routes
-        routes_file = "infrastructure/routes.tf.rb"
+        routes_file = 'infrastructure/routes.tf.rb'
         return unless File.exist?(routes_file)
 
         content = File.read(routes_file)
-        tables_arg = @fields.any? ? ", tables: [:#{@resource_name}]" : ""
+        tables_arg = @fields.any? ? ", tables: [:#{@resource_name}]" : ''
 
         # Insert before the closing `end` of the namespace block
-        if content.include?("# resources :posts")
-          content.sub!("# resources :posts", "resources :#{@resource_name}#{tables_arg}")
+        if content.include?('# resources :posts')
+          content.sub!('# resources :posts', "resources :#{@resource_name}#{tables_arg}")
         elsif content.match?(/namespace :\w+[^\n]*do\n(\s+#[^\n]*\n)*\s+end/)
           content.sub!(/^(\s+)(end\s*\z)/m, "\\1  resources :#{@resource_name}#{tables_arg}\n\\1\\2")
         else
@@ -139,8 +133,10 @@ module Belt
           "{ verb: 'GET', path: '/#{@resource_name}', controller: '#{@resource_name}', action: 'index' }",
           "{ verb: 'POST', path: '/#{@resource_name}', controller: '#{@resource_name}', action: 'create' }",
           "{ verb: 'GET', path: '/#{@resource_name}/{#{id_param}}', controller: '#{@resource_name}', action: 'show' }",
-          "{ verb: 'PUT', path: '/#{@resource_name}/{#{id_param}}', controller: '#{@resource_name}', action: 'update' }",
-          "{ verb: 'DELETE', path: '/#{@resource_name}/{#{id_param}}', controller: '#{@resource_name}', action: 'destroy' }"
+          "{ verb: 'PUT', path: '/#{@resource_name}/{#{id_param}}', " \
+          "controller: '#{@resource_name}', action: 'update' }",
+          "{ verb: 'DELETE', path: '/#{@resource_name}/{#{id_param}}', " \
+          "controller: '#{@resource_name}', action: 'destroy' }"
         ]
 
         existing_content = File.read(manifest_file)
@@ -169,14 +165,14 @@ module Belt
       end
 
       def inject_schema
-        schema_file = "infrastructure/schema.tf.rb"
+        schema_file = 'infrastructure/schema.tf.rb'
         return unless File.exist?(schema_file)
 
         content = File.read(schema_file)
 
         field_lines = @fields.map { |f| "    field :#{f[:name]}, type: :#{f[:type]}" }
-        field_lines << "    field :created_at, type: :string"
-        field_lines << "    field :updated_at, type: :string"
+        field_lines << '    field :created_at, type: :string'
+        field_lines << '    field :updated_at, type: :string'
 
         schema_block = "  model :#{@singular_name} do\n#{field_lines.join("\n")}\n  end\n"
 

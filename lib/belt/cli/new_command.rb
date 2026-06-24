@@ -14,18 +14,18 @@ module Belt
 
         args.each do |arg|
           if arg.start_with?('--frontend')
-            if arg.include?('=')
-              frontend = arg.split('=', 2).last
-            else
-              frontend = args[args.index(arg) + 1]
-            end
+            frontend = if arg.include?('=')
+                         arg.split('=', 2).last
+                       else
+                         args[args.index(arg) + 1]
+                       end
           elsif !arg.start_with?('-')
             app_name ||= arg
           end
         end
 
         if app_name.nil? || app_name.empty?
-          puts "Usage: belt new <app_name> [--frontend react|vue|svelte]"
+          puts 'Usage: belt new <app_name> [--frontend react|vue|svelte]'
           exit 1
         end
 
@@ -51,12 +51,10 @@ module Belt
         puts "\n✓ #{@app_name} created successfully!"
         puts "\nNext steps:"
         puts "  cd #{@app_name}"
-        puts "  bundle install"
-        if @frontend
-          puts "  cd frontend && npm install && npm run dev"
-        end
-        puts "  # Define your models in infrastructure/schema.tf.rb"
-        puts "  # Define your routes in infrastructure/routes.tf.rb"
+        puts '  bundle install'
+        puts '  cd frontend && npm install && npm run dev' if @frontend
+        puts '  # Define your models in infrastructure/schema.tf.rb'
+        puts '  # Define your routes in infrastructure/routes.tf.rb'
         puts "  # Add controllers in lambda/controllers/#{@app_name}/"
       end
 
@@ -85,7 +83,8 @@ module Belt
           'lambda/api.rb.erb' => "#{@app_name}/lambda/#{@app_name}.rb",
           'lambda/models/application_record.rb.erb' => "#{@app_name}/lambda/models/application_record.rb",
           'lambda/models/concerns/timestampable.rb.erb' => "#{@app_name}/lambda/models/concerns/timestampable.rb",
-          'lambda/controllers/application_controller.rb.erb' => "#{@app_name}/lambda/controllers/#{@app_name}/application_controller.rb",
+          'lambda/controllers/application_controller.rb.erb' =>
+            "#{@app_name}/lambda/controllers/#{@app_name}/application_controller.rb",
           'lambda/lib/routes/routes.rb.erb' => "#{@app_name}/lambda/lib/routes/#{@app_name}_routes.rb",
           'infrastructure/routes.tf.rb.erb' => "#{@app_name}/infrastructure/routes.tf.rb",
           'infrastructure/schema.tf.rb.erb' => "#{@app_name}/infrastructure/schema.tf.rb",

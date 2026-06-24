@@ -11,20 +11,21 @@ module Belt
       def self.run(args)
         name = args.shift
         if name.nil? || name.empty?
-          puts "Usage: belt generate views <resource> [field:type ...]"
+          puts 'Usage: belt generate views <resource> [field:type ...]'
           puts "\nGenerates React pages for all REST actions (index, show, new, edit)."
           puts "\nExamples:"
-          puts "  belt generate views post title:string content:text status:string"
-          puts "  belt generate views comment body:text author:string"
+          puts '  belt generate views post title:string content:text status:string'
+          puts '  belt generate views comment body:text author:string'
           exit 1
         end
 
-        fields = args.map { |arg| n, t = arg.split(':', 2); { name: n, type: t || 'string' } }
+        fields = args.map do |arg|
+          n, t = arg.split(':', 2)
+          { name: n, type: t || 'string' }
+        end
 
         # If no fields provided, try to read from schema.tf.rb
-        if fields.empty?
-          fields = read_schema_fields(name)
-        end
+        fields = read_schema_fields(name) if fields.empty?
 
         new(name, fields).generate
       end
@@ -38,8 +39,12 @@ module Belt
 
         # Extract fields from model block
         if content =~ /model :#{singular} do\n(.*?)\n\s*end/m
-          $1.scan(/field :(\w+), type: :(\w+)/).reject { |n, _| %w[created_at updated_at].include?(n) }
-             .map { |n, t| { name: n, type: t } }
+          ::Regexp.last_match(1).scan(/field :(\w+), type: :(\w+)/).except('created_at', 'updated_at')
+                  .map do |n, t|
+            {
+              name: n, type: t
+            }
+          end
         else
           []
         end
@@ -55,7 +60,7 @@ module Belt
 
       def generate
         unless Dir.exist?('frontend/src')
-          puts "✗ No frontend/ directory found. Run `belt generate frontend react` first."
+          puts '✗ No frontend/ directory found. Run `belt generate frontend react` first.'
           exit 1
         end
 
@@ -77,7 +82,7 @@ module Belt
         puts "  #{pages_dir}/#{@class_name}New.jsx"
         puts "  #{pages_dir}/#{@class_name}Edit.jsx"
         puts "  #{pages_dir}/#{@class_name}Form.jsx"
-        puts "  frontend/src/App.jsx (updated)"
+        puts '  frontend/src/App.jsx (updated)'
       end
 
       private
@@ -119,9 +124,7 @@ module Belt
 
         # Add routes before closing </Routes> (no regex — avoids polynomial backtracking)
         close_idx = content.index('</Routes>')
-        if close_idx
-          content.insert(close_idx, "#{route_lines.join("\n")}\n")
-        end
+        content.insert(close_idx, "#{route_lines.join("\n")}\n") if close_idx
 
         File.write(app_jsx, content)
         puts "  update  #{app_jsx}"

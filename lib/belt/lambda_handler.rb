@@ -31,15 +31,15 @@ module Belt
 
       # Auto-register controllers directory relative to the including file's location
       caller_file = caller_locations(1, 1)&.first&.path
-      if caller_file
-        controllers_dir = File.join(File.dirname(caller_file), 'controllers')
-        if File.directory?(controllers_dir)
-          Belt.controller_paths << controllers_dir
-          Dir.children(controllers_dir).each do |child|
-            subdir = File.join(controllers_dir, child)
-            Belt.controller_paths << subdir if File.directory?(subdir)
-          end
-        end
+      return unless caller_file
+
+      controllers_dir = File.join(File.dirname(caller_file), 'controllers')
+      return unless File.directory?(controllers_dir)
+
+      Belt.controller_paths << controllers_dir
+      Dir.children(controllers_dir).each do |child|
+        subdir = File.join(controllers_dir, child)
+        Belt.controller_paths << subdir if File.directory?(subdir)
       end
     end
 

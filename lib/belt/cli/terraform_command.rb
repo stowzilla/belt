@@ -17,7 +17,7 @@ module Belt
           puts "  belt #{action} wups"
           puts "  belt #{action} dev01"
           puts "  BELT_ENV=wups belt #{action}"
-          puts "  belt plan staging -target=module.lambda"
+          puts '  belt plan staging -target=module.lambda'
           puts "\nAvailable environments:"
           list_environments.each { |e| puts "  #{e}" }
           exit 1
@@ -66,11 +66,11 @@ module Belt
         end
 
         env_dir = File.join(@infra_dir, @env)
-        unless Dir.exist?(env_dir)
-          abort "Error: Environment '#{@env}' not found at #{env_dir}/.\n\n" \
-                "Available environments:\n#{self.class.list_environments.map { |e| "  #{e}" }.join("\n")}\n\n" \
-                "Create it with: belt generate environment #{@env}"
-        end
+        return if Dir.exist?(env_dir)
+
+        abort "Error: Environment '#{@env}' not found at #{env_dir}/.\n\n" \
+              "Available environments:\n#{self.class.list_environments.map { |e| "  #{e}" }.join("\n")}\n\n" \
+              "Create it with: belt generate environment #{@env}"
       end
     end
   end

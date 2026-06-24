@@ -16,13 +16,13 @@ module Belt
         env = EnvResolver.resolve(args)
 
         if env.nil?
-          puts "Usage: belt setup frontend <environment>"
+          puts 'Usage: belt setup frontend <environment>'
           puts "\nGenerates S3 + CloudFront Terraform for frontend hosting."
-          puts "You can also set BELT_ENV to skip the environment argument."
+          puts 'You can also set BELT_ENV to skip the environment argument.'
           puts "\nExamples:"
-          puts "  belt setup frontend wups"
-          puts "  belt setup frontend dev01"
-          puts "  BELT_ENV=wups belt setup frontend"
+          puts '  belt setup frontend wups'
+          puts '  belt setup frontend dev01'
+          puts '  BELT_ENV=wups belt setup frontend'
           exit 1
         end
 
@@ -46,10 +46,10 @@ module Belt
       private
 
       def validate!
-        unless Dir.exist?(@env_dir)
-          abort "Error: Environment '#{@env}' not found at #{@env_dir}/.\n" \
-                "Create it with: belt generate environment #{@env}"
-        end
+        return if Dir.exist?(@env_dir)
+
+        abort "Error: Environment '#{@env}' not found at #{@env_dir}/.\n" \
+              "Create it with: belt generate environment #{@env}"
       end
 
       def generate_frontend_tf

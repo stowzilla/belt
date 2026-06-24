@@ -7,7 +7,7 @@ module Belt
         if args.first && !args.first.start_with?('-')
           args.shift
         else
-          ENV['BELT_ENV']
+          ENV.fetch('BELT_ENV', nil)
         end
       end
     end

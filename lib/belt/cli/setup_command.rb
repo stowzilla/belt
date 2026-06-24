@@ -4,6 +4,7 @@ require 'json'
 require 'shellwords'
 require 'open3'
 require_relative 'app_detection'
+require_relative 'bucket_security'
 require_relative 'tables_command'
 require_relative 'frontend_setup_command'
 
@@ -15,6 +16,7 @@ module Belt
       SECURITY_CHECKS = %i[versioning encryption public_access_block tls_policy].freeze
 
       include AppDetection
+      include BucketSecurity
 
       def self.run(args)
         subcommand = args.shift
@@ -27,11 +29,11 @@ module Belt
         when 'frontend'
           Belt::CLI::FrontendSetupCommand.run(args)
         else
-          puts "Usage: belt setup <state|tables|frontend> [options]"
+          puts 'Usage: belt setup <state|tables|frontend> [options]'
           puts "\nSubcommands:"
-          puts "  state     Set up S3 bucket for Terraform state"
-          puts "  tables    Generate DynamoDB table definitions from schema.tf.rb"
-          puts "  frontend  Generate S3 + CloudFront infrastructure for frontend hosting"
+          puts '  state     Set up S3 bucket for Terraform state'
+          puts '  tables    Generate DynamoDB table definitions from schema.tf.rb'
+          puts '  frontend  Generate S3 + CloudFront infrastructure for frontend hosting'
           exit 1
         end
       end
@@ -50,44 +52,58 @@ module Belt
 
       def run_state_setup
         unless aws_configured?
-          puts "✗ AWS credentials not configured. Set AWS_PROFILE or configure aws sso login."
+          puts '✗ AWS credentials not configured. Set AWS_PROFILE or configure aws sso login.'
           exit 1
         end
 
-        if @select_mode
-          @bucket_name = interactive_bucket_selection
-        end
-
-        if bucket_exists?(@bucket_name)
-          puts "Found existing bucket: #{@bucket_name}"
-          audit = audit_bucket_security(@bucket_name)
-          print_security_audit(audit)
-
-          if audit.values.all?
-            puts "\n✓ Bucket '#{@bucket_name}' passes all security checks"
-          else
-            puts "\n⚠ Bucket '#{@bucket_name}' has security issues."
-            print "\nApply security hardening? [Y/n] "
-            response = $stdin.gets&.strip&.downcase
-            if response.nil? || response.empty? || response == 'y'
-              harden_bucket(@bucket_name, audit)
-            else
-              puts "✗ Refusing to use insecure bucket. Fix manually or choose a different bucket."
-              exit 1
-            end
-          end
-        else
-          puts "Creating state bucket: #{@bucket_name} (#{@region})"
-          create_bucket(@bucket_name)
-          puts "  create  s3://#{@bucket_name}"
-          harden_bucket(@bucket_name, {})
-        end
-
+        @bucket_name = interactive_bucket_selection if @select_mode
+        setup_or_verify_bucket
         apply_lifecycle(@bucket_name)
-        puts "  ensure  lifecycle rules (90-day noncurrent expiration)"
-
+        puts '  ensure  lifecycle rules (90-day noncurrent expiration)'
         update_backend_config
+        print_success_message
+      end
 
+      def setup_or_verify_bucket
+        if bucket_exists?(@bucket_name)
+          verify_existing_bucket
+        else
+          create_new_bucket
+        end
+      end
+
+      def verify_existing_bucket
+        puts "Found existing bucket: #{@bucket_name}"
+        audit = audit_bucket_security(@bucket_name)
+        print_security_audit(audit)
+
+        if audit.values.all?
+          puts "\n✓ Bucket '#{@bucket_name}' passes all security checks"
+        else
+          prompt_and_harden(audit)
+        end
+      end
+
+      def prompt_and_harden(audit)
+        puts "\n⚠ Bucket '#{@bucket_name}' has security issues."
+        print "\nApply security hardening? [Y/n] "
+        response = $stdin.gets&.strip&.downcase
+        if response.nil? || response.empty? || response == 'y'
+          harden_bucket(@bucket_name, audit)
+        else
+          puts '✗ Refusing to use insecure bucket. Fix manually or choose a different bucket.'
+          exit 1
+        end
+      end
+
+      def create_new_bucket
+        puts "Creating state bucket: #{@bucket_name} (#{@region})"
+        create_bucket(@bucket_name)
+        puts "  create  s3://#{@bucket_name}"
+        harden_bucket(@bucket_name, {})
+      end
+
+      def print_success_message
         puts "\n✓ State bucket '#{@bucket_name}' is ready!"
         if @env_name
           puts "\n  cd infrastructure/#{@env_name} && terraform init"
@@ -103,7 +119,7 @@ module Belt
           case arg
           when '--bucket'
             @custom_bucket = args.shift
-            abort "✗ --bucket requires a value" unless @custom_bucket
+            abort '✗ --bucket requires a value' unless @custom_bucket
           when '--select'
             @select_mode = true
           when '--help', '-h'
@@ -130,7 +146,7 @@ module Belt
         puts "Listing S3 buckets in account...\n\n"
         buckets = list_buckets
         if buckets.empty?
-          puts "No buckets found. Creating a new one."
+          puts 'No buckets found. Creating a new one.'
           return @bucket_name
         end
 
@@ -139,7 +155,7 @@ module Belt
           puts "  [#{i + 1}] #{b}"
         end
         puts "  [N] Create new bucket (#{@bucket_name})"
-        puts ""
+        puts ''
         print "Select bucket [1-#{buckets.size}] or N for new: "
         choice = $stdin.gets&.strip
 
@@ -150,7 +166,7 @@ module Belt
           if idx >= 0 && idx < buckets.size
             buckets[idx]
           else
-            puts "✗ Invalid selection"
+            puts '✗ Invalid selection'
             exit 1
           end
         end
@@ -163,101 +179,6 @@ module Belt
         JSON.parse(output)
       rescue JSON::ParserError
         []
-      end
-
-      # --- Security audit ---
-
-      def audit_bucket_security(bucket)
-        {
-          versioning: check_versioning(bucket),
-          encryption: check_encryption(bucket),
-          public_access_block: check_public_access_block(bucket),
-          tls_policy: check_tls_policy(bucket)
-        }
-      end
-
-      def print_security_audit(audit)
-        puts "\nSecurity audit:"
-        puts "  #{icon(audit[:versioning])} Versioning"
-        puts "  #{icon(audit[:encryption])} Encryption (AES-256)"
-        puts "  #{icon(audit[:public_access_block])} Public access block"
-        puts "  #{icon(audit[:tls_policy])} TLS-only policy"
-      end
-
-      def icon(passing)
-        passing ? '✓' : '✗'
-      end
-
-      def check_versioning(bucket)
-        output = safe_capture('aws', 's3api', 'get-bucket-versioning', '--bucket', bucket, '--output', 'json')
-        return false unless output
-
-        data = JSON.parse(output)
-        data['Status'] == 'Enabled'
-      rescue JSON::ParserError
-        false
-      end
-
-      def check_encryption(bucket)
-        output = safe_capture('aws', 's3api', 'get-bucket-encryption', '--bucket', bucket, '--output', 'json')
-        return false unless output
-
-        data = JSON.parse(output)
-        rules = data.dig('ServerSideEncryptionConfiguration', 'Rules') || []
-        rules.any? { |r| r.dig('ApplyServerSideEncryptionByDefault', 'SSEAlgorithm') }
-      rescue JSON::ParserError
-        false
-      end
-
-      def check_public_access_block(bucket)
-        output = safe_capture('aws', 's3api', 'get-public-access-block', '--bucket', bucket, '--output', 'json')
-        return false unless output
-
-        data = JSON.parse(output)
-        config = data['PublicAccessBlockConfiguration'] || {}
-        config['BlockPublicAcls'] && config['IgnorePublicAcls'] &&
-          config['BlockPublicPolicy'] && config['RestrictPublicBuckets']
-      rescue JSON::ParserError
-        false
-      end
-
-      def check_tls_policy(bucket)
-        output = safe_capture('aws', 's3api', 'get-bucket-policy', '--bucket', bucket, '--output', 'json')
-        return false unless output
-
-        data = JSON.parse(output)
-        policy = JSON.parse(data['Policy'])
-        statements = policy['Statement'] || []
-        statements.any? do |s|
-          s['Effect'] == 'Deny' &&
-            s.dig('Condition', 'Bool', 'aws:SecureTransport') == 'false'
-        end
-      rescue JSON::ParserError, TypeError
-        false
-      end
-
-      # --- Hardening ---
-
-      def harden_bucket(bucket, audit)
-        unless audit[:versioning]
-          enable_versioning(bucket)
-          puts "  enable  versioning"
-        end
-
-        unless audit[:encryption]
-          enable_encryption(bucket)
-          puts "  enable  AES-256 encryption"
-        end
-
-        unless audit[:public_access_block]
-          block_public_access(bucket)
-          puts "  enable  public access block"
-        end
-
-        unless audit[:tls_policy]
-          apply_tls_policy(bucket)
-          puts "  enable  TLS-only bucket policy"
-        end
       end
 
       # --- AWS operations ---
@@ -276,38 +197,6 @@ module Belt
         run!(*args)
       end
 
-      def enable_versioning(bucket)
-        run!('aws', 's3api', 'put-bucket-versioning', '--bucket', bucket,
-             '--versioning-configuration', 'Status=Enabled')
-      end
-
-      def enable_encryption(bucket)
-        config = '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"},"BucketKeyEnabled":true}]}'
-        run!('aws', 's3api', 'put-bucket-encryption', '--bucket', bucket,
-             '--server-side-encryption-configuration', config)
-      end
-
-      def block_public_access(bucket)
-        run!('aws', 's3api', 'put-public-access-block', '--bucket', bucket,
-             '--public-access-block-configuration',
-             'BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true')
-      end
-
-      def apply_tls_policy(bucket)
-        policy = {
-          Version: '2012-10-17',
-          Statement: [{
-            Sid: 'DenyInsecureConnections',
-            Effect: 'Deny',
-            Principal: '*',
-            Action: 's3:*',
-            Resource: ["arn:aws:s3:::#{bucket}", "arn:aws:s3:::#{bucket}/*"],
-            Condition: { Bool: { 'aws:SecureTransport' => 'false' } }
-          }]
-        }
-        run!('aws', 's3api', 'put-bucket-policy', '--bucket', bucket, '--policy', JSON.generate(policy))
-      end
-
       def apply_lifecycle(bucket)
         lifecycle = {
           Rules: [{
@@ -323,14 +212,14 @@ module Belt
       end
 
       def run!(*args)
-        unless system(*args)
-          puts "\n✗ Command failed: #{args.shelljoin}"
-          exit 1
-        end
+        return if system(*args)
+
+        puts "\n✗ Command failed: #{args.shelljoin}"
+        exit 1
       end
 
-      def safe_capture(*args)
-        output, status = Open3.capture2(*args, err: File::NULL)
+      def safe_capture(*)
+        output, status = Open3.capture2(*, err: File::NULL)
         status.success? ? output : nil
       end
 

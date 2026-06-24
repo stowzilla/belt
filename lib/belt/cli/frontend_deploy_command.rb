@@ -14,13 +14,13 @@ module Belt
         env = EnvResolver.resolve(args)
 
         if env.nil?
-          puts "Usage: belt deploy frontend <environment>"
+          puts 'Usage: belt deploy frontend <environment>'
           puts "\nBuilds the frontend app and deploys to S3 + invalidates CloudFront."
-          puts "You can also set BELT_ENV to skip the environment argument."
+          puts 'You can also set BELT_ENV to skip the environment argument.'
           puts "\nExamples:"
-          puts "  belt deploy frontend wups"
-          puts "  belt deploy frontend dev01"
-          puts "  BELT_ENV=wups belt deploy frontend"
+          puts '  belt deploy frontend wups'
+          puts '  belt deploy frontend dev01'
+          puts '  BELT_ENV=wups belt deploy frontend'
           exit 1
         end
 
@@ -47,19 +47,19 @@ module Belt
 
       def validate!
         unless Dir.exist?('frontend')
-          abort "Error: No frontend/ directory found. Run `belt generate frontend react` first."
+          abort 'Error: No frontend/ directory found. Run `belt generate frontend react` first.'
         end
-        unless File.exist?('frontend/package.json')
-          abort "Error: frontend/package.json not found."
-        end
+        return if File.exist?('frontend/package.json')
+
+        abort 'Error: frontend/package.json not found.'
       end
 
       def build_frontend
-        puts "📦 Installing dependencies..."
+        puts '📦 Installing dependencies...'
         install_cmd = File.exist?('frontend/package-lock.json') ? %w[npm ci] : %w[npm install]
         run!(*install_cmd, chdir: 'frontend')
 
-        puts "🏗️  Building frontend..."
+        puts '🏗️  Building frontend...'
         api_url = fetch_api_url
         env = api_url ? { 'VITE_API_URL' => api_url } : {}
         run!(env, 'npm', 'run', 'build', chdir: 'frontend')
@@ -84,14 +84,14 @@ module Belt
       def invalidate_cloudfront
         dist_id = fetch_distribution_id
         unless dist_id
-          puts "⚠️  No CloudFront distribution found (skipping cache invalidation)"
+          puts '⚠️  No CloudFront distribution found (skipping cache invalidation)'
           return
         end
 
-        puts "🔄 Invalidating CloudFront cache..."
+        puts '🔄 Invalidating CloudFront cache...'
         run!('aws', 'cloudfront', 'create-invalidation', '--distribution-id', dist_id, '--paths', '/*',
              out: File::NULL)
-        puts "✅ CloudFront cache invalidated"
+        puts '✅ CloudFront cache invalidated'
       end
 
       def fetch_api_url
@@ -114,11 +114,11 @@ module Belt
         status.success? && !output.strip.empty? ? output.strip : nil
       end
 
-      def run!(*args, **opts)
+      def run!(*args, **)
         env = args.first.is_a?(Hash) ? args.shift : {}
-        unless system(env, *args, **opts)
-          abort "\n✗ Command failed: #{args.shelljoin}"
-        end
+        return if system(env, *args, **)
+
+        abort "\n✗ Command failed: #{args.shelljoin}"
       end
     end
   end

@@ -15,11 +15,11 @@ module Belt
         env_name = args.shift
 
         if env_name.nil? || env_name.empty?
-          puts "Usage: belt generate environment <name>"
+          puts 'Usage: belt generate environment <name>'
           puts "\nExamples:"
-          puts "  belt generate environment dev01"
-          puts "  belt generate environment staging"
-          puts "  belt generate environment prod"
+          puts '  belt generate environment dev01'
+          puts '  belt generate environment staging'
+          puts '  belt generate environment prod'
           exit 1
         end
 
@@ -51,9 +51,9 @@ module Belt
         puts "\n✓ Environment '#{@env_name}' created!"
         puts "\nNext steps:"
         puts "  cd #{dest_dir}"
-        puts "  terraform init"
-        puts "  terraform plan"
-        puts "  terraform apply"
+        puts '  terraform init'
+        puts '  terraform plan'
+        puts '  terraform apply'
       end
 
       private

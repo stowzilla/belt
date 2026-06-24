@@ -18,12 +18,12 @@ module Belt
       'generate' => Belt::CLI::GenerateCommand,
       'g' => Belt::CLI::GenerateCommand,
       'setup' => Belt::CLI::SetupCommand,
-      'deploy' => ->(args) {
+      'deploy' => lambda { |args|
         subcommand = args.shift
         if subcommand == 'frontend'
           Belt::CLI::FrontendDeployCommand.run(args)
         else
-          puts "Usage: belt deploy frontend <environment>"
+          puts 'Usage: belt deploy frontend <environment>'
           exit 1
         end
       },
@@ -42,9 +42,7 @@ module Belt
       end
 
       # Terraform shorthand: belt init wups, belt plan wups, belt apply wups
-      if TERRAFORM_ACTIONS.include?(command)
-        return Belt::CLI::TerraformCommand.run(command, args)
-      end
+      return Belt::CLI::TerraformCommand.run(command, args) if TERRAFORM_ACTIONS.include?(command)
 
       handler = COMMANDS[command]
 

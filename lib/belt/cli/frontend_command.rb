@@ -20,8 +20,8 @@ module Belt
           puts "Usage: belt generate frontend <#{FRAMEWORKS.join('|')}>"
           puts "\nScaffolds a frontend application with build tooling and API client."
           puts "\nExamples:"
-          puts "  belt generate frontend react"
-          puts "  belt generate frontend vue"
+          puts '  belt generate frontend react'
+          puts '  belt generate frontend vue'
           exit 1
         end
 
@@ -54,9 +54,9 @@ module Belt
 
         puts "\n✓ Frontend (#{@framework}) created in frontend/"
         puts "\nNext steps:"
-        puts "  cd frontend && npm install && npm run dev"
-        puts "  belt setup frontend <env>    # Generate CloudFront + S3 infrastructure"
-        puts "  belt deploy frontend <env>   # Build and deploy to AWS"
+        puts '  cd frontend && npm install && npm run dev'
+        puts '  belt setup frontend <env>    # Generate CloudFront + S3 infrastructure'
+        puts '  belt deploy frontend <env>   # Build and deploy to AWS'
       end
 
       private
