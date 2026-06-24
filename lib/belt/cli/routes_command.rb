@@ -20,9 +20,7 @@ module Belt
 
       def run
         routes_file = find_routes_file
-        unless routes_file
-          abort "Error: No routes file found. Expected infrastructure/routes.tf.rb"
-        end
+        abort 'Error: No routes file found. Expected infrastructure/routes.tf.rb' unless routes_file
 
         dsl = load_routes(routes_file)
         @table_inference = TableInference.new(@options[:tables_file])
@@ -45,33 +43,33 @@ module Belt
 
       def parse_options(args)
         OptionParser.new do |opts|
-          opts.banner = "Usage: belt routes [options]"
+          opts.banner = 'Usage: belt routes [options]'
 
-          opts.on("-g", "--grep PATTERN", "Filter routes matching pattern") do |pattern|
+          opts.on('-g', '--grep PATTERN', 'Filter routes matching pattern') do |pattern|
             @options[:grep] = pattern
           end
 
-          opts.on("-f", "--format FORMAT", "Output format: concise (default), json") do |format|
+          opts.on('-f', '--format FORMAT', 'Output format: concise (default), json') do |format|
             @options[:format] = format
           end
 
-          opts.on("--ruby-output NAMESPACE", "Generate Ruby route file for NAMESPACE") do |ns|
+          opts.on('--ruby-output NAMESPACE', 'Generate Ruby route file for NAMESPACE') do |ns|
             @options[:ruby_output] = ns
           end
 
-          opts.on("--output-dir DIR", "Output directory for generated files") do |dir|
+          opts.on('--output-dir DIR', 'Output directory for generated files') do |dir|
             @options[:output_dir] = dir
           end
 
-          opts.on("--schema FILE", "Path to schema.tf.rb for model definitions") do |file|
+          opts.on('--schema FILE', 'Path to schema.tf.rb for model definitions') do |file|
             @options[:schema_file] = file
           end
 
-          opts.on("--tables-file FILE", "Path to Terraform file with DynamoDB table definitions") do |file|
+          opts.on('--tables-file FILE', 'Path to Terraform file with DynamoDB table definitions') do |file|
             @options[:tables_file] = file
           end
 
-          opts.on("-h", "--help", "Show this help") do
+          opts.on('-h', '--help', 'Show this help') do
             puts opts
             exit
           end
@@ -85,10 +83,10 @@ module Belt
 
       def load_routes(file)
         # Reset schema builder for clean state
-        TerraDispatch.instance_variable_set(:@schema_builder, nil)
+        Belt.instance_variable_set(:@application, nil)
 
         content = File.read(file)
-        if content.include?('TerraDispatch.routes.draw')
+        if content.include?('Belt.application.routes.draw')
           binding_context = binding
           eval(content, binding_context, file) # rubocop:disable Security/Eval
         else
@@ -103,7 +101,7 @@ module Belt
             routes << build_route_hash(route, gateway)
           end
         end
-        routes.sort_by { |r| [r[:gateway], r[:path], verb_order(r[:verb])] }
+        routes.sort_by { |r| route_specificity(r[:path], r[:verb]) }
       end
 
       def build_route_hash(route, gateway)
@@ -117,8 +115,8 @@ module Belt
           action: infer_action(route, gateway),
           auth: route.auth.to_s,
           tables: get_route_tables(route),
-          request_model: infer_request_model(route),
-          response_model: infer_response_model(route)
+          request_model: route.request_model.to_s,
+          response_model: route.response_model.to_s
         }
         rc = route.response_context.to_s
         hash[:response_context] = rc unless rc.empty?
@@ -133,43 +131,9 @@ module Belt
         end
       end
 
-      def infer_request_model(route)
-        return route.request_model if route.request_model && !route.request_model.empty?
-        return "" unless route.resource?
-
-        resource_name = extract_resource_name(route.path)
-        return "" unless resource_name
-
-        singular = singularize(resource_name)
-
-        case route.method
-        when 'POST' then "create_#{singular}"
-        when 'PUT', 'PATCH' then "update_#{singular}"
-        else ""
-        end
-      end
-
-      def infer_response_model(route)
-        return route.response_model if route.response_model && !route.response_model.empty?
-        return "" unless route.resource?
-
-        resource_name = extract_resource_name(route.path)
-        return "" unless resource_name
-
-        singularize(resource_name)
-      end
-
-      def extract_resource_name(path)
-        segments = path.split('/').reject(&:empty?)
-        non_param = segments.reject { |s| s.start_with?(':', '{') }
-        return nil if non_param.empty?
-
-        non_param.last.gsub('-', '_')
-      end
-
       def extract_route_name(path)
         segments = path.split('/').reject(&:empty?)
-        return "root" if segments.empty?
+        return 'root' if segments.empty?
 
         segments.reject { |s| s.start_with?('{', ':') }
                 .map { |s| s.gsub('-', '_') }
@@ -184,21 +148,21 @@ module Belt
         end
         return [] unless schema_file && File.exist?(schema_file)
 
-        TerraDispatch.instance_variable_set(:@schema_builder, nil)
+        Belt.instance_variable_set(:@application, nil)
         begin
           eval(File.read(schema_file), binding, schema_file) # rubocop:disable Security/Eval
-        rescue => e
+        rescue StandardError => e
           warn "Warning: Failed to load schema file #{schema_file}: #{e.message}"
           return []
         end
 
-        schema = TerraDispatch.schema.to_h
+        schema = Belt.application.schema.to_h
         models = []
 
         (schema[:request_models] || {}).each do |_name, model|
           models << {
             name: model[:name],
-            kind: "request",
+            kind: 'request',
             description: "Request model: #{model[:name]}",
             properties: stringify_properties(model[:properties] || {}),
             required: (model[:required] || []).map(&:to_s)
@@ -209,7 +173,7 @@ module Belt
           (model[:contexts] || {}).each do |ctx_name, ctx|
             models << {
               name: "#{model[:name]}_#{ctx_name}_response",
-              kind: "response",
+              kind: 'response',
               description: "Response model: #{model[:name]} (#{ctx_name} context)",
               properties: stringify_properties(ctx[:properties] || {}),
               required: []
@@ -246,17 +210,17 @@ module Belt
       def generate_ruby_content(routes, namespace)
         constant_name = namespace.upcase
         lines = [
-          "# frozen_string_literal: true",
-          "",
+          '# frozen_string_literal: true',
+          '',
           "# Auto-generated by: belt routes --ruby-output #{namespace}",
-          "# Do not edit manually",
-          "",
-          "module Routes",
+          '# Do not edit manually',
+          '',
+          'module Routes',
           "  #{constant_name} = ["
         ]
 
         routes.each_with_index do |route, index|
-          lines << "    {"
+          lines << '    {'
           lines << "      verb: #{route[:verb].inspect},"
           lines << "      path: #{route[:path].inspect},"
           lines << "      gateway: #{route[:gateway].inspect},"
@@ -264,13 +228,14 @@ module Belt
           lines << "      controller: #{route[:controller].inspect},"
           lines << "      action: #{route[:action].inspect},"
           lines << "      auth: #{route[:auth].inspect},"
-          lines << "      tables: #{route[:tables].inspect}"
-          lines << "    }#{index < routes.length - 1 ? ',' : ''}"
+          tables_syms = route[:tables].map { |t| ":#{t}" }.join(', ')
+          lines << "      tables: [#{tables_syms}]"
+          lines << "    }#{',' if index < routes.length - 1}"
         end
 
-        lines << "  ].freeze"
-        lines << "end"
-        lines << ""
+        lines << '  ].freeze'
+        lines << 'end'
+        lines << ''
         lines.join("\n")
       end
 
@@ -281,7 +246,7 @@ module Belt
           trailing = ::Regexp.last_match(2)
           singular = singularize(resource)
           "/#{resource}/{#{singular}_id}#{trailing}"
-        end.gsub(/:([a-zA-Z_][a-zA-Z0-9_]*)/) { "{#{$1}}" }
+        end.gsub(/:([a-zA-Z_][a-zA-Z0-9_]*)/) { "{#{::Regexp.last_match(1)}}" }
       end
 
       def infer_controller(route, gateway)
@@ -291,14 +256,12 @@ module Belt
         non_param = segments.reject { |s| s.start_with?(':', '{') }
         return gateway.name if non_param.empty?
 
-        if route.resource? && nested_resource?(segments)
-          return non_param.map { |s| s.gsub('-', '_') }.join('/')
-        end
+        return non_param.map { |s| s.gsub('-', '_') }.join('/') if route.resource? && nested_resource?(segments)
 
         if route.resource?
           non_param.first.gsub('-', '_')
         elsif non_param.length == 1 && segments.length == 1
-          route.lambda.to_s != gateway.name.to_s ? route.lambda.to_s : gateway.name.to_s
+          route.lambda.to_s == gateway.name.to_s ? gateway.name.to_s : route.lambda.to_s
         else
           non_param.first.gsub('-', '_')
         end
@@ -367,7 +330,7 @@ module Belt
       end
 
       def output_concise(routes)
-        return puts("No routes defined.") if routes.empty?
+        return puts('No routes defined.') if routes.empty?
 
         multi_gateway = routes.map { |r| r[:gateway] }.uniq.length > 1
 
@@ -379,19 +342,26 @@ module Belt
           lam_w = [routes.map { |r| r[:lambda].length }.max, 6].max
 
           puts "#{'VERB'.ljust(verb_w)}  #{'PATH'.ljust(path_w)}  #{'GATEWAY'.ljust(gw_w)}  #{'LAMBDA'.ljust(lam_w)}  CONTROLLER#ACTION"
-          puts "-" * (verb_w + path_w + gw_w + lam_w + 20)
+          puts '-' * (verb_w + path_w + gw_w + lam_w + 20)
 
           routes.each do |r|
             puts "#{r[:verb].ljust(verb_w)}  #{r[:path].ljust(path_w)}  #{r[:gateway].to_s.ljust(gw_w)}  #{r[:lambda].ljust(lam_w)}  #{r[:controller]}##{r[:action]}"
           end
         else
           puts "#{'VERB'.ljust(verb_w)}  #{'PATH'.ljust(path_w)}  CONTROLLER#ACTION"
-          puts "-" * (verb_w + path_w + 30)
+          puts '-' * (verb_w + path_w + 30)
 
           routes.each do |r|
             puts "#{r[:verb].ljust(verb_w)}  #{r[:path].ljust(path_w)}  #{r[:controller]}##{r[:action]}"
           end
         end
+      end
+
+      def route_specificity(path, verb)
+        segments = path.split('/').reject(&:empty?)
+        param_count = segments.count { |s| s.start_with?('{') }
+        segment_count = segments.length
+        [param_count, -segment_count, path, verb_order(verb)]
       end
 
       def verb_order(verb)

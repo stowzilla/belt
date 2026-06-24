@@ -129,7 +129,7 @@ terraform {
 Define routes in `infrastructure/routes.tf.rb`:
 
 ```ruby
-TerraDispatch.routes.draw do
+Belt.application.routes.draw do
   namespace :api do
     resources :posts, only: [:index, :show, :create]
   end
@@ -139,7 +139,7 @@ end
 Define tables in `infrastructure/schema.tf.rb`:
 
 ```ruby
-TerraDispatch.schema.define do
+Belt.application.schema.define do
   model :post do
     partition_key :id, :string
     global_secondary_index :UserIndex, partition_key: :user_id
@@ -413,7 +413,7 @@ This is used by `Belt::ActionRouter` at runtime for request routing.
 The command expects `infrastructure/routes.tf.rb` in the current working directory. Routes are defined using the same DSL as the Belt Terraform provider:
 
 ```ruby
-TerraDispatch.routes.draw do
+Belt.application.routes.draw do
   namespace :api do
     resources :posts, only: [:index, :show, :create, :destroy]
     resource :profile, only: [:show, :update]

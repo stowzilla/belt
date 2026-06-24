@@ -4,7 +4,7 @@ source 'https://rubygems.org'
 
 gemspec
 
-gem 's3arch', '~> 0.0.5'
+gem 's3arch', '~> 0.1.3'
 
 group :development, :test do
   gem 'rake', '~> 13.0'

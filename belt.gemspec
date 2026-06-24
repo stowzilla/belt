@@ -20,7 +20,7 @@ Gem::Specification.new do |spec|
   spec.metadata['rubygems_mfa_required'] = 'true'
 
   spec.cert_chain  = ['certs/stowzilla.pem']
-  signing_key_path = File.expand_path('~/.ssh/gem-private_key.pem')
+  signing_key_path = ENV.fetch('GEM_SIGNING_KEY', File.expand_path('~/.ssh/gem-private_key.pem'))
   spec.signing_key = signing_key_path if File.exist?(signing_key_path)
 
   spec.files = Dir['lib/**/*', 'exe/*', 'LICENSE.txt', 'README.md', 'CHANGELOG.md', 'certs/*']
@@ -28,5 +28,6 @@ Gem::Specification.new do |spec|
   spec.executables = ['belt']
   spec.require_paths = ['lib']
 
+  spec.add_dependency 'activeitem', '~> 0.0'
   spec.add_dependency 'lambda_loadout', '~> 0.0'
 end

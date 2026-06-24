@@ -1,0 +1,12 @@
+# frozen_string_literal: true
+
+require 'bundler/setup'
+
+# Load rake tasks from all gems that ship them
+Gem.loaded_specs.each_value do |spec|
+  tasks_dir = File.join(spec.full_gem_path, 'lib', 'tasks')
+  Dir.glob("#{tasks_dir}/**/*.rake").each { |r| load r } if Dir.exist?(tasks_dir)
+end
+
+# Load project-local tasks
+Dir.glob('lib/tasks/**/*.rake').each { |r| load r }

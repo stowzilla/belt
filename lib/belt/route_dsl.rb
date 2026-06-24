@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require 'set'
-
 module Belt
   # DSL for defining API Gateway routes.
   # Ported from terraform-provider-conveyor-belt/scripts/lib/route_dsl.rb
@@ -70,20 +68,30 @@ module Belt
 
       @gateway.send(:add_route, :get, "#{@prefix}/#{resource_name}", resource_options) if actions.include?(:index)
       @gateway.send(:add_route, :post, "#{@prefix}/#{resource_name}", resource_options) if actions.include?(:create)
-      @gateway.send(:add_route, :get, "#{@prefix}/#{resource_name}/{#{param_name}}", resource_options) if actions.include?(:show)
-      @gateway.send(:add_route, :put, "#{@prefix}/#{resource_name}/{#{param_name}}", resource_options) if actions.include?(:update)
-      @gateway.send(:add_route, :delete, "#{@prefix}/#{resource_name}/{#{param_name}}", resource_options) if actions.include?(:destroy)
+      if actions.include?(:show)
+        @gateway.send(:add_route, :get, "#{@prefix}/#{resource_name}/{#{param_name}}",
+                      resource_options)
+      end
+      if actions.include?(:update)
+        @gateway.send(:add_route, :put, "#{@prefix}/#{resource_name}/{#{param_name}}",
+                      resource_options)
+      end
+      return unless actions.include?(:destroy)
+
+      @gateway.send(:add_route, :delete, "#{@prefix}/#{resource_name}/{#{param_name}}",
+                    resource_options)
     end
 
-    def member(&block)
-      MemberCollectionBuilder.new(@gateway, @prefix, @inherited_tables, @inherited_auth).instance_eval(&block)
+    def member(&)
+      MemberCollectionBuilder.new(@gateway, @prefix, @inherited_tables, @inherited_auth).instance_eval(&)
     end
 
-    def collection(&block)
-      MemberCollectionBuilder.new(@gateway, @collection_prefix, @inherited_tables, @inherited_auth).instance_eval(&block)
+    def collection(&)
+      MemberCollectionBuilder.new(@gateway, @collection_prefix, @inherited_tables,
+                                  @inherited_auth).instance_eval(&)
     end
 
-    [:get, :post, :put, :delete, :patch].each do |method|
+    %i[get post put delete patch].each do |method|
       define_method(method) do |path, options = {}|
         full_path = options[:on] == :collection ? "#{@collection_prefix}#{path}" : "#{@prefix}#{path}"
         options = merge_inherited_options(options)
@@ -113,7 +121,7 @@ module Belt
       @inherited_auth = inherited_auth
     end
 
-    [:get, :post, :put, :delete, :patch].each do |method|
+    %i[get post put delete patch].each do |method|
       define_method(method) do |path, options = {}|
         full_path = "#{@prefix}#{path}"
         options = merge_inherited_options(options)
@@ -147,20 +155,20 @@ module Belt
       @current_lambda_context = nil
     end
 
-    def lambda(name, &block)
+    def lambda(name, &)
       previous_context = @current_lambda_context
       @current_lambda_context = name.to_sym
-      instance_eval(&block) if block_given?
+      instance_eval(&) if block_given?
       @current_lambda_context = previous_context
     end
 
-    [:get, :post, :put, :delete, :patch].each do |method|
+    %i[get post put delete patch].each do |method|
       define_method(method) do |path, options = {}|
         add_route(method, path, options)
       end
     end
 
-    def resources(name, options = {}, &block)
+    def resources(name, options = {}, &)
       resource_name = name.to_s
       singular = singularize(resource_name)
       param_name = options[:param] || "#{singular}_id"
@@ -174,22 +182,22 @@ module Belt
       add_route(:put, "/#{resource_name}/{#{param_name}}", resource_options) if actions.include?(:update)
       add_route(:delete, "/#{resource_name}/{#{param_name}}", resource_options) if actions.include?(:destroy)
 
-      if block_given?
-        collection_prefix = "/#{resource_name}"
-        member_prefix = "/#{resource_name}/{#{param_name}}"
-        resource_tables = Array(options[:tables] || [])
-        inherited_tables = (@default_tables + resource_tables).uniq
-        inherited_auth = options[:auth] || @default_auth
-        nested_builder = NestedResourceBuilder.new(self, member_prefix, collection_prefix,
-                                                   inherited_tables: inherited_tables,
-                                                   inherited_auth: inherited_auth)
-        nested_builder.instance_eval(&block)
-      end
+      return unless block_given?
+
+      collection_prefix = "/#{resource_name}"
+      member_prefix = "/#{resource_name}/{#{param_name}}"
+      resource_tables = Array(options[:tables] || [])
+      inherited_tables = (@default_tables + resource_tables).uniq
+      inherited_auth = options[:auth] || @default_auth
+      nested_builder = NestedResourceBuilder.new(self, member_prefix, collection_prefix,
+                                                 inherited_tables: inherited_tables,
+                                                 inherited_auth: inherited_auth)
+      nested_builder.instance_eval(&)
     end
 
     def resource(name, options = {})
       resource_name = name.to_s
-      actions = determine_actions(options, default: [:show, :update, :destroy])
+      actions = determine_actions(options, default: %i[show update destroy])
       resource_options = options.merge(route_type: :resource)
 
       add_route(:get, "/#{resource_name}", resource_options) if actions.include?(:show)
@@ -237,7 +245,7 @@ module Belt
       options.merge(tables: [resource_name.to_sym])
     end
 
-    def determine_actions(options, default: [:index, :create, :show, :update, :destroy])
+    def determine_actions(options, default: %i[index create show update destroy])
       if options[:only]
         Array(options[:only])
       elsif options[:except]
@@ -262,8 +270,8 @@ module Belt
     end
   end
 
-  # TerraDispatch-compatible wrapper so routes.tf.rb files work unchanged.
-  module TerraDispatch
+  # Application object providing Rails-style `Belt.application.routes.draw` DSL.
+  class Application
     class Routes
       attr_reader :dsl
 
@@ -271,16 +279,24 @@ module Belt
         @dsl = RouteDSL.new
       end
 
-      def draw(&block)
-        instance_eval(&block) if block_given?
+      def draw(&)
+        instance_eval(&) if block_given?
         @dsl
       end
 
-      def namespace(name, options = {}, &block)
+      def namespace(name, options = {}, &)
         gateway = Belt::ApiGateway.new(name, options)
-        RouteBuilder.new(gateway).instance_eval(&block) if block_given?
+        RouteBuilder.new(gateway).instance_eval(&) if block_given?
         @dsl.api_gateways << gateway
       end
+    end
+
+    def routes
+      Routes.new
+    end
+
+    def schema
+      @schema_builder ||= SchemaBuilder.new
     end
 
     class RouteBuilder
@@ -292,7 +308,7 @@ module Belt
         @scope_tables = []
       end
 
-      def scope(options = {}, &block)
+      def scope(options = {}, &)
         previous_prefix = @scope_prefix
         previous_module = @scope_module
         previous_auth = @scope_auth
@@ -303,7 +319,7 @@ module Belt
         @scope_auth = options[:auth] || @scope_auth
         @scope_tables = (@scope_tables + Array(options[:tables] || [])).uniq
 
-        instance_eval(&block) if block_given?
+        instance_eval(&) if block_given?
 
         @scope_prefix = previous_prefix
         @scope_module = previous_module
@@ -311,20 +327,23 @@ module Belt
         @scope_tables = previous_tables
       end
 
-      [:get, :post, :put, :delete, :patch].each do |method|
+      %i[get post put delete patch].each do |method|
         define_method(method) do |path, options = {}|
           full_path = build_path(path)
           route_options = options.dup
           route_options[:lambda] ||= @scope_module if @scope_module
           route_options[:auth] ||= @scope_auth if @scope_auth
-          route_options[:tables] = (@scope_tables + Array(route_options[:tables] || [])).uniq if @scope_tables.any? || route_options[:tables]
+          if @scope_tables.any? || route_options[:tables]
+            route_options[:tables] =
+              (@scope_tables + Array(route_options[:tables] || [])).uniq
+          end
           @gateway.send(method, full_path, route_options)
         end
       end
 
-      def resources(name, options = {}, &block)
+      def resources(name, options = {}, &)
         options = apply_scope_options(options)
-        @gateway.resources(name, options, &block)
+        @gateway.resources(name, options, &)
       end
 
       def resource(name, options = {})
@@ -332,8 +351,8 @@ module Belt
         @gateway.resource(name, options)
       end
 
-      def lambda(name, &block)
-        @gateway.lambda(name, &block)
+      def lambda(name, &)
+        name
       end
 
       def mount(mountable, options = {})
@@ -345,7 +364,7 @@ module Belt
 
         route_definitions.each do |route_def|
           method = route_def[:method].to_sym
-          path = route_def[:path].to_s.gsub(/:([a-zA-Z_]\w*)/) { "{#{$1}}" }
+          path = route_def[:path].to_s.gsub(/:([a-zA-Z_]\w*)/) { "{#{::Regexp.last_match(1)}}" }
 
           full_path = prefix.empty? ? path : "/#{prefix}#{path}"
           full_path = full_path.chomp('/') unless full_path == '/'
@@ -378,13 +397,11 @@ module Belt
         result
       end
     end
+  end
 
-    def self.routes
-      Routes.new
-    end
-
-    def self.schema
-      @schema_builder ||= SchemaBuilder.new
+  class << self
+    def application
+      @application ||= Application.new
     end
   end
 
@@ -396,9 +413,9 @@ module Belt
       @api_gateways = []
     end
 
-    def api_gateway(name, options = {}, &block)
+    def api_gateway(name, options = {}, &)
       gateway = Belt::ApiGateway.new(name, options)
-      gateway.instance_eval(&block) if block_given?
+      gateway.instance_eval(&) if block_given?
       @api_gateways << gateway
     end
 
@@ -420,20 +437,22 @@ module Belt
       @response_models = {}
     end
 
-    def define(&block)
-      instance_eval(&block) if block_given?
+    def define(&)
+      instance_eval(&) if block_given?
       self
     end
 
-    def request(name, &block)
+    alias draw define
+
+    def request(name, &)
       builder = RequestModelBuilder.new(name)
-      builder.instance_eval(&block) if block_given?
+      builder.instance_eval(&) if block_given?
       @request_models[name] = builder
     end
 
-    def model(name, &block)
+    def model(name, &)
       builder = ResponseModelBuilder.new(name)
-      builder.instance_eval(&block) if block_given?
+      builder.instance_eval(&) if block_given?
       @response_models[name] = builder
     end
 
@@ -503,9 +522,9 @@ module Belt
       end
     end
 
-    def context(name, &block)
+    def context(name, &)
       builder = ContextBuilder.new(name)
-      builder.instance_eval(&block) if block_given?
+      builder.instance_eval(&) if block_given?
       @contexts[name] = builder
     end
 

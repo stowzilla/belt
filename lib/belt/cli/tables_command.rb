@@ -59,8 +59,8 @@ module Belt
         schema_content = File.read(SCHEMA_FILE)
 
         # Replace DSL wrapper with direct parser call
-        # TerraDispatch.schema.draw do ... end → parser.instance_eval do ... end
-        inner = schema_content.sub(/\ATerraDispatch\.schema\.draw do\n?/, '').sub(/\nend\s*\z/, '')
+        # Belt.application.schema.draw do ... end → parser.instance_eval do ... end
+        inner = schema_content.sub(/\A(?:Belt\.application)\.schema\.draw do\n?/, '').sub(/\nend\s*\z/, '')
         parser.instance_eval(inner, SCHEMA_FILE)
         parser.models
       end

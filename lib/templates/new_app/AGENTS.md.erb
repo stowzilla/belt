@@ -51,7 +51,7 @@ belt output <env>                                      # terraform output
 
 1. `infrastructure/routes.tf.rb` defines routes using a DSL:
    ```ruby
-   TerraDispatch.routes.draw do
+   Belt.application.routes.draw do
      namespace :<%= @app_name %> do
        resources :things, tables: [:things]
      end
