@@ -2,7 +2,9 @@
 
 require 'json'
 require 'optparse'
+require 'fileutils'
 require_relative '../route_dsl'
+require_relative '../table_inference'
 
 module Belt
   module CLI
@@ -23,12 +25,17 @@ module Belt
         end
 
         dsl = load_routes(routes_file)
+        @table_inference = TableInference.new(@options[:tables_file])
         routes = collect_routes(dsl)
         routes = apply_grep(routes) if @options[:grep]
 
-        case @options[:format]
-        when 'json'
-          puts JSON.pretty_generate(routes: routes)
+        if @options[:ruby_output]
+          output_ruby(routes, @options[:ruby_output], routes_file)
+        elsif @options[:format] == 'json'
+          output = { routes: routes }
+          models = load_schema_models(routes_file)
+          output[:models] = models if models.any?
+          puts JSON.pretty_generate(output)
         else
           output_concise(routes)
         end
@@ -48,6 +55,22 @@ module Belt
             @options[:format] = format
           end
 
+          opts.on("--ruby-output NAMESPACE", "Generate Ruby route file for NAMESPACE") do |ns|
+            @options[:ruby_output] = ns
+          end
+
+          opts.on("--output-dir DIR", "Output directory for generated files") do |dir|
+            @options[:output_dir] = dir
+          end
+
+          opts.on("--schema FILE", "Path to schema.tf.rb for model definitions") do |file|
+            @options[:schema_file] = file
+          end
+
+          opts.on("--tables-file FILE", "Path to Terraform file with DynamoDB table definitions") do |file|
+            @options[:tables_file] = file
+          end
+
           opts.on("-h", "--help", "Show this help") do
             puts opts
             exit
@@ -61,6 +84,9 @@ module Belt
       end
 
       def load_routes(file)
+        # Reset schema builder for clean state
+        TerraDispatch.instance_variable_set(:@schema_builder, nil)
+
         content = File.read(file)
         if content.include?('TerraDispatch.routes.draw')
           binding_context = binding
@@ -74,24 +100,148 @@ module Belt
         routes = []
         dsl.api_gateways.each do |gateway|
           gateway.routes.each do |route|
-            routes << {
-              verb: route.method,
-              path: normalize_path(route.path),
-              gateway: gateway.name,
-              lambda: route.lambda.to_s,
-              controller: infer_controller(route, gateway),
-              action: infer_action(route, gateway),
-              auth: route.auth.to_s,
-              tables: route.tables.map(&:to_s)
-            }
+            routes << build_route_hash(route, gateway)
           end
         end
         routes.sort_by { |r| [r[:gateway], r[:path], verb_order(r[:verb])] }
       end
 
+      def build_route_hash(route, gateway)
+        hash = {
+          name: extract_route_name(route.path),
+          verb: route.method,
+          path: normalize_path(route.path),
+          gateway: gateway.name,
+          lambda: route.lambda.to_s,
+          controller: infer_controller(route, gateway),
+          action: infer_action(route, gateway),
+          auth: route.auth.to_s,
+          tables: get_route_tables(route),
+          request_model: route.request_model.to_s,
+          response_model: route.response_model.to_s
+        }
+        rc = route.response_context.to_s
+        hash[:response_context] = rc unless rc.empty?
+        hash
+      end
+
+      def get_route_tables(route)
+        if route.tables.any?
+          route.tables.map(&:to_s)
+        else
+          @table_inference.infer_tables_from_route(route)
+        end
+      end
+
+      def extract_route_name(path)
+        segments = path.split('/').reject(&:empty?)
+        return "root" if segments.empty?
+
+        segments.reject { |s| s.start_with?('{', ':') }
+                .map { |s| s.gsub('-', '_') }
+                .join('_')
+      end
+
+      def load_schema_models(routes_file)
+        schema_file = @options[:schema_file]
+        unless schema_file
+          routes_dir = File.dirname(File.expand_path(routes_file))
+          schema_file = File.join(routes_dir, 'schema.tf.rb')
+        end
+        return [] unless schema_file && File.exist?(schema_file)
+
+        TerraDispatch.instance_variable_set(:@schema_builder, nil)
+        begin
+          eval(File.read(schema_file), binding, schema_file) # rubocop:disable Security/Eval
+        rescue => e
+          warn "Warning: Failed to load schema file #{schema_file}: #{e.message}"
+          return []
+        end
+
+        schema = TerraDispatch.schema.to_h
+        models = []
+
+        (schema[:request_models] || {}).each do |_name, model|
+          models << {
+            name: model[:name],
+            kind: "request",
+            description: "Request model: #{model[:name]}",
+            properties: stringify_properties(model[:properties] || {}),
+            required: (model[:required] || []).map(&:to_s)
+          }
+        end
+
+        (schema[:response_models] || {}).each do |_name, model|
+          (model[:contexts] || {}).each do |ctx_name, ctx|
+            models << {
+              name: "#{model[:name]}_#{ctx_name}_response",
+              kind: "response",
+              description: "Response model: #{model[:name]} (#{ctx_name} context)",
+              properties: stringify_properties(ctx[:properties] || {}),
+              required: []
+            }
+          end
+        end
+
+        models
+      end
+
+      def stringify_properties(properties)
+        properties.each_with_object({}) do |(key, value), hash|
+          hash[key.to_s] = value.transform_keys(&:to_s)
+        end
+      end
+
+      def output_ruby(routes, namespace, routes_file)
+        filtered = routes.select { |r| r[:lambda] == namespace }
+        if filtered.empty?
+          warn "No routes found for namespace '#{namespace}' - skipping"
+          return
+        end
+
+        output_dir = @options[:output_dir] || File.expand_path('../lambda/lib/routes', Dir.pwd)
+        FileUtils.mkdir_p(output_dir)
+        output_file = File.join(output_dir, "#{namespace}_routes.rb")
+
+        content = generate_ruby_content(filtered, namespace)
+        File.write(output_file, content)
+        puts "Generated: #{output_file}"
+        puts "Routes: #{filtered.length}"
+      end
+
+      def generate_ruby_content(routes, namespace)
+        constant_name = namespace.upcase
+        lines = [
+          "# frozen_string_literal: true",
+          "",
+          "# Auto-generated by: belt routes --ruby-output #{namespace}",
+          "# Do not edit manually",
+          "",
+          "module Routes",
+          "  #{constant_name} = ["
+        ]
+
+        routes.each_with_index do |route, index|
+          lines << "    {"
+          lines << "      verb: #{route[:verb].inspect},"
+          lines << "      path: #{route[:path].inspect},"
+          lines << "      gateway: #{route[:gateway].inspect},"
+          lines << "      lambda: #{route[:lambda].inspect},"
+          lines << "      controller: #{route[:controller].inspect},"
+          lines << "      action: #{route[:action].inspect},"
+          lines << "      auth: #{route[:auth].inspect},"
+          lines << "      tables: #{route[:tables].inspect}"
+          lines << "    }#{index < routes.length - 1 ? ',' : ''}"
+        end
+
+        lines << "  ].freeze"
+        lines << "end"
+        lines << ""
+        lines.join("\n")
+      end
+
       def normalize_path(path)
         path = "/#{path}" unless path.start_with?('/')
-        # Convert :param to {param} and :id to {resource_id}
         path.gsub(%r{/([a-zA-Z_][a-zA-Z0-9_]*?)/:id(/|$)}) do
           resource = ::Regexp.last_match(1)
           trailing = ::Regexp.last_match(2)
@@ -107,7 +257,6 @@ module Belt
         non_param = segments.reject { |s| s.start_with?(':', '{') }
         return gateway.name if non_param.empty?
 
-        # Nested resource: parent/{id}/child → "parent/child"
         if route.resource? && nested_resource?(segments)
           return non_param.map { |s| s.gsub('-', '_') }.join('/')
         end
@@ -115,7 +264,7 @@ module Belt
         if route.resource?
           non_param.first.gsub('-', '_')
         elsif non_param.length == 1 && segments.length == 1
-          route.lambda.to_s != gateway.name ? route.lambda.to_s : gateway.name
+          route.lambda.to_s != gateway.name.to_s ? route.lambda.to_s : gateway.name.to_s
         else
           non_param.first.gsub('-', '_')
         end
@@ -139,7 +288,6 @@ module Belt
           else 'show'
           end
         elsif route.plural_resource? && nested_resource?(segments)
-          # Nested resource: check for child ID param
           child_idx = segments.rindex { |s| !s.start_with?(':', '{') }
           has_child_id = child_idx && segments[(child_idx + 1)..]&.any? { |s| s.start_with?(':', '{') }
           restful_action(verb, has_child_id || false)
@@ -155,7 +303,6 @@ module Belt
       end
 
       def nested_resource?(segments)
-        # Pattern: resource/{param}/resource...
         segments.length >= 3 &&
           !segments[0].start_with?(':', '{') &&
           segments[1]&.start_with?(':', '{') &&
@@ -177,7 +324,7 @@ module Belt
         pattern = Regexp.new(@options[:grep], Regexp::IGNORECASE)
         routes.select do |r|
           r[:path].match?(pattern) ||
-            r[:gateway].match?(pattern) ||
+            r[:gateway].to_s.match?(pattern) ||
             r[:lambda].match?(pattern) ||
             r[:verb].match?(pattern) ||
             r[:controller].match?(pattern) ||
@@ -194,14 +341,14 @@ module Belt
         path_w = [routes.map { |r| r[:path].length }.max, 4].max
 
         if multi_gateway
-          gw_w = [routes.map { |r| r[:gateway].length }.max, 7].max
+          gw_w = [routes.map { |r| r[:gateway].to_s.length }.max, 7].max
           lam_w = [routes.map { |r| r[:lambda].length }.max, 6].max
 
           puts "#{'VERB'.ljust(verb_w)}  #{'PATH'.ljust(path_w)}  #{'GATEWAY'.ljust(gw_w)}  #{'LAMBDA'.ljust(lam_w)}  CONTROLLER#ACTION"
           puts "-" * (verb_w + path_w + gw_w + lam_w + 20)
 
           routes.each do |r|
-            puts "#{r[:verb].ljust(verb_w)}  #{r[:path].ljust(path_w)}  #{r[:gateway].ljust(gw_w)}  #{r[:lambda].ljust(lam_w)}  #{r[:controller]}##{r[:action]}"
+            puts "#{r[:verb].ljust(verb_w)}  #{r[:path].ljust(path_w)}  #{r[:gateway].to_s.ljust(gw_w)}  #{r[:lambda].ljust(lam_w)}  #{r[:controller]}##{r[:action]}"
           end
         else
           puts "#{'VERB'.ljust(verb_w)}  #{'PATH'.ljust(path_w)}  CONTROLLER#ACTION"
