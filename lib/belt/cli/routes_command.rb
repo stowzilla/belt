@@ -117,8 +117,8 @@ module Belt
           action: infer_action(route, gateway),
           auth: route.auth.to_s,
           tables: get_route_tables(route),
-          request_model: route.request_model.to_s,
-          response_model: route.response_model.to_s
+          request_model: infer_request_model(route),
+          response_model: infer_response_model(route)
         }
         rc = route.response_context.to_s
         hash[:response_context] = rc unless rc.empty?
@@ -131,6 +131,40 @@ module Belt
         else
           @table_inference.infer_tables_from_route(route)
         end
+      end
+
+      def infer_request_model(route)
+        return route.request_model if route.request_model && !route.request_model.empty?
+        return "" unless route.resource?
+
+        resource_name = extract_resource_name(route.path)
+        return "" unless resource_name
+
+        singular = singularize(resource_name)
+
+        case route.method
+        when 'POST' then "create_#{singular}"
+        when 'PUT', 'PATCH' then "update_#{singular}"
+        else ""
+        end
+      end
+
+      def infer_response_model(route)
+        return route.response_model if route.response_model && !route.response_model.empty?
+        return "" unless route.resource?
+
+        resource_name = extract_resource_name(route.path)
+        return "" unless resource_name
+
+        singularize(resource_name)
+      end
+
+      def extract_resource_name(path)
+        segments = path.split('/').reject(&:empty?)
+        non_param = segments.reject { |s| s.start_with?(':', '{') }
+        return nil if non_param.empty?
+
+        non_param.last.gsub('-', '_')
       end
 
       def extract_route_name(path)
