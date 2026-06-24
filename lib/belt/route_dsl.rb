@@ -306,6 +306,7 @@ module Belt
         @scope_module = nil
         @scope_auth = nil
         @scope_tables = []
+        @scope_controller = nil
       end
 
       def scope(options = {}, &)
@@ -313,11 +314,13 @@ module Belt
         previous_module = @scope_module
         previous_auth = @scope_auth
         previous_tables = @scope_tables
+        previous_controller = @scope_controller
 
         @scope_prefix = options[:path] || @scope_prefix
         @scope_module = options[:module] || @scope_module
         @scope_auth = options[:auth] || @scope_auth
         @scope_tables = (@scope_tables + Array(options[:tables] || [])).uniq
+        @scope_controller = options[:controller] || @scope_controller
 
         instance_eval(&) if block_given?
 
@@ -325,6 +328,7 @@ module Belt
         @scope_module = previous_module
         @scope_auth = previous_auth
         @scope_tables = previous_tables
+        @scope_controller = previous_controller
       end
 
       %i[get post put delete patch].each do |method|
@@ -333,6 +337,7 @@ module Belt
           route_options = options.dup
           route_options[:lambda] ||= @scope_module if @scope_module
           route_options[:auth] ||= @scope_auth if @scope_auth
+          route_options[:controller] ||= @scope_controller if @scope_controller
           if @scope_tables.any? || route_options[:tables]
             route_options[:tables] =
               (@scope_tables + Array(route_options[:tables] || [])).uniq

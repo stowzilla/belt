@@ -191,20 +191,40 @@ module Belt
       end
 
       def output_ruby(routes, namespace, routes_file)
-        filtered = routes.select { |r| r[:lambda] == namespace }
-        if filtered.empty?
-          warn "No routes found for namespace '#{namespace}' - skipping"
-          return
-        end
-
         output_dir = @options[:output_dir] || File.expand_path('../lambda/lib/routes', Dir.pwd)
         FileUtils.mkdir_p(output_dir)
-        output_file = File.join(output_dir, "#{namespace}_routes.rb")
 
-        content = generate_ruby_content(filtered, namespace)
+        if namespace == 'all'
+          generate_all_manifests(routes, output_dir)
+        else
+          # Generate gateway-based manifest (all routes for this gateway)
+          filtered = routes.select { |r| r[:gateway] == namespace }
+          # Fall back to lambda-based if no gateway match
+          filtered = routes.select { |r| r[:lambda] == namespace } if filtered.empty?
+          if filtered.empty?
+            warn "No routes found for namespace '#{namespace}' - skipping"
+            return
+          end
+          write_ruby_manifest(filtered, namespace, output_dir)
+        end
+      end
+
+      def generate_all_manifests(routes, output_dir)
+        # Gateway-based manifests (primary — used by main Lambda entry points)
+        by_gateway = routes.group_by { |r| r[:gateway] }
+        by_gateway.each { |gw, gw_routes| write_ruby_manifest(gw_routes, gw, output_dir) }
+
+        # Scoped lambda manifests (where lambda != gateway — separate Lambda functions)
+        scoped = routes.select { |r| r[:lambda] != r[:gateway] }
+        by_lambda = scoped.group_by { |r| r[:lambda] }
+        by_lambda.each { |lam, lam_routes| write_ruby_manifest(lam_routes, lam, output_dir) }
+      end
+
+      def write_ruby_manifest(routes, name, output_dir)
+        output_file = File.join(output_dir, "#{name}_routes.rb")
+        content = generate_ruby_content(routes, name)
         File.write(output_file, content)
-        puts "Generated: #{output_file}"
-        puts "Routes: #{filtered.length}"
+        puts "  ✅ #{name}_routes.rb (#{routes.length} routes)"
       end
 
       def generate_ruby_content(routes, namespace)
@@ -250,7 +270,7 @@ module Belt
       end
 
       def infer_controller(route, gateway)
-        return route.controller if route.controller
+        return route.controller.to_s if route.controller
 
         segments = route.path.split('/').reject(&:empty?)
         non_param = segments.reject { |s| s.start_with?(':', '{') }
@@ -268,7 +288,7 @@ module Belt
       end
 
       def infer_action(route, gateway)
-        return route.action if route.action
+        return route.action.to_s if route.action
 
         segments = route.path.split('/').reject(&:empty?)
         non_param = segments.reject { |s| s.start_with?(':', '{') }
