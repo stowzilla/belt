@@ -1,0 +1,7 @@
+# frozen_string_literal: true
+
+# Runs before models/libs are loaded in `belt console`.
+# Use this for AWS configuration, environment setup, credential checks, etc.
+
+ENV['APP_NAME'] ||= '<%= @app_name %>'
+ENV['AWS_REGION'] ||= 'us-east-1'

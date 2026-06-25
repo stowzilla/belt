@@ -71,6 +71,7 @@ module Belt
           #{@app_name}/lambda/models
           #{@app_name}/lambda/models/concerns
           #{@app_name}/lambda/lib/routes
+          #{@app_name}/lambda/config
           #{@app_name}/lambda/spec
           #{@app_name}/infrastructure
         ]
@@ -81,6 +82,7 @@ module Belt
           'Gemfile.erb' => "#{@app_name}/Gemfile",
           'Rakefile.erb' => "#{@app_name}/Rakefile",
           'lambda/api.rb.erb' => "#{@app_name}/lambda/#{@app_name}.rb",
+          'lambda/config/before_console.rb.erb' => "#{@app_name}/lambda/config/before_console.rb",
           'lambda/models/application_record.rb.erb' => "#{@app_name}/lambda/models/application_record.rb",
           'lambda/models/concerns/timestampable.rb.erb' => "#{@app_name}/lambda/models/concerns/timestampable.rb",
           'lambda/controllers/application_controller.rb.erb' =>

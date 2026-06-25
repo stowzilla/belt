@@ -1,40 +1,131 @@
 # frozen_string_literal: true
 
+require 'optparse'
+
 module Belt
   module CLI
     class ConsoleCommand
-      def self.run(_args)
-        unless File.exist?(gemfile_path)
-          abort "Error: No Gemfile found at #{gemfile_path}. Are you in a Belt project?"
+      def self.run(args)
+        new(args).run
+      end
+
+      def initialize(args)
+        @args = args
+        @options = {}
+        parse_options
+      end
+
+      def run
+        ENV['BUNDLE_GEMFILE'] ||= File.join(Belt.root, 'Gemfile')
+
+        unless File.exist?(ENV['BUNDLE_GEMFILE'])
+          abort "Error: No Gemfile found at #{ENV['BUNDLE_GEMFILE']}. Are you in a Belt project?"
         end
 
-        ENV['BUNDLE_GEMFILE'] ||= gemfile_path
+        @environment = @args.first || ENV['BELT_ENV'] || 'dev'
+        ENV['ENVIRONMENT'] = @environment
 
-        boot_file = File.join(Belt.root, 'lambda', 'bin', 'console.rb')
-        if File.exist?(boot_file)
-          exec('ruby', boot_file)
+        if @options[:run]
+          exec_runner(@options[:run])
         else
-          exec_irb
+          exec_console
         end
       end
 
-      def self.gemfile_path
-        File.join(Belt.root, 'Gemfile')
+      private
+
+      def parse_options
+        OptionParser.new do |opts|
+          opts.banner = 'Usage: belt console [environment] [options]'
+          opts.on('--run COMMAND', 'Execute a command and exit') { |cmd| @options[:run] = cmd }
+          opts.on('-h', '--help', 'Show this help') { puts opts; exit }
+        end.parse!(@args)
       end
 
-      def self.exec_irb
-        require 'bundler/setup'
-        load_app
+      def exec_console
+        production_guard!
+        boot_app
+        puts banner
+        ARGV.clear
         require 'irb'
         IRB.start
       end
 
-      def self.load_app
+      def exec_runner(command)
+        boot_app
+        result = eval(command) # rubocop:disable Security/Eval
+        puts format_result(result)
+      rescue => e
+        abort "Error: #{e.class}: #{e.message}\n#{e.backtrace.first(5).join("\n")}"
+      end
+
+      def boot_app
+        require 'bundler/setup'
         require 'belt'
 
-        models_dir = File.join(Belt.root, 'lambda', 'models')
-        if Dir.exist?(models_dir)
-          Dir.glob(File.join(models_dir, '**', '*.rb')).sort.each { |f| require f }
+        run_initializer('before_console')
+        load_libs
+        load_models
+        run_initializer('after_console')
+
+        define_reload!
+      end
+
+      def load_models
+        load_dir('models')
+      end
+
+      def load_libs
+        load_dir('lib')
+      end
+
+      def load_dir(subdir)
+        dir = File.join(Belt.root, 'lambda', subdir)
+        Dir.glob(File.join(dir, '**', '*.rb')).sort.each { |f| require f } if Dir.exist?(dir)
+      end
+
+      def run_initializer(name)
+        path = File.join(Belt.root, 'lambda', 'config', "#{name}.rb")
+        load path if File.exist?(path)
+      end
+
+      def define_reload!
+        console = self
+        Kernel.define_method(:reload!) do
+          console.send(:load_libs)
+          console.send(:load_models)
+          puts '♻️  Reloaded'
+        end
+      end
+
+      def production_guard!
+        return unless @environment == 'prod'
+
+        $stdout.write "\n⚠️  WARNING: You are entering the PRODUCTION console!\nType 'yes' to continue: "
+        response = $stdin.gets&.chomp
+        abort "\n❌ Cancelled." unless response&.downcase == 'yes'
+        puts "\n✅ Entering production console...\n"
+      end
+
+      def banner
+        <<~BANNER
+
+          Belt Console (#{@environment})
+          Type 'reload!' to reload code.
+
+        BANNER
+      end
+
+      def format_result(result)
+        require 'json'
+        if result.respond_to?(:to_h)
+          JSON.pretty_generate(result.to_h)
+        elsif result.respond_to?(:map) && result.respond_to?(:first) && result.first.respond_to?(:to_h)
+          JSON.pretty_generate(result.map(&:to_h))
+        elsif result.nil?
+          'nil'
+        else
+          result.inspect
         end
       end
     end

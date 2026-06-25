@@ -231,12 +231,20 @@ Belt includes a command-line interface for project management.
 
 ### `belt console` (alias: `belt c`)
 
-Start an interactive Ruby console with your app loaded. If `lambda/bin/console.rb` exists, it runs that file (allowing project-specific boot logic). Otherwise, Belt loads your models and starts IRB.
+Start an interactive Ruby console with your app loaded. Belt uses convention over configuration:
+
+1. Loads `lambda/config/before_console.rb` (AWS setup, credentials, env vars)
+2. Requires all files in `lambda/lib/` and `lambda/models/`
+3. Loads `lambda/config/after_console.rb` (FactoryBot, custom helpers)
+4. Starts IRB with `reload!` available
 
 ```bash
-belt console
-belt c
+belt console           # uses BELT_ENV or defaults to 'dev'
+belt c prod            # specify environment explicitly
+belt c dev02 --run "Customer.first"  # runner mode (execute and exit)
 ```
+
+A production safety prompt is shown when the environment is `prod`.
 
 ### `belt routes`
 
