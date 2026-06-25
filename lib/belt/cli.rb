@@ -13,6 +13,7 @@ require_relative 'cli/setup_command'
 require_relative 'cli/terraform_command'
 require_relative 'cli/routes_command'
 require_relative 'cli/tasks_command'
+require_relative 'cli/console_command'
 
 module Belt
   module CLI
@@ -20,6 +21,7 @@ module Belt
       'new' => Belt::CLI::NewCommand,
       %w[generate g] => Belt::CLI::GenerateCommand,
       'routes' => Belt::CLI::RoutesCommand,
+      %w[console c] => Belt::CLI::ConsoleCommand,
       %w[tasks --tasks -T] => Belt::CLI::TasksCommand,
       'setup' => Belt::CLI::SetupCommand,
       'deploy' => lambda { |args|
@@ -79,6 +81,8 @@ module Belt
           generate views <resource> [fields...]       Generate React pages for REST actions
           generate environment <name>                 Create a new environment
           routes [-g PATTERN] [-f json]               Show route definitions
+          console                                     Start an interactive console (IRB)
+          c                                           Alias for console
           tasks [-g PATTERN] [-a]                     List available rake tasks
           -T [-g PATTERN] [-a]                        Alias for tasks
           setup state                                 Create/select S3 state bucket

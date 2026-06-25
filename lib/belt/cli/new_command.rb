@@ -80,7 +80,6 @@ module Belt
         {
           'Gemfile.erb' => "#{@app_name}/Gemfile",
           'Rakefile.erb' => "#{@app_name}/Rakefile",
-          'lambda/Gemfile.erb' => "#{@app_name}/lambda/Gemfile",
           'lambda/api.rb.erb' => "#{@app_name}/lambda/#{@app_name}.rb",
           'lambda/models/application_record.rb.erb' => "#{@app_name}/lambda/models/application_record.rb",
           'lambda/models/concerns/timestampable.rb.erb' => "#{@app_name}/lambda/models/concerns/timestampable.rb",

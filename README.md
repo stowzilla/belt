@@ -229,6 +229,15 @@ Belt::Observability::Metrics.track_event("OrderCreated", model: "Order")
 
 Belt includes a command-line interface for project management.
 
+### `belt console` (alias: `belt c`)
+
+Start an interactive Ruby console with your app loaded. If `lambda/bin/console.rb` exists, it runs that file (allowing project-specific boot logic). Otherwise, Belt loads your models and starts IRB.
+
+```bash
+belt console
+belt c
+```
+
 ### `belt routes`
 
 Display route definitions from your `infrastructure/routes.tf.rb`. This is the primary way to inspect what endpoints your app exposes.
