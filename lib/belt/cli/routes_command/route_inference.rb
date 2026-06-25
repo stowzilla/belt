@@ -16,13 +16,7 @@ module Belt
 
           return non_param.map { |s| s.gsub('-', '_') }.join('/') if route.resource? && nested_resource?(segments)
 
-          if route.resource?
-            non_param.first.gsub('-', '_')
-          elsif non_param.length == 1 && segments.length == 1
-            route.lambda.to_s == gateway.name.to_s ? gateway.name.to_s : route.lambda.to_s
-          else
-            non_param.first.gsub('-', '_')
-          end
+          non_param.first.gsub('-', '_')
         end
 
         def infer_action(route, _gateway)
