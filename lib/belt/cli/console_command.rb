@@ -38,7 +38,10 @@ module Belt
         OptionParser.new do |opts|
           opts.banner = 'Usage: belt console [environment] [options]'
           opts.on('--run COMMAND', 'Execute a command and exit') { |cmd| @options[:run] = cmd }
-          opts.on('-h', '--help', 'Show this help') { puts opts; exit }
+          opts.on('-h', '--help', 'Show this help') do
+            puts opts
+            exit
+          end
         end.parse!(@args)
       end
 
@@ -55,7 +58,7 @@ module Belt
         boot_app
         result = eval(command) # rubocop:disable Security/Eval
         puts format_result(result)
-      rescue => e
+      rescue StandardError => e
         abort "Error: #{e.class}: #{e.message}\n#{e.backtrace.first(5).join("\n")}"
       end
 
@@ -76,7 +79,7 @@ module Belt
 
       def load_dir(subdir)
         dir = File.join(Belt.root, 'lambda', subdir)
-        Dir.glob(File.join(dir, '**', '*.rb')).sort.each { |f| require f } if Dir.exist?(dir)
+        Dir.glob(File.join(dir, '**', '*.rb')).each { |f| require f } if Dir.exist?(dir)
       end
 
       def define_reload!
@@ -84,7 +87,7 @@ module Belt
         Kernel.define_method(:reload!) do
           %w[lib models].each do |subdir|
             dir = File.join(root, 'lambda', subdir)
-            Dir.glob(File.join(dir, '**', '*.rb')).sort.each { |f| load f } if Dir.exist?(dir)
+            Dir.glob(File.join(dir, '**', '*.rb')).each { |f| load f } if Dir.exist?(dir)
           end
           puts '♻️  Reloaded'
         end
