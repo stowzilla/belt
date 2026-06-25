@@ -61,22 +61,17 @@ module Belt
 
       def boot_app
         require 'bundler/setup'
-        require 'belt'
 
-        run_initializer('before_console')
-        load_libs
-        load_models
-        run_initializer('after_console')
+        environment_file = File.join(Belt.root, 'lambda', 'config', 'environment.rb')
+        if File.exist?(environment_file)
+          load environment_file
+        else
+          require 'belt'
+          load_dir('lib')
+          load_dir('models')
+        end
 
         define_reload!
-      end
-
-      def load_models
-        load_dir('models')
-      end
-
-      def load_libs
-        load_dir('lib')
       end
 
       def load_dir(subdir)
@@ -84,16 +79,13 @@ module Belt
         Dir.glob(File.join(dir, '**', '*.rb')).sort.each { |f| require f } if Dir.exist?(dir)
       end
 
-      def run_initializer(name)
-        path = File.join(Belt.root, 'lambda', 'config', "#{name}.rb")
-        load path if File.exist?(path)
-      end
-
       def define_reload!
-        console = self
+        root = Belt.root
         Kernel.define_method(:reload!) do
-          console.send(:load_libs)
-          console.send(:load_models)
+          %w[lib models].each do |subdir|
+            dir = File.join(root, 'lambda', subdir)
+            Dir.glob(File.join(dir, '**', '*.rb')).sort.each { |f| load f } if Dir.exist?(dir)
+          end
           puts '♻️  Reloaded'
         end
       end
