@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'version'
+require_relative 'root'
 require_relative 'cli/env_resolver'
 require_relative 'cli/new_command'
 require_relative 'cli/generate_command'

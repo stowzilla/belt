@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.1.1
+
+### `belt routes` CLI command
+
+- Added `belt routes` — displays all routes defined in `infrastructure/routes.tf.rb`
+- Concise table output with VERB, PATH, CONTROLLER#ACTION (shows GATEWAY/LAMBDA columns when multiple namespaces exist)
+- JSON output via `--format json` includes routes array and optional schema models
+- Filter routes with `--grep PATTERN` (case-insensitive, matches verb, path, gateway, lambda, controller, or action)
+- Generate Ruby route manifest files with `--namespace NAMESPACE` (or `all` for every gateway/lambda)
+- `--output-dir DIR` controls where generated files are written (warns if used without `--namespace`)
+- Added `Belt.root` — project root detection by walking up to find `infrastructure/routes.tf.rb`, with fallback to `pwd`
+- Default output directory for generated routes: `#{Belt.root}/lambda/lib/routes`
+
+### `belt tasks` CLI command
+
+- Added `belt tasks` — lists available rake tasks from the project's Rakefile
+- Filter tasks with `--grep PATTERN`
+- Show all tasks (including undescribed) with `--all`
+- Run rake tasks directly: `belt lambda:build_layer` invokes `bundle exec rake lambda:build_layer`
+
+### Other changes
+
+- Added `Belt::RouteDSL` — full route DSL parser (resources, nested resources, scopes, mounts, schemas)
+- Added `Belt::TableInference` — infers DynamoDB table access from Terraform definitions
+- Renamed `TerraDispatch` references to `Belt` in templates and DSL entry points
+- Removed `activeitem` dependency from generated Gemfile template
+- Added Rakefile template to `belt new` scaffolding
+
 ## 0.0.7
 
 - Fixed `discover_gem_paths` to use `Gem.loaded_specs` instead of `Gem::Specification.each` — the latter silently returns nothing on Lambda's vendored bundle layout, causing gem controllers/models to not be found
@@ -26,4 +54,4 @@
 - Added `BeltController::Base` with callbacks, strong params, CORS, error handling
 - Added `ActionController::Parameters` (strong params without Rails)
 - Added response helpers and CORS origin resolution
-- Bundled dependencies: activeitem, lambda_loadout, s3arch
+- Bundled dependencies: activeitem, lambda_loadout

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'belt/version'
+require_relative 'belt/root'
 require_relative 'belt/parameters'
 require_relative 'belt/observability'
 require_relative 'belt/lambda_handler'
