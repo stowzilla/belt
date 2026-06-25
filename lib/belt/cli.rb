@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'version'
+require_relative 'root'
 require_relative 'cli/env_resolver'
 require_relative 'cli/new_command'
 require_relative 'cli/generate_command'
@@ -10,13 +11,16 @@ require_relative 'cli/frontend_deploy_command'
 require_relative 'cli/views_command'
 require_relative 'cli/setup_command'
 require_relative 'cli/terraform_command'
+require_relative 'cli/routes_command'
+require_relative 'cli/tasks_command'
 
 module Belt
   module CLI
-    COMMANDS = {
+    COMMANDS_DEFINITION = {
       'new' => Belt::CLI::NewCommand,
-      'generate' => Belt::CLI::GenerateCommand,
-      'g' => Belt::CLI::GenerateCommand,
+      %w[generate g] => Belt::CLI::GenerateCommand,
+      'routes' => Belt::CLI::RoutesCommand,
+      %w[tasks --tasks -T] => Belt::CLI::TasksCommand,
       'setup' => Belt::CLI::SetupCommand,
       'deploy' => lambda { |args|
         subcommand = args.shift
@@ -27,9 +31,12 @@ module Belt
           exit 1
         end
       },
-      '--version' => ->(_args) { puts "Belt #{Belt::VERSION}" },
-      '-v' => ->(_args) { puts "Belt #{Belt::VERSION}" }
+      %w[version --version -v] => ->(_args) { puts "Belt #{Belt::VERSION}" }
     }.freeze
+
+    COMMANDS = COMMANDS_DEFINITION.each_with_object({}) do |(keys, handler), hash|
+      Array(keys).each { |key| hash[key] = handler }
+    end.freeze
 
     TERRAFORM_ACTIONS = Belt::CLI::TerraformCommand::ACTIONS
 
@@ -46,7 +53,10 @@ module Belt
 
       handler = COMMANDS[command]
 
+      # If no built-in command matched, try running it as a rake task
       if handler.nil?
+        return Belt::CLI::TasksCommand.invoke(command, args) if Belt::CLI::TasksCommand.rake_task?(command)
+
         puts "Unknown command: #{command}\n\n#{usage}"
         exit 1
       end
@@ -68,6 +78,9 @@ module Belt
           generate frontend <react|vue|svelte>        Scaffold a frontend app
           generate views <resource> [fields...]       Generate React pages for REST actions
           generate environment <name>                 Create a new environment
+          routes [-g PATTERN] [-f json]               Show route definitions
+          tasks [-g PATTERN] [-a]                     List available rake tasks
+          -T [-g PATTERN] [-a]                        Alias for tasks
           setup state                                 Create/select S3 state bucket
           setup tables <env>                          Generate DynamoDB tables from schema
           setup frontend <env>                        Generate S3 + CloudFront infrastructure
@@ -78,6 +91,10 @@ module Belt
           destroy <env>                               terraform destroy for environment
           output <env>                                terraform output for environment
           --version                                   Show Belt version
+
+        Rake Tasks:
+          Any rake task from your Gemfile dependencies can be run directly:
+            belt lambda:build_layer                   Run a rake task by name
 
         Environment:
           Set BELT_ENV to skip the <env> argument:
@@ -92,6 +109,8 @@ module Belt
           belt setup frontend wups
           belt deploy frontend wups
           belt apply wups
+          belt tasks                    # list all rake tasks
+          belt lambda:build_layer       # run a rake task directly
       USAGE
     end
   end

@@ -9,7 +9,6 @@ Belt bundles everything you need to go from zero to production:
 - **Belt::ActionRouter** — request routing to controllers from route manifests
 - **ActiveItem** — DynamoDB ORM (queries, validations, associations, transactions)
 - **Lambda Loadout** — structured logging, CloudWatch metrics (EMF), error alerting
-- **S3arch** — full-text search via SQLite FTS5, stored on S3, queried from Lambda
 
 ## Installation
 
@@ -129,7 +128,7 @@ terraform {
 Define routes in `infrastructure/routes.tf.rb`:
 
 ```ruby
-TerraDispatch.routes.draw do
+Belt.application.routes.draw do
   namespace :api do
     resources :posts, only: [:index, :show, :create]
   end
@@ -139,7 +138,7 @@ end
 Define tables in `infrastructure/schema.tf.rb`:
 
 ```ruby
-TerraDispatch.schema.define do
+Belt.application.schema.define do
   model :post do
     partition_key :id, :string
     global_secondary_index :UserIndex, partition_key: :user_id
@@ -201,59 +200,9 @@ error_response("Not found", 404)                        # 404 JSON error
 html_response("<h1>Hello</h1>")                         # 200 HTML with CORS
 ```
 
-## Holsters (Belt's Engines)
-
-Holsters are Belt's equivalent of Rails Engines. A holster lets a gem provide its own controllers, models, routes, and schema — all discovered automatically via convention.
-
-### Creating a Holster
-
-In your gem, subclass `Belt::Holster`:
-
-```ruby
-# lib/s3arch/holster.rb
-module S3arch
-  class Holster < Belt::Holster
-  end
-end
-```
-
-That's it. Belt discovers all `Holster` subclasses at boot. By convention, it expects:
-
-```
-your-gem/
-├── infrastructure/
-│   ├── routes.tf.rb      # Holster's route definitions
-│   └── schema.tf.rb      # Holster's DynamoDB tables
-└── lambda/
-    ├── controllers/      # Holster's controllers
-    └── models/           # Holster's models
-```
-
-No configuration needed if you follow the convention. Belt resolves paths relative to your gem's root (two directories up from the holster file).
-
-### Customizing Paths
-
-If your gem uses a different layout, override any path:
-
-```ruby
-module MyGem
-  class Holster < Belt::Holster
-    self.gem_root = File.expand_path("..", __dir__)
-    self.controllers_path = File.join(gem_root, "app", "controllers")
-  end
-end
-```
-
-### How Belt Uses Holsters
-
-- **Controllers**: `Belt::ActionRouter` searches holster controller paths automatically
-- **Routes**: `Belt.all_routes_paths` collects all holster `routes.tf.rb` files for the Terraform provider
-- **Schema**: `Belt.all_schema_paths` collects all holster `schema.tf.rb` files for the Terraform provider
-- **Models**: `Belt.all_models_paths` collects all holster model directories
-
 ## Controller Discovery
 
-Belt discovers controllers from the app's namespace module first, then searches `Belt.all_controller_paths` — which includes both app-defined paths and holster-provided paths. No registration needed.
+Belt discovers controllers from the app's namespace module first, then searches `Belt.all_controller_paths` — which includes app-defined paths. No registration needed.
 
 ## Belt::Observability
 
@@ -275,6 +224,156 @@ Belt::Observability::Metrics.track_event("OrderCreated", model: "Order")
 | `CORS_ALLOWED_ORIGINS` | Comma-separated origins (overrides domain vars) |
 | `CUSTOMER_APP_DOMAIN` | Primary app domain for CORS |
 | `OPS_APP_DOMAIN` | Internal tools domain for CORS |
+
+## CLI
+
+Belt includes a command-line interface for project management.
+
+### `belt routes`
+
+Display route definitions from your `infrastructure/routes.tf.rb`. This is the primary way to inspect what endpoints your app exposes.
+
+```bash
+belt routes
+```
+
+Output (single namespace):
+
+```
+VERB    PATH                   CONTROLLER#ACTION
+------------------------------------------------------------------
+GET     /posts                 posts#index
+GET     /posts/{post_id}       posts#show
+POST    /posts                 posts#create
+DELETE  /posts/{post_id}       posts#destroy
+```
+
+When multiple namespaces (API Gateways) exist, GATEWAY and LAMBDA columns are added automatically:
+
+```
+VERB    PATH              GATEWAY  LAMBDA  CONTROLLER#ACTION
+---------------------------------------------------------------
+GET     /posts            blog     blog    posts#index
+POST    /posts            blog     blog    posts#create
+GET     /posts            ops      ops     posts#index
+POST    /posts            ops      ops     posts#create
+```
+
+#### Options
+
+| Flag | Description |
+|------|-------------|
+| `-g, --grep PATTERN` | Filter routes matching pattern (case-insensitive, matches verb, path, gateway, lambda, controller, or action) |
+| `-f, --format FORMAT` | Output format: `concise` (default) or `json` |
+| `--namespace NAMESPACE` | Generate Ruby route files for NAMESPACE (or "all") |
+| `--output-dir DIR` | Output directory for generated Ruby files (default: `lambda/lib/routes/`) |
+| `--schema FILE` | Path to `schema.tf.rb` for model definitions (default: same directory as routes file) |
+| `--tables-file FILE` | Path to Terraform file with `aws_dynamodb_table` resources for table inference |
+| `-h, --help` | Show help |
+
+#### Examples
+
+```bash
+# Filter routes by pattern
+belt routes -g posts
+
+# JSON output (for tooling/CI)
+belt routes -f json
+
+# Generate Ruby route constant for the "api" namespace
+belt routes --namespace api
+
+# Generate to a custom directory
+belt routes --namespace api --output-dir lib/routes
+
+# Include schema models in JSON output
+belt routes -f json --schema infrastructure/schema.tf.rb
+
+# Infer DynamoDB table access from Terraform
+belt routes -f json --tables-file infrastructure/main.tf
+```
+
+#### JSON Output
+
+With `--format json`, the output includes a `routes` array and optionally a `models` array (when a schema file is found):
+
+```json
+{
+  "routes": [
+    {
+      "name": "posts",
+      "verb": "GET",
+      "path": "/posts",
+      "gateway": "api",
+      "lambda": "api",
+      "controller": "posts",
+      "action": "index",
+      "auth": "cognito",
+      "tables": ["posts"],
+      "request_model": "",
+      "response_model": ""
+    }
+  ],
+  "models": [
+    {
+      "name": "CreatePost",
+      "kind": "request",
+      "description": "Request model: CreatePost",
+      "properties": {
+        "title": { "type": "string" },
+        "body": { "type": "string" }
+      },
+      "required": ["title"]
+    }
+  ]
+}
+```
+
+#### Ruby Output
+
+With `--namespace NAMESPACE`, Belt generates a frozen Ruby constant file at `lambda/lib/routes/<namespace>_routes.rb`:
+
+```ruby
+# frozen_string_literal: true
+
+# Auto-generated by: belt routes --namespace api
+# Do not edit manually
+
+module Routes
+  API = [
+    {
+      verb: "GET",
+      path: "/posts",
+      gateway: "api",
+      lambda: "api",
+      controller: "posts",
+      action: "index",
+      auth: "cognito",
+      tables: ["posts"]
+    }
+  ].freeze
+end
+```
+
+This is used by `Belt::ActionRouter` at runtime for request routing.
+
+#### Route File Location
+
+The command expects `infrastructure/routes.tf.rb` in the current working directory. Routes are defined using the same DSL as the Belt Terraform provider:
+
+```ruby
+Belt.application.routes.draw do
+  namespace :api do
+    resources :posts, only: [:index, :show, :create, :destroy]
+    resource :profile, only: [:show, :update]
+    get "health", action: :health
+  end
+end
+```
+
+#### Table Inference
+
+When `--tables-file` is provided, Belt parses `aws_dynamodb_table` resource blocks from your Terraform files and infers which tables each route accesses based on the resource name in the route path. Routes can also declare tables explicitly in the DSL via `tables: [:posts, :comments]`.
 
 ## License
 
