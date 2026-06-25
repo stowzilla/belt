@@ -241,12 +241,24 @@ Start an interactive Ruby console with your app loaded. Belt uses convention ove
 3. Reads `.irbrc` from the project root (console-specific customization)
 
 ```bash
-belt console           # uses BELT_ENV or defaults to 'dev'
+belt console           # uses .belt_env file, then BELT_ENV, then defaults to 'dev'
 belt c prod            # specify environment explicitly
 belt c dev02 --run "Customer.first"  # runner mode (execute and exit)
 ```
 
 A production safety prompt is shown when the environment is `prod`.
+
+#### Default Environment
+
+Create a `.belt_env` file in your project root to set a per-project default:
+
+```bash
+echo "dev02" > .belt_env
+```
+
+Resolution order: CLI argument → `BELT_ENV` env var → `.belt_env` file → `'dev'`
+
+Add `.belt_env` to `.gitignore` so each developer can have their own default.
 
 ### `belt routes`
 

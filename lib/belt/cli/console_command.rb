@@ -22,7 +22,7 @@ module Belt
           abort "Error: No Gemfile found at #{ENV['BUNDLE_GEMFILE']}. Are you in a Belt project?"
         end
 
-        @environment = @args.first || ENV['BELT_ENV'] || 'dev'
+        @environment = @args.first || ENV['BELT_ENV'] || default_env || 'dev'
         ENV['ENVIRONMENT'] = @environment
 
         if @options[:run]
@@ -91,6 +91,11 @@ module Belt
           end
           puts '♻️  Reloaded'
         end
+      end
+
+      def default_env
+        file = File.join(Belt.root, '.belt_env')
+        File.read(file).strip if File.exist?(file)
       end
 
       def production_guard!
