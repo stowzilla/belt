@@ -34,6 +34,8 @@ my-app/
 │   ├── routes.tf.rb        # Belt provider route definitions
 │   └── schema.tf.rb        # DynamoDB table schemas
 ├── lambda/
+│   ├── config/
+│   │   └── environment.rb  # App boot file (used by console + Lambda)
 │   ├── controllers/
 │   │   └── posts_controller.rb
 │   ├── models/
@@ -41,6 +43,7 @@ my-app/
 │   ├── lib/
 │   │   └── routes.rb
 │   └── api.rb              # Lambda entry point
+├── .irbrc                  # Console customization (optional)
 ├── Gemfile
 └── Gemfile.lock
 ```
@@ -228,6 +231,22 @@ Belt::Observability::Metrics.track_event("OrderCreated", model: "Order")
 ## CLI
 
 Belt includes a command-line interface for project management.
+
+### `belt console` (alias: `belt c`)
+
+Start an interactive Ruby console with your app loaded. Belt uses convention over configuration:
+
+1. Loads `lambda/config/environment.rb` (your app's boot file — AWS setup, models, libs)
+2. Starts IRB with `reload!` available
+3. Reads `.irbrc` from the project root (console-specific customization)
+
+```bash
+belt console           # uses BELT_ENV or defaults to 'dev'
+belt c prod            # specify environment explicitly
+belt c dev02 --run "Customer.first"  # runner mode (execute and exit)
+```
+
+A production safety prompt is shown when the environment is `prod`.
 
 ### `belt routes`
 
