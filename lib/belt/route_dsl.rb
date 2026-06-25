@@ -95,7 +95,7 @@ module Belt
       define_method(method) do |path, options = {}|
         full_path = options[:on] == :collection ? "#{@collection_prefix}#{path}" : "#{@prefix}#{path}"
         options = merge_inherited_options(options)
-        route_options = options.reject { |k, _| k == :on }
+        route_options = options.except(:on)
         @gateway.send(:add_route, method, full_path, route_options)
       end
     end
@@ -257,7 +257,7 @@ module Belt
 
     def singularize(word)
       if word.end_with?('ies')
-        word[0..-4] + 'y'
+        "#{word[0..-4]}y"
       elsif word.end_with?('xes') || word.end_with?('zes') || word.end_with?('ses')
         word[0..-3]
       elsif word.end_with?('ches') || word.end_with?('shes')
@@ -296,7 +296,7 @@ module Belt
     end
 
     def schema
-      @schema_builder ||= SchemaBuilder.new
+      @schema ||= SchemaBuilder.new
     end
 
     class RouteBuilder
@@ -364,28 +364,38 @@ module Belt
         prefix = options[:at]&.to_s&.gsub(%r{^/|/$}, '') || ''
         extra_tables = Array(options[:tables] || [])
         auth_override = options[:auth]
-
         route_definitions = mountable.respond_to?(:routes) ? mountable.routes : []
 
         route_definitions.each do |route_def|
-          method = route_def[:method].to_sym
-          path = route_def[:path].to_s.gsub(/:([a-zA-Z_]\w*)/) { "{#{::Regexp.last_match(1)}}" }
-
-          full_path = prefix.empty? ? path : "/#{prefix}#{path}"
-          full_path = full_path.chomp('/') unless full_path == '/'
-          full_path = build_path(full_path)
-
-          route_options = (route_def[:options] || {}).dup
-          route_options[:tables] = (extra_tables + Array(route_options[:tables] || [])).uniq
-          route_options[:auth] = auth_override if auth_override
-          route_options[:auth] ||= @scope_auth if @scope_auth
-          route_options[:tables] = (@scope_tables + route_options[:tables]).uniq if @scope_tables.any?
-          route_options[:controller] ||= prefix.gsub('-', '_') unless prefix.empty?
-          stripped = path.gsub(%r{^/|/$}, '')
-          route_options[:action] ||= stripped.empty? ? 'index' : stripped.gsub('-', '_')
-
-          @gateway.send(method, full_path, route_options)
+          mount_route(route_def, prefix, extra_tables, auth_override)
         end
+      end
+
+      def mount_route(route_def, prefix, extra_tables, auth_override)
+        method = route_def[:method].to_sym
+        path = route_def[:path].to_s.gsub(/:([a-zA-Z_]\w*)/) { "{#{::Regexp.last_match(1)}}" }
+        full_path = mount_full_path(path, prefix)
+        route_options = mount_route_options(route_def, path, prefix, extra_tables, auth_override)
+
+        @gateway.send(method, full_path, route_options)
+      end
+
+      def mount_full_path(path, prefix)
+        full_path = prefix.empty? ? path : "/#{prefix}#{path}"
+        full_path = full_path.chomp('/') unless full_path == '/'
+        build_path(full_path)
+      end
+
+      def mount_route_options(route_def, path, prefix, extra_tables, auth_override)
+        route_options = (route_def[:options] || {}).dup
+        route_options[:tables] = (extra_tables + Array(route_options[:tables] || [])).uniq
+        route_options[:auth] = auth_override if auth_override
+        route_options[:auth] ||= @scope_auth if @scope_auth
+        route_options[:tables] = (@scope_tables + route_options[:tables]).uniq if @scope_tables.any?
+        route_options[:controller] ||= prefix.gsub('-', '_') unless prefix.empty?
+        stripped = path.gsub(%r{^/|/$}, '')
+        route_options[:action] ||= stripped.empty? ? 'index' : stripped.gsub('-', '_')
+        route_options
       end
 
       private
@@ -496,8 +506,8 @@ module Belt
     private
 
     def fields_to_properties
-      @fields.each_with_object({}) do |field, hash|
-        hash[field[:name].to_s] = { type: map_type(field[:type]) }
+      @fields.to_h do |field|
+        [field[:name].to_s, { type: map_type(field[:type]) }]
       end
     end
 
@@ -522,7 +532,7 @@ module Belt
     end
 
     SUPPORTED_TYPES.each do |type|
-      define_method(type) do |field_name, options = {}|
+      define_method(type) do |field_name, _options = {}|
         @fields << { name: field_name, type: type }
       end
     end
@@ -542,8 +552,8 @@ module Belt
     private
 
     def fields_to_properties
-      @fields.each_with_object({}) do |field, hash|
-        hash[field[:name].to_s] = { type: map_type(field[:type]) }
+      @fields.to_h do |field|
+        [field[:name].to_s, { type: map_type(field[:type]) }]
       end
     end
 
@@ -567,7 +577,7 @@ module Belt
     end
 
     SUPPORTED_TYPES.each do |type|
-      define_method(type) do |field_name, options = {}|
+      define_method(type) do |field_name, _options = {}|
         @fields << { name: field_name, type: type }
       end
     end
@@ -579,8 +589,8 @@ module Belt
     private
 
     def fields_to_properties
-      @fields.each_with_object({}) do |field, hash|
-        hash[field[:name].to_s] = { type: map_type(field[:type]) }
+      @fields.to_h do |field|
+        [field[:name].to_s, { type: map_type(field[:type]) }]
       end
     end
 

@@ -5,10 +5,15 @@ require 'optparse'
 require 'fileutils'
 require_relative '../route_dsl'
 require_relative '../table_inference'
+require_relative 'routes_command/schema_loader'
+require_relative 'routes_command/route_inference'
 
 module Belt
   module CLI
     class RoutesCommand
+      include SchemaLoader
+      include RouteInference
+
       def self.run(args)
         new(args).run
       end
@@ -142,57 +147,7 @@ module Belt
                 .join('_')
       end
 
-      def load_schema_models(routes_file)
-        schema_file = @options[:schema_file]
-        unless schema_file
-          routes_dir = File.dirname(File.expand_path(routes_file))
-          schema_file = File.join(routes_dir, 'schema.tf.rb')
-        end
-        return [] unless schema_file && File.exist?(schema_file)
-
-        Belt.instance_variable_set(:@application, nil)
-        begin
-          eval(File.read(schema_file), binding, schema_file) # rubocop:disable Security/Eval
-        rescue StandardError => e
-          warn "Warning: Failed to load schema file #{schema_file}: #{e.message}"
-          return []
-        end
-
-        schema = Belt.application.schema.to_h
-        models = []
-
-        (schema[:request_models] || {}).each do |_name, model|
-          models << {
-            name: model[:name],
-            kind: 'request',
-            description: "Request model: #{model[:name]}",
-            properties: stringify_properties(model[:properties] || {}),
-            required: (model[:required] || []).map(&:to_s)
-          }
-        end
-
-        (schema[:response_models] || {}).each do |_name, model|
-          (model[:contexts] || {}).each do |ctx_name, ctx|
-            models << {
-              name: "#{model[:name]}_#{ctx_name}_response",
-              kind: 'response',
-              description: "Response model: #{model[:name]} (#{ctx_name} context)",
-              properties: stringify_properties(ctx[:properties] || {}),
-              required: []
-            }
-          end
-        end
-
-        models
-      end
-
-      def stringify_properties(properties)
-        properties.each_with_object({}) do |(key, value), hash|
-          hash[key.to_s] = value.transform_keys(&:to_s)
-        end
-      end
-
-      def output_ruby(routes, namespace, routes_file)
+      def output_ruby(routes, namespace, _routes_file)
         output_dir = @options[:output_dir] || File.join(Belt.root, 'lambda/lib/routes')
         FileUtils.mkdir_p(output_dir)
         puts "Writing to #{output_dir}/:"
@@ -218,7 +173,7 @@ module Belt
         by_gateway.each { |gw, gw_routes| write_ruby_manifest(gw_routes, gw, output_dir) }
 
         # Scoped lambda manifests (where lambda != gateway — separate Lambda functions)
-        scoped = routes.select { |r| r[:lambda] != r[:gateway] }
+        scoped = routes.reject { |r| r[:lambda] == r[:gateway] }
         by_lambda = scoped.group_by { |r| r[:lambda] }
         by_lambda.each { |lam, lam_routes| write_ruby_manifest(lam_routes, lam, output_dir) }
       end
@@ -264,80 +219,13 @@ module Belt
 
       def normalize_path(path)
         path = "/#{path}" unless path.start_with?('/')
-        path.gsub(%r{/([a-zA-Z_][a-zA-Z0-9_]*?)/:id(/|$)}) do
+        normalized = path.gsub(%r{/([a-zA-Z_][a-zA-Z0-9_]*?)/:id(/|$)}) do
           resource = ::Regexp.last_match(1)
           trailing = ::Regexp.last_match(2)
           singular = singularize(resource)
           "/#{resource}/{#{singular}_id}#{trailing}"
-        end.gsub(/:([a-zA-Z_][a-zA-Z0-9_]*)/) { "{#{::Regexp.last_match(1)}}" }
-      end
-
-      def infer_controller(route, gateway)
-        return route.controller.to_s if route.controller
-
-        segments = route.path.split('/').reject(&:empty?)
-        non_param = segments.reject { |s| s.start_with?(':', '{') }
-        return gateway.name if non_param.empty?
-
-        return non_param.map { |s| s.gsub('-', '_') }.join('/') if route.resource? && nested_resource?(segments)
-
-        if route.resource?
-          non_param.first.gsub('-', '_')
-        elsif non_param.length == 1 && segments.length == 1
-          route.lambda.to_s == gateway.name.to_s ? gateway.name.to_s : route.lambda.to_s
-        else
-          non_param.first.gsub('-', '_')
         end
-      end
-
-      def infer_action(route, gateway)
-        return route.action.to_s if route.action
-
-        segments = route.path.split('/').reject(&:empty?)
-        non_param = segments.reject { |s| s.start_with?(':', '{') }
-        has_id = segments.any? { |s| s.start_with?(':', '{') }
-        last_is_param = segments.last&.start_with?(':', '{')
-        verb = route.method
-
-        if route.singular_resource?
-          case verb
-          when 'GET' then 'show'
-          when 'PUT', 'PATCH' then 'update'
-          when 'DELETE' then 'destroy'
-          when 'POST' then 'create'
-          else 'show'
-          end
-        elsif route.plural_resource? && nested_resource?(segments)
-          child_idx = segments.rindex { |s| !s.start_with?(':', '{') }
-          has_child_id = child_idx && segments[(child_idx + 1)..]&.any? { |s| s.start_with?(':', '{') }
-          restful_action(verb, has_child_id || false)
-        elsif route.plural_resource?
-          restful_action(verb, has_id && last_is_param)
-        elsif non_param.length <= 1 && !has_id
-          non_param.first&.gsub('-', '_') || 'index'
-        elsif non_param.length > 1
-          non_param.last.gsub('-', '_')
-        else
-          restful_action(verb, has_id && last_is_param)
-        end
-      end
-
-      def nested_resource?(segments)
-        segments.length >= 3 &&
-          !segments[0].start_with?(':', '{') &&
-          segments[1]&.start_with?(':', '{') &&
-          !segments[2]&.start_with?(':', '{')
-      end
-
-      def restful_action(verb, is_member)
-        case [verb, is_member]
-        when ['GET', false] then 'index'
-        when ['GET', true] then 'show'
-        when ['POST', false] then 'create'
-        when ['PUT', true], ['PATCH', true] then 'update'
-        when ['DELETE', true] then 'destroy'
-        else 'index'
-        end
+        normalized.gsub(/:([a-zA-Z_][a-zA-Z0-9_]*)/) { "{#{::Regexp.last_match(1)}}" }
       end
 
       def apply_grep(routes)
@@ -356,27 +244,39 @@ module Belt
         return puts('No routes defined.') if routes.empty?
 
         multi_gateway = routes.map { |r| r[:gateway] }.uniq.length > 1
-
         verb_w = [routes.map { |r| r[:verb].length }.max, 6].max
         path_w = [routes.map { |r| r[:path].length }.max, 4].max
 
         if multi_gateway
-          gw_w = [routes.map { |r| r[:gateway].to_s.length }.max, 7].max
-          lam_w = [routes.map { |r| r[:lambda].length }.max, 6].max
-
-          puts "#{'VERB'.ljust(verb_w)}  #{'PATH'.ljust(path_w)}  #{'GATEWAY'.ljust(gw_w)}  #{'LAMBDA'.ljust(lam_w)}  CONTROLLER#ACTION"
-          puts '-' * (verb_w + path_w + gw_w + lam_w + 20)
-
-          routes.each do |r|
-            puts "#{r[:verb].ljust(verb_w)}  #{r[:path].ljust(path_w)}  #{r[:gateway].to_s.ljust(gw_w)}  #{r[:lambda].ljust(lam_w)}  #{r[:controller]}##{r[:action]}"
-          end
+          output_concise_multi_gateway(routes, verb_w, path_w)
         else
-          puts "#{'VERB'.ljust(verb_w)}  #{'PATH'.ljust(path_w)}  CONTROLLER#ACTION"
-          puts '-' * (verb_w + path_w + 30)
+          output_concise_single_gateway(routes, verb_w, path_w)
+        end
+      end
 
-          routes.each do |r|
-            puts "#{r[:verb].ljust(verb_w)}  #{r[:path].ljust(path_w)}  #{r[:controller]}##{r[:action]}"
-          end
+      def output_concise_multi_gateway(routes, verb_w, path_w)
+        gw_w = [routes.map { |r| r[:gateway].to_s.length }.max, 7].max
+        lam_w = [routes.map { |r| r[:lambda].length }.max, 6].max
+
+        header = "#{'VERB'.ljust(verb_w)}  #{'PATH'.ljust(path_w)}  " \
+                 "#{'GATEWAY'.ljust(gw_w)}  #{'LAMBDA'.ljust(lam_w)}  CONTROLLER#ACTION"
+        puts header
+        puts '-' * (verb_w + path_w + gw_w + lam_w + 20)
+
+        routes.each do |r|
+          line = "#{r[:verb].ljust(verb_w)}  #{r[:path].ljust(path_w)}  " \
+                 "#{r[:gateway].to_s.ljust(gw_w)}  #{r[:lambda].ljust(lam_w)}  " \
+                 "#{r[:controller]}##{r[:action]}"
+          puts line
+        end
+      end
+
+      def output_concise_single_gateway(routes, verb_w, path_w)
+        puts "#{'VERB'.ljust(verb_w)}  #{'PATH'.ljust(path_w)}  CONTROLLER#ACTION"
+        puts '-' * (verb_w + path_w + 30)
+
+        routes.each do |r|
+          puts "#{r[:verb].ljust(verb_w)}  #{r[:path].ljust(path_w)}  #{r[:controller]}##{r[:action]}"
         end
       end
 
@@ -393,7 +293,7 @@ module Belt
 
       def singularize(word)
         if word.end_with?('ies')
-          word[0..-4] + 'y'
+          "#{word[0..-4]}y"
         elsif word.end_with?('ses') || word.end_with?('xes') || word.end_with?('zes')
           word[0..-3]
         elsif word.end_with?('s') && !word.end_with?('ss')
