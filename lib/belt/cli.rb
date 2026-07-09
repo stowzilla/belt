@@ -89,11 +89,11 @@ module Belt
           setup tables <env>                          Generate DynamoDB tables from schema
           setup frontend <env>                        Generate S3 + CloudFront infrastructure
           deploy frontend <env>                       Build and deploy frontend to AWS
-          init <env>                                  terraform init for environment
-          plan <env>                                  terraform plan for environment
-          apply <env>                                 terraform apply for environment
-          destroy <env>                               terraform destroy for environment
-          output <env>                                terraform output for environment
+          init [environment] <env>                    terraform init for environment
+          plan [environment] <env>                    terraform plan for environment
+          apply [environment] <env>                   terraform apply for environment
+          destroy [environment] <env>                 terraform destroy for environment
+          output [environment] <env>                  terraform output for environment
           --version                                   Show Belt version
 
         Rake Tasks:

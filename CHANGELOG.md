@@ -2,8 +2,11 @@
 
 ## Unreleased
 
+## 0.1.4
+
 ### Bug fixes
 
+- Accept optional `environment` keyword on terraform commands so `belt destroy environment dev` works (mirrors `belt generate environment`). Short form `belt destroy dev` still works.
 - Sanitize app names for S3 bucket names in `belt setup state` (and env/frontend templates): underscores are converted to hyphens so names like `my_app` produce valid buckets (`my-app-terraform-state`)
 
 ## 0.1.1

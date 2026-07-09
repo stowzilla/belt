@@ -11,10 +11,11 @@ module Belt
         env = EnvResolver.resolve(args)
 
         if env.nil?
-          puts "Usage: belt #{action} <environment> [terraform flags...]"
+          puts "Usage: belt #{action} [environment] <name> [terraform flags...]"
           puts "\nYou can also set BELT_ENV to skip the environment argument."
           puts "\nExamples:"
           puts "  belt #{action} wups"
+          puts "  belt #{action} environment dev"
           puts "  belt #{action} dev01"
           puts "  BELT_ENV=wups belt #{action}"
           puts '  belt plan staging -target=module.lambda'
