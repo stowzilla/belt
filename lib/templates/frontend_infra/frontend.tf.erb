@@ -9,7 +9,7 @@ resource "random_string" "frontend_suffix" {
 
 # S3 bucket for frontend static assets
 resource "aws_s3_bucket" "frontend" {
-  bucket = "<%= @app_name %>-frontend-${var.environment}-${random_string.frontend_suffix.result}"
+  bucket = "<%= s3_safe_name(@app_name) %>-frontend-${var.environment}-${random_string.frontend_suffix.result}"
 
   lifecycle {
     ignore_changes = [bucket]
