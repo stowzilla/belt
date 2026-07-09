@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Bug fixes
+
+- Sanitize app names for S3 bucket names in `belt setup state` (and env/frontend templates): underscores are converted to hyphens so names like `my_app` produce valid buckets (`my-app-terraform-state`)
+
 ## 0.1.1
 
 ### `belt routes` CLI command

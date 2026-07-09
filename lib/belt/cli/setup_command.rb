@@ -134,9 +134,9 @@ module Belt
         if @custom_bucket
           @custom_bucket
         elsif @env_name
-          "#{@app_name}-terraform-state-#{@env_name}"
+          s3_safe_name("#{@app_name}-terraform-state-#{@env_name}")
         else
-          "#{@app_name}-terraform-state"
+          s3_safe_name("#{@app_name}-terraform-state")
         end
       end
 
