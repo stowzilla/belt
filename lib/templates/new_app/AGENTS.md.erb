@@ -6,7 +6,7 @@ This file explains the project structure, tooling, and conventions for AI agents
 
 - **Belt** — CLI and runtime framework (like Rails for serverless). Provides Lambda handler, action router, controller base class, and CLI tooling.
 - **ActiveItem** — ActiveRecord-like ORM for DynamoDB. Models inherit from `ActiveItem::Base`.
-- **Dispatcher** — Terraform provider that reads a Ruby DSL (`routes.tf.rb`) and creates API Gateway + Lambda + IAM infrastructure.
+- **Conveyor Belt** — Terraform provider that reads a Ruby DSL (`routes.tf.rb`) and creates API Gateway + Lambda + IAM infrastructure.
 - **Lambda Loadout** — Lambda cold-start optimizer (auto-required by Belt).
 
 ## Project Structure
@@ -23,7 +23,7 @@ This file explains the project structure, tooling, and conventions for AI agents
 │   ├── lib/routes/                     # Route manifests (auto-generated)
 │   └── Gemfile                         # Lambda-specific dependencies
 ├── infrastructure/
-│   ├── routes.tf.rb                    # API routes (Dispatcher DSL)
+│   ├── routes.tf.rb                    # API routes (Conveyor Belt DSL)
 │   ├── schema.tf.rb                    # Model schema definitions
 │   └── <env>/                          # Per-environment Terraform configs
 ├── Gemfile                             # Project-level dependencies
@@ -58,7 +58,7 @@ belt output <env>                                      # terraform output
    end
    ```
 
-2. Dispatcher creates an API Gateway where the namespace becomes a base path mapping. URLs look like:
+2. Conveyor Belt creates an API Gateway where the namespace becomes a base path mapping. URLs look like:
    ```
    https://api.<env>.example.com/<%= @app_name %>/things
    ```

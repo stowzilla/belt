@@ -155,5 +155,5 @@ output "frontend_url" {
 }
 
 output "api_url" {
-  value = values(dispatcher.main.api_gateway_urls)[0]
+  value = values(conveyor_belt.main.api_gateway_urls)[0]
 }

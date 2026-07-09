@@ -8,9 +8,9 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.0"
     }
-    dispatcher = {
-      source  = "terraform.local/stowzilla/dispatcher"
-      version = "99.0.0"
+    conveyor-belt = {
+      source  = "stowzilla/conveyor-belt"
+      version = "~> 0.0.1"
     }
   }
 }
@@ -27,12 +27,12 @@ provider "aws" {
   }
 }
 
-provider "dispatcher" {
+provider "conveyor-belt" {
   environment = var.environment
   aws_region  = var.aws_region
 }
 
-resource "dispatcher" "main" {
+resource "conveyor_belt" "main" {
   source            = "${path.module}/../routes.tf.rb"
   app_name          = var.app_name
   lambda_source_dir = "${path.module}/../../lambda"

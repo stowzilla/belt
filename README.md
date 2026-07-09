@@ -112,17 +112,18 @@ That's it. `lambda_handler` is automatically your Lambda function handler. It:
 - Catches unhandled errors and returns proper CORS-enabled error responses
 - Calls your `execute` method for routing
 
-### 5. Configure the Belt Terraform provider
+### 5. Configure the Conveyor Belt Terraform provider
 
-The Belt Terraform provider (formerly Dispatcher) handles Lambda packaging, API Gateway routing, and IAM permissions.
+The [Conveyor Belt](https://registry.terraform.io/providers/stowzilla/conveyor-belt) Terraform provider (formerly Dispatcher) handles Lambda packaging, API Gateway routing, and IAM permissions.
 
 Add the provider to your Terraform config:
 
 ```hcl
 terraform {
   required_providers {
-    belt = {
-      source = "stowzilla/belt"
+    conveyor-belt = {
+      source  = "stowzilla/conveyor-belt"
+      version = "~> 0.0.1"
     }
   }
 }
