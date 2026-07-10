@@ -32,25 +32,21 @@ provider "conveyor-belt" {
   aws_region  = var.aws_region
 }
 
-resource "conveyor_belt" "main" {
-  provider          = conveyor-belt
-  source            = "${path.module}/../routes.tf.rb"
-  app_name          = var.app_name
-  lambda_source_dir = "${path.module}/../../lambda"
-  lambda_shared_dirs = ["controllers", "helpers", "lib", "models", "views"]
-  frontend_urls     = var.environment == "prod" ? [] : ["http://localhost:3000"]
-  friendly_errors   = var.environment != "prod"
+module "app" {
+  source = "../modules/app"
 
-  # Per-lambda configuration: env vars, timeouts, memory
-  lambda_config = {
-    api = {
-      # timeout     = 30
-      # memory_size = 256
+  app_name     = var.app_name
+  environment  = var.environment
+  aws_region   = var.aws_region
+  domain       = var.domain
+  frontend_urls = concat(
+    var.domain != "" ? ["https://${var.environment == "prod" ? var.domain : "${var.environment}.${var.domain}"}"] : [],
+    var.environment == "prod" ? [] : ["http://localhost:3000"]
+  )
 
-      env_vars = {
-        WELCOME_TITLE    = "Welcome to ${var.app_name}"
-        WELCOME_SUBTITLE = "API Gateway → Lambda → DynamoDB — all connected."
-      }
-    }
+  providers = {
+    aws           = aws
+    random        = random
+    conveyor-belt = conveyor-belt
   }
 }

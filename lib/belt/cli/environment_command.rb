@@ -26,9 +26,10 @@ module Belt
         new(env_name).generate
       end
 
-      def initialize(env_name, quiet: false)
+      def initialize(env_name, quiet: false, domain: nil)
         @env_name = env_name.downcase.gsub(/[^a-z0-9_-]/, '')
         @app_name = detect_app_name
+        @domain = domain
         @quiet = quiet
       end
 
@@ -51,27 +52,18 @@ module Belt
 
         puts "\n✓ Environment '#{@env_name}' created!"
 
-        setup_frontend_if_exists
-
         unless @quiet
           puts "\nNext steps:"
           puts "  cd #{dest_dir}"
           puts '  terraform init'
           puts '  terraform plan'
           puts '  terraform apply'
+          puts "\nTo configure a custom domain, set `domain` in #{dest_dir}/terraform.tfvars:"
+          puts "  domain = \"myapp.com\""
         end
       end
 
       private
-
-      def setup_frontend_if_exists
-        return unless Dir.exist?('frontend') && !Dir.empty?('frontend')
-
-        puts "\n  Frontend detected — generating frontend infrastructure..."
-        require_relative 'frontend_setup_command'
-        FrontendSetupCommand.new(@env_name, quiet: true).run
-        puts "  create  infrastructure/#{@env_name}/frontend.tf"
-      end
 
       def templates
         {

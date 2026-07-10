@@ -1,11 +1,10 @@
 variable "app_name" {
   description = "Name of the application"
   type        = string
-  default     = "<%= @app_name %>"
 }
 
 variable "environment" {
-  description = "Environment name"
+  description = "Environment name (e.g., dev, prod, staging)"
   type        = string
 }
 
@@ -16,7 +15,13 @@ variable "aws_region" {
 }
 
 variable "domain" {
-  description = "Root domain (e.g., myapp.com). Leave empty to use default CloudFront/API Gateway URLs."
+  description = "Root domain for the application (e.g., myapp.com). Leave empty to skip DNS."
   type        = string
   default     = ""
+}
+
+variable "frontend_urls" {
+  description = "URLs allowed for CORS frontend access"
+  type        = list(string)
+  default     = []
 }

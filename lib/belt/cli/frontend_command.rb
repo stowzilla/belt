@@ -75,22 +75,20 @@ module Belt
       end
 
       def setup_frontend_infra_for_existing_environments
-        environments = detect_environments
-        return if environments.empty?
+        module_dir = 'infrastructure/modules/app'
+        frontend_tf = File.join(module_dir, 'frontend.tf')
 
-        puts "\n  Setting up frontend infrastructure for existing environments..."
-        require_relative 'frontend_setup_command'
-
-        environments.each do |env_name|
-          frontend_tf = "infrastructure/#{env_name}/frontend.tf"
-          if File.exist?(frontend_tf)
-            puts "  skip    #{frontend_tf} (already exists)"
-            next
-          end
-
-          FrontendSetupCommand.new(env_name, quiet: true).run
-          puts "  create  #{frontend_tf}"
+        if File.exist?(frontend_tf)
+          puts "  skip    #{frontend_tf} (already exists)"
+          return
         end
+
+        return unless Dir.exist?(module_dir)
+
+        puts "\n  Setting up frontend infrastructure..."
+        require_relative 'frontend_setup_command'
+        FrontendSetupCommand.new(nil, quiet: true).run
+        puts "  create  #{frontend_tf}"
       end
 
       def copy_template(src_dir, dest_dir)

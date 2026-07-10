@@ -8,89 +8,48 @@ require_relative 'env_resolver'
 module Belt
   module CLI
     class FrontendSetupCommand
-      TEMPLATE_DIR = File.expand_path('../../templates/frontend_infra', __dir__)
+      TEMPLATE_DIR = File.expand_path('../../templates/module', __dir__)
+      MODULE_DIR = 'infrastructure/modules/app'
 
       include AppDetection
 
       def self.run(args)
-        env = EnvResolver.resolve(args)
-
-        if env.nil?
-          puts 'Usage: belt setup frontend <environment>'
-          puts "\nGenerates S3 + CloudFront Terraform for frontend hosting."
-          puts 'You can also set BELT_ENV to skip the environment argument.'
-          puts "\nExamples:"
-          puts '  belt setup frontend wups'
-          puts '  belt setup frontend dev01'
-          puts '  BELT_ENV=wups belt setup frontend'
-          exit 1
-        end
-
-        new(env).run
+        # Environment arg is no longer needed since frontend.tf goes in the module,
+        # but we still accept it for backwards compat (just ignore it).
+        _env = EnvResolver.resolve(args)
+        new.run
       end
 
-      def initialize(env, quiet: false)
-        @env = env
+      def initialize(env = nil, quiet: false)
         @app_name = detect_app_name
-        @env_dir = "infrastructure/#{@env}"
         @quiet = quiet
       end
 
       def run
         validate!
         generate_frontend_tf
-        update_main_tf_frontend_urls
         return if @quiet
 
-        puts "\n✓ Frontend infrastructure generated for '#{@env}'!"
-        puts "\nRun `belt apply #{@env}` to create the S3 bucket and CloudFront distribution."
-        puts "Then `belt deploy frontend #{@env}` to build and deploy."
+        puts "\n✓ Frontend infrastructure generated in #{MODULE_DIR}!"
+        puts "\nRun `belt deploy` to create the S3 bucket and CloudFront distribution."
+        puts "Then `belt deploy frontend` to build and deploy."
       end
 
       private
 
       def validate!
-        return if Dir.exist?(@env_dir)
+        return if Dir.exist?(MODULE_DIR)
 
-        abort "Error: Environment '#{@env}' not found at #{@env_dir}/.\n" \
-              "Create it with: belt generate environment #{@env}"
+        abort "Error: Module directory not found at #{MODULE_DIR}/.\n" \
+              "Run `belt new` to create a project with the correct structure."
       end
 
       def generate_frontend_tf
-        dest = File.join(@env_dir, 'frontend.tf')
+        dest = File.join(MODULE_DIR, 'frontend.tf')
         template_path = File.join(TEMPLATE_DIR, 'frontend.tf.erb')
         content = ERB.new(File.read(template_path), trim_mode: '-').result(binding)
         File.write(dest, content)
         puts "  create  #{dest}" unless @quiet
-      end
-
-      def update_main_tf_frontend_urls
-        main_tf = File.join(@env_dir, 'main.tf')
-        return unless File.exist?(main_tf)
-
-        content = File.read(main_tf)
-        cloudfront_url = '"https://${aws_cloudfront_distribution.frontend.domain_name}"'
-
-        # Already patched — skip
-        return if content.include?('aws_cloudfront_distribution.frontend.domain_name')
-
-        # Match any frontend_urls line (hardcoded list or conditional expression)
-        new_frontend_urls = <<~HCL.chomp
-          frontend_urls     = concat(
-            [#{cloudfront_url}],
-            var.environment == "prod" ? [] : ["http://localhost:3000"]
-          )
-        HCL
-
-        replaced = content.sub(
-          /^(\s*)frontend_urls\s*=\s*.+$/,
-          new_frontend_urls
-        )
-
-        if replaced != content
-          File.write(main_tf, replaced)
-          puts "  update  #{main_tf} (added CloudFront URL to frontend_urls)" unless @quiet
-        end
       end
     end
   end
