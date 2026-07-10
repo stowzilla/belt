@@ -503,7 +503,47 @@ module Belt
           output.each_line do |line|
             puts "  #{line}"
           end
+
+          # Show DNS guidance if name_servers are present and this looks like a first deploy
+          print_dns_guidance if output.include?('name_servers')
         end
+      end
+
+      def print_dns_guidance
+        # Check if there's a marker file indicating DNS guidance was already shown
+        marker = File.join(@infra_dir, @env, '.dns_configured')
+        return if File.exist?(marker)
+
+        domain = detect_domain_from_tfvars
+        return unless domain
+
+        puts ''
+        puts '  ┌─────────────────────────────────────────────────────────────┐'
+        puts '  │ DNS SETUP REQUIRED                                          │'
+        puts '  ├─────────────────────────────────────────────────────────────┤'
+        puts '  │ Point your domain to the name_servers shown above.          │'
+        puts '  │                                                             │'
+        puts '  │ • External registrar (GoDaddy, Namecheap, etc.):            │'
+        puts '  │   Update nameservers in your registrar\'s DNS settings.      │'
+        puts '  │                                                             │'
+        puts '  │ • Domain in AWS Route53 Registered Domains:                 │'
+        puts '  │   Route53 → Registered Domains → Name servers → Edit.       │'
+        puts '  │                                                             │'
+        puts "  │ Verify: dig +short NS #{domain.ljust(38)}│"
+        puts '  │                                                             │'
+        puts '  │ This message won\'t appear on subsequent deploys.            │'
+        puts '  └─────────────────────────────────────────────────────────────┘'
+
+        # Create the marker so we don't nag on every deploy
+        File.write(marker, "DNS guidance shown at #{Time.now}\n")
+      end
+
+      def detect_domain_from_tfvars
+        tfvars_file = File.join(@infra_dir, @env, 'terraform.tfvars')
+        return nil unless File.exist?(tfvars_file)
+
+        match = File.read(tfvars_file).match(/^\s*domain\s*=\s*"([^"]+)"/)
+        match[1] if match
       end
     end
   end

@@ -98,6 +98,7 @@ module Belt
         setup_state
         puts "\n✓ #{@app_name} created successfully!"
         print_next_steps
+        enter_project!
       end
 
       private
@@ -280,7 +281,6 @@ module Belt
 
       def print_next_steps
         puts "\nNext steps:"
-        puts "  cd #{@app_name}"
         unless @state_setup_succeeded
           puts '  # Configure AWS credentials (aws sso login / AWS_PROFILE)'
           puts '  belt setup state              # Create the S3 state bucket'
@@ -291,11 +291,46 @@ module Belt
           puts "\n  Custom domain: #{@domain}"
           puts "    prod  → #{@domain}"
           puts "    dev   → dev.#{@domain}"
-          puts "\n  After first deploy, add NS records from your registrar to Route53."
+          puts ''
+          puts '  DNS setup (after first deploy):'
+          puts '  ─────────────────────────────────────────────────────────────────'
+          puts '  1. Run: terraform output name_servers'
+          puts '     This prints the 4 NS records for your Route53 hosted zone.'
+          puts ''
+          puts '  2. Point your domain to those nameservers:'
+          puts ''
+          puts '     • Domain registered OUTSIDE AWS (GoDaddy, Namecheap, etc.):'
+          puts '       Go to your registrar → DNS/Nameserver settings → replace the'
+          puts '       default nameservers with the 4 values from step 1.'
+          puts ''
+          puts '     • Domain registered IN AWS (Route53 Registered Domains):'
+          puts '       Go to Route53 → Registered Domains → your domain → Name servers'
+          puts '       → Edit → paste the 4 values from step 1.'
+          puts ''
+          puts '  3. Wait for propagation (usually 5–30 min, can take up to 48h).'
+          puts '     Verify: dig +short NS #{@domain}'
+          puts '  ─────────────────────────────────────────────────────────────────'
         else
           puts "\n  To add a custom domain later, set `domain` in infrastructure/<env>/terraform.tfvars:"
           puts '    domain = "myapp.com"'
         end
+      end
+
+      def enter_project!
+        project_path = File.expand_path(@app_name)
+
+        # Don't exec into a subshell if:
+        # - Not running interactively (CI, scripts, piped)
+        # - User explicitly opted out
+        unless $stdin.tty? && ENV['BELT_NO_CD'].nil?
+          puts "\n  cd #{@app_name}"
+          return
+        end
+
+        Dir.chdir(project_path)
+        shell = ENV['SHELL'] || '/bin/bash'
+        puts "\n  Entering #{@app_name}/...\n\n"
+        exec(shell)
       end
 
       def s3_safe_name(name)
