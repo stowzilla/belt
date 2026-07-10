@@ -121,8 +121,6 @@ module Belt
         destroy_model
         destroy_controller
         remove_routes
-        remove_schema
-        sync_tables
         destroy_views
         puts "\n✓ Scaffold '#{@singular_name}' destroyed!"
       end
@@ -130,6 +128,8 @@ module Belt
       def destroy_model
         path = "lambda/models/#{@singular_name}.rb"
         remove_file(path)
+        remove_schema
+        sync_tables
       end
 
       def destroy_controller
@@ -157,38 +157,18 @@ module Belt
           @removed << dir
           puts "  remove  #{dir}/"
 
-          # Remove frontend.tf and revert frontend_urls in main.tf for each environment
-          Dir.glob('infrastructure/*/frontend.tf').each do |frontend_tf|
-            FileUtils.rm_f(frontend_tf)
-            puts "  remove  #{frontend_tf}"
-
-            env_dir = File.dirname(frontend_tf)
-            main_tf = File.join(env_dir, 'main.tf')
-            revert_main_tf_frontend_urls(main_tf)
+          # Remove frontend.tf from the module
+          module_frontend = 'infrastructure/modules/app/frontend.tf'
+          if File.exist?(module_frontend)
+            FileUtils.rm_f(module_frontend)
+            @removed << module_frontend
+            puts "  remove  #{module_frontend}"
           end
 
           puts "\n✓ Frontend removed!"
         else
           puts '✗ No frontend/ directory found.'
           exit 1
-        end
-      end
-
-      def revert_main_tf_frontend_urls(main_tf)
-        return unless File.exist?(main_tf)
-
-        content = File.read(main_tf)
-        return unless content.include?('aws_cloudfront_distribution.frontend.domain_name')
-
-        # Replace the multi-line concat block back to a simple conditional
-        replaced = content.sub(
-          /^\s*frontend_urls\s*=\s*concat\(\n(?:.*\n)*?\s*\)\s*\n/,
-          "  frontend_urls     = var.environment == \"prod\" ? [] : [\"http://localhost:3000\"]\n"
-        )
-
-        if replaced != content
-          File.write(main_tf, replaced)
-          puts "  update  #{main_tf} (reverted frontend_urls)"
         end
       end
 

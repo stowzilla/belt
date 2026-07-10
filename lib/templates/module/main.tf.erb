@@ -1,0 +1,40 @@
+# Belt application module — defines all shared infrastructure.
+# Environments call this module with different variables.
+
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.0"
+    }
+    conveyor-belt = {
+      source  = "stowzilla/conveyor-belt"
+      version = "~> 0.0.1"
+    }
+  }
+}
+
+resource "conveyor_belt" "main" {
+  source            = "${path.module}/../../routes.tf.rb"
+  app_name          = var.app_name
+  lambda_source_dir = "${path.module}/../../../lambda"
+  lambda_shared_dirs = ["controllers", "helpers", "lib", "models", "views"]
+  frontend_urls     = var.frontend_urls
+  friendly_errors   = var.environment != "prod"
+
+  custom_domain_name = local.dns_enabled ? local.api_domain : ""
+
+  # Per-lambda configuration: env vars, timeouts, memory
+  lambda_config = {
+    api = {
+      env_vars = {
+        WELCOME_TITLE    = "Welcome to ${var.app_name}"
+        WELCOME_SUBTITLE = "API Gateway → Lambda → DynamoDB — all connected."
+      }
+    }
+  }
+}

@@ -17,6 +17,7 @@ module Belt
         frontend = nil
         bucket = nil
         environments = nil
+        domain = nil
 
         i = 0
         while i < args.length
@@ -43,6 +44,11 @@ module Belt
             environments = args[i]
           when /^--environments=/
             environments = arg.split('=', 2).last
+          when '--domain'
+            i += 1
+            domain = args[i]
+          when /^--domain=/
+            domain = arg.split('=', 2).last
           else
             app_name ||= arg unless arg.start_with?('-')
           end
@@ -54,6 +60,7 @@ module Belt
           puts ''
           puts 'Options:'
           puts '  --frontend react|vue|svelte    Set up frontend framework'
+          puts '  --domain DOMAIN                Custom domain (e.g., myapp.com)'
           puts '  --bucket BUCKET_NAME           S3 bucket for Terraform state'
           puts '  --state-bucket BUCKET_NAME     Alias for --bucket'
           puts '  --environments dev,prod        Comma-separated environments (default: dev,prod)'
@@ -61,14 +68,15 @@ module Belt
           exit 1
         end
 
-        new(app_name, frontend: frontend, bucket: bucket, environments: environments).generate
+        new(app_name, frontend: frontend, bucket: bucket, environments: environments, domain: domain).generate
       end
 
-      def initialize(app_name, frontend: nil, bucket: nil, environments: nil)
+      def initialize(app_name, frontend: nil, bucket: nil, environments: nil, domain: nil)
         @app_name = app_name.gsub(/[^a-z0-9_-]/i, '_').downcase
         @module_name = @app_name.split(/[-_]/).map(&:capitalize).join
         @frontend = frontend
         @bucket = bucket
+        @domain = domain
         @environments = parse_environments(environments)
         @resolved_bucket = nil
         @state_setup_succeeded = false
@@ -82,6 +90,7 @@ module Belt
 
         puts "Creating new Belt application: #{@app_name}"
         create_structure
+        generate_module
         generate_environments
         generate_frontend if @frontend
         init_git
@@ -112,7 +121,7 @@ module Belt
           #{@app_name}/lambda/lib/routes
           #{@app_name}/lambda/config
           #{@app_name}/lambda/spec
-          #{@app_name}/infrastructure
+          #{@app_name}/infrastructure/modules/app
         ]
       end
 
@@ -134,12 +143,32 @@ module Belt
         }
       end
 
+      def generate_module
+        module_dir = "#{@app_name}/infrastructure/modules/app"
+        module_template_dir = File.expand_path('../../templates/module', File.dirname(__FILE__))
+
+        module_templates = {
+          'main.tf.erb' => 'main.tf',
+          'variables.tf.erb' => 'variables.tf',
+          'outputs.tf.erb' => 'outputs.tf',
+          'dns.tf.erb' => 'dns.tf'
+        }
+
+        module_templates.each do |template_name, dest_file|
+          dest_path = File.join(module_dir, dest_file)
+          template_path = File.join(module_template_dir, template_name)
+          content = ERB.new(File.read(template_path), trim_mode: '-').result(binding)
+          File.write(dest_path, content)
+          puts "  create  #{dest_path}"
+        end
+      end
+
       def generate_environments
         return if @environments.empty?
 
         Dir.chdir(@app_name) do
           @environments.each do |env_name|
-            Belt::CLI::EnvironmentCommand.new(env_name, quiet: true).generate
+            Belt::CLI::EnvironmentCommand.new(env_name, quiet: true, domain: @domain).generate
           end
         end
       end
@@ -258,6 +287,15 @@ module Belt
         end
         puts '  belt deploy                   # Deploy to AWS'
         puts '  belt server                   # Start local frontend server' if @frontend
+        if @domain
+          puts "\n  Custom domain: #{@domain}"
+          puts "    prod  → #{@domain}"
+          puts "    dev   → dev.#{@domain}"
+          puts "\n  After first deploy, add NS records from your registrar to Route53."
+        else
+          puts "\n  To add a custom domain later, set `domain` in infrastructure/<env>/terraform.tfvars:"
+          puts '    domain = "myapp.com"'
+        end
       end
 
       def s3_safe_name(name)

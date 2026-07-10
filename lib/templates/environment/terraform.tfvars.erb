@@ -1,1 +1,6 @@
 environment = "<%= @env_name %>"
+<% if @domain && !@domain.empty? -%>
+domain      = "<%= @domain %>"
+<% else -%>
+# domain      = "myapp.com"
+<% end -%>
