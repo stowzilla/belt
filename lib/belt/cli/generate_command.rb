@@ -24,12 +24,14 @@ module Belt
           description: 'Generate a model, controller, routes, schema, and views for a REST resource.',
           usage: 'belt generate scaffold <name> [field:type ...] [options]',
           options: [
-            ['--skip-views', 'Skip generating frontend view pages']
+            ['--skip-views', 'Skip generating frontend view pages'],
+            ['--force, -f', 'Overwrite existing resource files (skip collision check)']
           ],
           examples: [
             ['belt g scaffold post title body:text'],
             ['belt g scaffold comment author body:text status'],
-            ['belt g scaffold task --skip-views']
+            ['belt g scaffold task --skip-views'],
+            ['belt g scaffold post title body:text --force']
           ],
           notes: <<~NOTES
             Creates:
@@ -45,8 +47,10 @@ module Belt
         },
         'model' => {
           description: 'Generate an ActiveItem model with validations and DynamoDB field definitions.',
-          usage: 'belt generate model <name> [field:type ...]',
-          options: [],
+          usage: 'belt generate model <name> [field:type ...] [options]',
+          options: [
+            ['--force, -f', 'Overwrite existing model files (skip collision check)']
+          ],
           examples: [
             ['belt g model user email name'],
             ['belt g model event title starts_at:datetime']
@@ -110,9 +114,10 @@ module Belt
 
         validate_resource_name!(name, generator)
 
+        force = args.delete('--force') || args.delete('-f')
         skip_views = args.delete('--skip-views')
         fields = args.map { |arg| parse_field(arg) }
-        new(generator, name, fields, skip_views: skip_views).generate
+        new(generator, name, fields, skip_views: skip_views, force: force).generate
       end
 
       def self.parse_field(arg)
@@ -214,11 +219,12 @@ module Belt
         puts "\n#{info[:notes]}" if info[:notes]
       end
 
-      def initialize(generator, name, fields, skip_views: false)
+      def initialize(generator, name, fields, skip_views: false, force: false)
         @generator = generator
         @name = name.downcase.gsub(/[^a-z0-9_]/, '_')
         @fields = fields
         @skip_views = skip_views
+        @force = force
         @app_name = detect_namespace
         @module_name = @app_name.split(/[-_]/).map(&:capitalize).join
         @singular_name = Belt::Inflector.singularize(@name)
@@ -228,13 +234,59 @@ module Belt
 
       def generate
         case @generator
-        when 'scaffold'  then generate_resource
-        when 'model'     then generate_model_standalone
+        when 'scaffold'
+          check_resource_collision! unless @force
+          generate_resource
+        when 'model'
+          check_model_collision! unless @force
+          generate_model_standalone
         when 'controller' then generate_controller
         end
       end
 
       private
+
+      def check_resource_collision!
+        conflicts = []
+        conflicts << "lambda/models/#{@singular_name}.rb" if File.exist?("lambda/models/#{@singular_name}.rb")
+        conflicts << "lambda/controllers/#{@app_name}/#{@resource_name}_controller.rb" if File.exist?("lambda/controllers/#{@app_name}/#{@resource_name}_controller.rb")
+
+        schema_file = 'infrastructure/schema.tf.rb'
+        if File.exist?(schema_file) && File.read(schema_file).match?(/^\s*model :#{Regexp.escape(@singular_name)}\b/)
+          conflicts << "#{schema_file} (model :#{@singular_name})"
+        end
+
+        routes_file = 'infrastructure/routes.tf.rb'
+        if File.exist?(routes_file) && File.read(routes_file).match?(/resources :#{Regexp.escape(@resource_name)}\b/)
+          conflicts << "#{routes_file} (resources :#{@resource_name})"
+        end
+
+        return if conflicts.empty?
+
+        puts "\n✗ Resource '#{@singular_name}' already exists. Conflicting files:"
+        conflicts.each { |c| puts "    • #{c}" }
+        puts "\nTo overwrite, run again with --force:"
+        puts "  belt g scaffold #{@singular_name} #{@fields.map { |f| "#{f[:name]}:#{f[:type]}" }.join(' ')} --force"
+        exit 1
+      end
+
+      def check_model_collision!
+        conflicts = []
+        conflicts << "lambda/models/#{@singular_name}.rb" if File.exist?("lambda/models/#{@singular_name}.rb")
+
+        schema_file = 'infrastructure/schema.tf.rb'
+        if File.exist?(schema_file) && File.read(schema_file).match?(/^\s*model :#{Regexp.escape(@singular_name)}\b/)
+          conflicts << "#{schema_file} (model :#{@singular_name})"
+        end
+
+        return if conflicts.empty?
+
+        puts "\n✗ Model '#{@singular_name}' already exists. Conflicting files:"
+        conflicts.each { |c| puts "    • #{c}" }
+        puts "\nTo overwrite, run again with --force:"
+        puts "  belt g model #{@singular_name} #{@fields.map { |f| "#{f[:name]}:#{f[:type]}" }.join(' ')} --force"
+        exit 1
+      end
 
       def generate_resource
         generate_model
@@ -279,8 +331,15 @@ module Belt
         tables_arg = @fields.any? ? ", tables: [:#{@resource_name}]" : ''
         resource_line = "resources :#{@resource_name}#{tables_arg}"
 
+        # If this resource already exists in routes (force mode), replace it
+        existing_resource_pattern = /^\s*resources :#{Regexp.escape(@resource_name)}\b[^\n]*/
+        if content.match?(existing_resource_pattern)
+          content.sub!(existing_resource_pattern) do |match|
+            indent = match[/^\s*/]
+            "#{indent}#{resource_line}"
+          end
         # Replace the commented placeholder if it exists
-        if content.include?('# resources :posts')
+        elsif content.include?('# resources :posts')
           content.sub!('# resources :posts', resource_line)
         else
           # Find the target namespace block and insert before its closing `end`
@@ -368,8 +427,12 @@ module Belt
 
         schema_block = "  model :#{@singular_name} do\n#{field_lines.join("\n")}\n  end\n"
 
+        # If model already exists (force mode), replace it
+        existing_model_pattern = /^  model :#{Regexp.escape(@singular_name)} do\n.*?^  end\n/m
+        if content.match?(existing_model_pattern)
+          content.sub!(existing_model_pattern, schema_block)
         # Replace commented-out block or insert before final end
-        if content.match?(/^\s*#\s*model :/)
+        elsif content.match?(/^\s*#\s*model :/)
           content.gsub!(/^\s*#[^\n]*\n/, '')
           content.sub!(/^(end\s*\z)/m, "#{schema_block}\\1")
         else
