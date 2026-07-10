@@ -210,7 +210,7 @@ module Belt
         @name = name.downcase.gsub(/[^a-z0-9_]/, '_')
         @fields = fields
         @skip_views = skip_views
-        @app_name = detect_app_name
+        @app_name = detect_namespace
         @module_name = @app_name.split(/[-_]/).map(&:capitalize).join
         @resource_name = @name.end_with?('s') ? @name : "#{@name}s"
         @singular_name = @name.end_with?('s') ? @name.chomp('s') : @name

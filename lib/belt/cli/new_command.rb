@@ -107,7 +107,7 @@ module Belt
 
       def directories
         %W[
-          #{@app_name}/lambda/controllers/#{@app_name}
+          #{@app_name}/lambda/controllers/api
           #{@app_name}/lambda/models
           #{@app_name}/lambda/models/concerns
           #{@app_name}/lambda/lib/routes
@@ -121,13 +121,13 @@ module Belt
         {
           'Gemfile.erb' => "#{@app_name}/Gemfile",
           'Rakefile.erb' => "#{@app_name}/Rakefile",
-          'lambda/api.rb.erb' => "#{@app_name}/lambda/#{@app_name}.rb",
+          'lambda/api.rb.erb' => "#{@app_name}/lambda/api.rb",
           'lambda/config/environment.rb.erb' => "#{@app_name}/lambda/config/environment.rb",
           'lambda/models/application_record.rb.erb' => "#{@app_name}/lambda/models/application_record.rb",
           'lambda/models/concerns/timestampable.rb.erb' => "#{@app_name}/lambda/models/concerns/timestampable.rb",
           'lambda/controllers/application_controller.rb.erb' =>
-            "#{@app_name}/lambda/controllers/#{@app_name}/application_controller.rb",
-          'lambda/lib/routes/routes.rb.erb' => "#{@app_name}/lambda/lib/routes/#{@app_name}_routes.rb",
+            "#{@app_name}/lambda/controllers/api/application_controller.rb",
+          'lambda/lib/routes/routes.rb.erb' => "#{@app_name}/lambda/lib/routes/api_routes.rb",
           'infrastructure/routes.tf.rb.erb' => "#{@app_name}/infrastructure/routes.tf.rb",
           'infrastructure/schema.tf.rb.erb' => "#{@app_name}/infrastructure/schema.tf.rb",
           'README.md.erb' => "#{@app_name}/README.md",

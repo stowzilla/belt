@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= h(@title) %></title>
+  <style><%= @css %></style>
+</head>
+<body>
+  <div class="hero">
+    <img src="data:image/jpeg;base64,<%= @background_image %>" alt="Belt" class="hero-bg" />
+    <div class="overlay">
+      <h1><%= h(@title) %></h1>
+      <p class="subtitle"><%= h(@subtitle) %></p>
+    </div>
+  </div>
+  <div class="container">
+    <div class="stack-check">
+      <div class="check-item check-pass">
+        <span class="icon">✓</span>
+        <span>API Gateway</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="check-item check-pass">
+        <span class="icon">✓</span>
+        <span>Lambda</span>
+      </div>
+      <div class="arrow">→</div>
+      <%- if @dynamodb_connected -%>
+      <div class="check-item check-pass">
+        <span class="icon">✓</span>
+        <span>DynamoDB</span>
+      </div>
+      <%- else -%>
+      <div class="check-item check-warn">
+        <span class="icon">⚠</span>
+        <span>DynamoDB</span>
+      </div>
+      <%- end -%>
+    </div>
+    <div class="next-steps">
+      <h2>Next Steps</h2>
+      <ol>
+        <li>Generate a resource: <code>belt g resource post title:string body:text</code></li>
+        <li>Deploy: <code>belt deploy</code></li>
+        <li>This page will be replaced once you define your own root route.</li>
+      </ol>
+    </div>
+  </div>
+</body>
+</html>

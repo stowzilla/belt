@@ -1,5 +1,5 @@
 Belt.application.routes.draw do
-  namespace :<%= @app_name %> do
+  namespace :api do
     get "/", action: :show, controller: :welcome
     # resources :posts
   end

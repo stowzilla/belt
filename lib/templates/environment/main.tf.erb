@@ -20,7 +20,7 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project     = "<%= @app_name.capitalize %>"
+      Project     = var.app_name
       Environment = var.environment
       ManagedBy   = "Terraform"
     }
@@ -37,7 +37,20 @@ resource "conveyor_belt" "main" {
   source            = "${path.module}/../routes.tf.rb"
   app_name          = var.app_name
   lambda_source_dir = "${path.module}/../../lambda"
-  lambda_shared_dirs = ["controllers", "helpers", "lib", "models", "templates"]
+  lambda_shared_dirs = ["controllers", "helpers", "lib", "models", "views"]
   frontend_urls     = ["http://localhost:3000"]
-  friendly_errors   = true
+  friendly_errors   = var.environment != "prod"
+
+  # Per-lambda configuration: env vars, timeouts, memory
+  lambda_config = {
+    api = {
+      # timeout     = 30
+      # memory_size = 256
+
+      env_vars = {
+        WELCOME_TITLE    = "Welcome to ${var.app_name}"
+        WELCOME_SUBTITLE = "API Gateway → Lambda → DynamoDB — all connected."
+      }
+    }
+  }
 }

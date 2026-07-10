@@ -6,10 +6,12 @@ require_relative '../belt/parameters'
 require_relative '../belt/helpers/response'
 require_relative '../belt/helpers/error_logging'
 require_relative '../belt/helpers/cors_origin'
+require_relative '../belt/rendering'
 
 module BeltController
   class Base
     include Belt::Helpers::Response
+    include Belt::Rendering
 
     attr_reader :event, :body
 

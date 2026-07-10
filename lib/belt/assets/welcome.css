@@ -23,7 +23,7 @@ body {
   left: 50%;
   transform: translate(-50%, -50%);
   padding: 2rem 3rem;
-  background: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 255, 255, 0.50);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   border-radius: 12px;

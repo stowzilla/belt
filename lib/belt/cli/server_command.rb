@@ -144,7 +144,7 @@ module Belt
         subtitle = ENV.fetch('WELCOME_SUBTITLE', 'Your app is ready. Deploy to see it live on AWS.')
 
         css = load_asset('welcome.css') || ''
-        image_b64 = load_image_base64('belt-default.png') || ''
+        image_b64 = load_image_base64('belt-default.jpg') || ''
 
         if @api_url
           deployed_html(css: css, image_b64: image_b64)
@@ -175,7 +175,7 @@ module Belt
           </head>
           <body>
             <div class="hero">
-              <img src="data:image/png;base64,#{image_b64}" alt="Belt" class="hero-bg" />
+              <img src="data:image/jpeg;base64,#{image_b64}" alt="Belt" class="hero-bg" />
               <div class="overlay">
                 <h1>#{@app_name}</h1>
                 <p class="subtitle">Deployed and running on AWS</p>
@@ -208,7 +208,7 @@ module Belt
           </head>
           <body>
             <div class="hero">
-              <img src="data:image/png;base64,#{image_b64}" alt="Belt" class="hero-bg" />
+              <img src="data:image/jpeg;base64,#{image_b64}" alt="Belt" class="hero-bg" />
               <div class="overlay">
                 <h1>#{title}</h1>
                 <p class="subtitle">#{subtitle}</p>
