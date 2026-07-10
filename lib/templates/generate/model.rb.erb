@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
 class <%= @class_name %> < ApplicationRecord
-  include Concerns::Timestampable
-
 <% @fields.each do |field| -%>
   attr_accessor :<%= field[:name] %>
 <% end -%>

@@ -3,6 +3,7 @@ PATH
   specs:
     belt (0.1.7)
       activeitem (~> 0.0)
+      activesupport (>= 7.0)
       lambda_loadout (~> 0.0)
 
 GEM

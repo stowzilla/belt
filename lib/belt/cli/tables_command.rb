@@ -2,6 +2,8 @@
 
 require_relative 'app_detection'
 require_relative 'env_resolver'
+require_relative 'terraform_command'
+require_relative '../inflector'
 
 module Belt
   module CLI
@@ -27,8 +29,22 @@ module Belt
         new(env).run
       end
 
-      def initialize(env)
+      # Automatically sync dynamodb.tf for all existing environments.
+      # Called by generators after updating schema.tf.rb.
+      def self.sync_all_environments
+        return unless File.exist?(SCHEMA_FILE)
+
+        environments = TerraformCommand.list_environments
+        return if environments.empty?
+
+        environments.each do |env|
+          new(env, quiet: true).run
+        end
+      end
+
+      def initialize(env, quiet: false)
         @env = env
+        @quiet = quiet
         @app_name = detect_app_name
         @env_dir = "infrastructure/#{@env}"
       end
@@ -37,8 +53,8 @@ module Belt
         validate!
         models = parse_schema
         if models.empty?
-          puts "No models found in #{SCHEMA_FILE}"
-          exit 0
+          puts "No models found in #{SCHEMA_FILE}" unless @quiet
+          return
         end
 
         generate_dynamodb_tf(models)
@@ -47,32 +63,54 @@ module Belt
       private
 
       def validate!
-        abort "Error: #{SCHEMA_FILE} not found. Run `belt generate resource` first." unless File.exist?(SCHEMA_FILE)
+        unless File.exist?(SCHEMA_FILE)
+          abort "Error: #{SCHEMA_FILE} not found. Run `belt generate resource` first." unless @quiet
+          return
+        end
         return if Dir.exist?(@env_dir)
 
-        abort "Error: Environment '#{@env}' not found at #{@env_dir}/.\n" \
-              "Create it with: belt generate environment #{@env}"
+        unless @quiet
+          abort "Error: Environment '#{@env}' not found at #{@env_dir}/.\n" \
+                "Create it with: belt generate environment #{@env}"
+        end
       end
 
       def parse_schema
+        return [] unless File.exist?(SCHEMA_FILE)
+
         parser = SchemaParser.new
         schema_content = File.read(SCHEMA_FILE)
 
         # Replace DSL wrapper with direct parser call
         # Belt.application.schema.draw do ... end → parser.instance_eval do ... end
-        inner = schema_content.sub(/\A(?:Belt\.application)\.schema\.draw do\n?/, '').sub(/\nend\s*\z/, '')
+        inner = schema_content.sub(/\A(?:Belt\.application)\.schema\.draw do\n?/, '').sub(/\n?end\s*\z/, '')
+        inner.strip!
+
+        return [] if inner.empty? || inner.match?(/\A\s*\z/m)
+
         parser.instance_eval(inner, SCHEMA_FILE)
         parser.models
       end
 
       def generate_dynamodb_tf(models)
         dest = File.join(@env_dir, 'dynamodb.tf')
-        content = render_dynamodb(models)
-        File.write(dest, content)
-        puts "  create  #{dest}"
-        puts "\n✓ Generated DynamoDB tables for #{models.size} model(s):"
-        models.each { |m| puts "    • #{table_name(m[:name])}" }
-        puts "\nRun `belt apply #{@env}` to create them."
+        existing_content = File.exist?(dest) ? File.read(dest) : nil
+        new_content = render_dynamodb(models)
+
+        # Skip if content is unchanged
+        return if existing_content == new_content
+
+        File.write(dest, new_content)
+
+        if @quiet
+          verb = existing_content ? 'update' : 'create'
+          puts "  #{verb}  #{dest}"
+        else
+          puts "  create  #{dest}"
+          puts "\n✓ Generated DynamoDB tables for #{models.size} model(s):"
+          models.each { |m| puts "    • #{table_name(m[:name])}" }
+          puts "\nRun `belt deploy` to create them."
+        end
       end
 
       def render_dynamodb(models)
@@ -84,7 +122,7 @@ module Belt
       def render_table(model)
         name = table_name(model[:name])
         <<~HCL
-          resource "aws_dynamodb_table" "#{model[:name]}s" {
+          resource "aws_dynamodb_table" "#{Belt::Inflector.pluralize(model[:name])}" {
             name         = "#{name}"
             billing_mode = "PAY_PER_REQUEST"
             hash_key     = "id"
@@ -104,7 +142,7 @@ module Belt
       end
 
       def table_name(model_name)
-        "#{@app_name}-#{@env}-#{model_name}s"
+        "#{@app_name}-#{@env}-#{Belt::Inflector.pluralize(model_name)}"
       end
 
       # Minimal DSL parser for schema.tf.rb

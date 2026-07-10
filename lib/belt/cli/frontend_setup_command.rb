@@ -39,6 +39,7 @@ module Belt
       def run
         validate!
         generate_frontend_tf
+        update_main_tf_frontend_urls
         return if @quiet
 
         puts "\n✓ Frontend infrastructure generated for '#{@env}'!"
@@ -61,6 +62,35 @@ module Belt
         content = ERB.new(File.read(template_path), trim_mode: '-').result(binding)
         File.write(dest, content)
         puts "  create  #{dest}" unless @quiet
+      end
+
+      def update_main_tf_frontend_urls
+        main_tf = File.join(@env_dir, 'main.tf')
+        return unless File.exist?(main_tf)
+
+        content = File.read(main_tf)
+        cloudfront_url = '"https://${aws_cloudfront_distribution.frontend.domain_name}"'
+
+        # Already patched — skip
+        return if content.include?('aws_cloudfront_distribution.frontend.domain_name')
+
+        # Match any frontend_urls line (hardcoded list or conditional expression)
+        new_frontend_urls = <<~HCL.chomp
+          frontend_urls     = concat(
+            [#{cloudfront_url}],
+            var.environment == "prod" ? [] : ["http://localhost:3000"]
+          )
+        HCL
+
+        replaced = content.sub(
+          /^(\s*)frontend_urls\s*=\s*.+$/,
+          new_frontend_urls
+        )
+
+        if replaced != content
+          File.write(main_tf, replaced)
+          puts "  update  #{main_tf} (added CloudFront URL to frontend_urls)" unless @quiet
+        end
       end
     end
   end

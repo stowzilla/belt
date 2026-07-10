@@ -109,7 +109,6 @@ module Belt
         %W[
           #{@app_name}/lambda/controllers/api
           #{@app_name}/lambda/models
-          #{@app_name}/lambda/models/concerns
           #{@app_name}/lambda/lib/routes
           #{@app_name}/lambda/config
           #{@app_name}/lambda/spec
@@ -124,7 +123,6 @@ module Belt
           'lambda/api.rb.erb' => "#{@app_name}/lambda/api.rb",
           'lambda/config/environment.rb.erb' => "#{@app_name}/lambda/config/environment.rb",
           'lambda/models/application_record.rb.erb' => "#{@app_name}/lambda/models/application_record.rb",
-          'lambda/models/concerns/timestampable.rb.erb' => "#{@app_name}/lambda/models/concerns/timestampable.rb",
           'lambda/controllers/application_controller.rb.erb' =>
             "#{@app_name}/lambda/controllers/api/application_controller.rb",
           'lambda/lib/routes/routes.rb.erb' => "#{@app_name}/lambda/lib/routes/api_routes.rb",

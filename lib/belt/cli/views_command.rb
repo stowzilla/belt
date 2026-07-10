@@ -2,6 +2,7 @@
 
 require 'fileutils'
 require 'erb'
+require_relative '../inflector'
 
 module Belt
   module CLI
@@ -35,7 +36,7 @@ module Belt
         return [] unless File.exist?(schema_file)
 
         content = File.read(schema_file)
-        singular = name.end_with?('s') ? name.chomp('s') : name
+        singular = Belt::Inflector.singularize(name)
 
         # Extract fields from model block
         if content =~ /model :#{singular} do\n(.*?)\n\s*end/m
@@ -53,9 +54,9 @@ module Belt
       def initialize(name, fields)
         @name = name.downcase.gsub(/[^a-z0-9_]/, '_')
         @fields = fields
-        @resource_name = @name.end_with?('s') ? @name : "#{@name}s"
-        @singular_name = @name.end_with?('s') ? @name.chomp('s') : @name
-        @class_name = @singular_name.split('_').map(&:capitalize).join
+        @singular_name = Belt::Inflector.singularize(@name)
+        @resource_name = Belt::Inflector.pluralize(@singular_name)
+        @class_name = Belt::Inflector.classify(@singular_name)
       end
 
       def generate
@@ -65,9 +66,10 @@ module Belt
         end
 
         pages_dir = "frontend/src/pages/#{@resource_name}"
+        @plural_class_name = Belt::Inflector.camelize(@resource_name)
         FileUtils.mkdir_p(pages_dir)
 
-        write_template('Index.jsx.erb', "#{pages_dir}/#{@class_name}sIndex.jsx")
+        write_template('Index.jsx.erb', "#{pages_dir}/#{@plural_class_name}Index.jsx")
         write_template('Show.jsx.erb', "#{pages_dir}/#{@class_name}Show.jsx")
         write_template('New.jsx.erb', "#{pages_dir}/#{@class_name}New.jsx")
         write_template('Edit.jsx.erb', "#{pages_dir}/#{@class_name}Edit.jsx")
@@ -77,7 +79,7 @@ module Belt
 
         puts "\n✓ Views for '#{@singular_name}' generated!"
         puts "\nFiles created:"
-        puts "  #{pages_dir}/#{@class_name}sIndex.jsx"
+        puts "  #{pages_dir}/#{@plural_class_name}Index.jsx"
         puts "  #{pages_dir}/#{@class_name}Show.jsx"
         puts "  #{pages_dir}/#{@class_name}New.jsx"
         puts "  #{pages_dir}/#{@class_name}Edit.jsx"
@@ -100,16 +102,17 @@ module Belt
 
         content = File.read(app_jsx)
         pages_dir = @resource_name
+        plural_class = @plural_class_name || Belt::Inflector.camelize(@resource_name)
 
         import_lines = [
-          "import #{@class_name}sIndex from './pages/#{pages_dir}/#{@class_name}sIndex'",
+          "import #{plural_class}Index from './pages/#{pages_dir}/#{plural_class}Index'",
           "import #{@class_name}Show from './pages/#{pages_dir}/#{@class_name}Show'",
           "import #{@class_name}New from './pages/#{pages_dir}/#{@class_name}New'",
           "import #{@class_name}Edit from './pages/#{pages_dir}/#{@class_name}Edit'"
         ]
 
         route_lines = [
-          "        <Route path=\"/#{@resource_name}\" element={<#{@class_name}sIndex />} />",
+          "        <Route path=\"/#{@resource_name}\" element={<#{plural_class}Index />} />",
           "        <Route path=\"/#{@resource_name}/new\" element={<#{@class_name}New />} />",
           "        <Route path=\"/#{@resource_name}/:id\" element={<#{@class_name}Show />} />",
           "        <Route path=\"/#{@resource_name}/:id/edit\" element={<#{@class_name}Edit />} />"

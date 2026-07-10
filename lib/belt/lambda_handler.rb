@@ -41,6 +41,17 @@ module Belt
         subdir = File.join(controllers_dir, child)
         Belt.controller_paths << subdir if File.directory?(subdir)
       end
+
+      # Auto-load all models (application_record first, then the rest)
+      models_dir = File.join(File.dirname(caller_file), 'models')
+      if File.directory?(models_dir)
+        all_models = Dir[File.join(models_dir, '**', '*.rb')].sort
+        app_record = all_models.find { |f| File.basename(f) == 'application_record.rb' }
+        rest = all_models - [app_record].compact
+
+        require app_record if app_record
+        rest.each { |f| require f }
+      end
     end
 
     # API Gateway Lambda handler.

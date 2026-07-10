@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'inflector'
+
 module Belt
   # Infers DynamoDB table names from route paths by matching against
   # tables defined in a Terraform file containing aws_dynamodb_table resources.
@@ -45,27 +47,11 @@ module Belt
     end
 
     def pluralize(word)
-      if word.end_with?('y')
-        "#{word[0..-2]}ies"
-      elsif word.end_with?('s', 'x', 'z', 'ch', 'sh')
-        "#{word}es"
-      else
-        "#{word}s"
-      end
+      Belt::Inflector.pluralize(word)
     end
 
     def singularize(word)
-      if word.end_with?('ies')
-        "#{word[0..-4]}y"
-      elsif word.end_with?('xes', 'zes', 'ses')
-        word[0..-3]
-      elsif word.end_with?('ches', 'shes')
-        word[0..-3]
-      elsif word.end_with?('s') && !word.end_with?('ss')
-        word[0..-2]
-      else
-        word
-      end
+      Belt::Inflector.singularize(word)
     end
   end
 end

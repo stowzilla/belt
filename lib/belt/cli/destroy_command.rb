@@ -2,6 +2,8 @@
 
 require 'fileutils'
 require_relative 'app_detection'
+require_relative 'tables_command'
+require_relative '../inflector'
 
 module Belt
   module CLI
@@ -93,13 +95,9 @@ module Belt
         @name = name&.downcase&.gsub(/[^a-z0-9_]/, '_')
         @fields = fields
         @app_name = detect_namespace
-        @resource_name = if @name
-                           @name.end_with?('s') ? @name : "#{@name}s"
-                         end
-        @singular_name = if @name
-                           @name.end_with?('s') ? @name.chomp('s') : @name
-                         end
-        @class_name = @singular_name&.split('_')&.map(&:capitalize)&.join
+        @singular_name = @name ? Belt::Inflector.singularize(@name) : nil
+        @resource_name = @singular_name ? Belt::Inflector.pluralize(@singular_name) : nil
+        @class_name = @singular_name ? Belt::Inflector.classify(@singular_name) : nil
         @removed = []
         @updated = []
       end
@@ -124,6 +122,7 @@ module Belt
         destroy_controller
         remove_routes
         remove_schema
+        sync_tables
         destroy_views
         puts "\n✓ Scaffold '#{@singular_name}' destroyed!"
       end
@@ -157,6 +156,17 @@ module Belt
           FileUtils.rm_rf(dir)
           @removed << dir
           puts "  remove  #{dir}/"
+
+          # Remove frontend.tf and revert frontend_urls in main.tf for each environment
+          Dir.glob('infrastructure/*/frontend.tf').each do |frontend_tf|
+            FileUtils.rm_f(frontend_tf)
+            puts "  remove  #{frontend_tf}"
+
+            env_dir = File.dirname(frontend_tf)
+            main_tf = File.join(env_dir, 'main.tf')
+            revert_main_tf_frontend_urls(main_tf)
+          end
+
           puts "\n✓ Frontend removed!"
         else
           puts '✗ No frontend/ directory found.'
@@ -164,10 +174,29 @@ module Belt
         end
       end
 
+      def revert_main_tf_frontend_urls(main_tf)
+        return unless File.exist?(main_tf)
+
+        content = File.read(main_tf)
+        return unless content.include?('aws_cloudfront_distribution.frontend.domain_name')
+
+        # Replace the multi-line concat block back to a simple conditional
+        replaced = content.sub(
+          /^\s*frontend_urls\s*=\s*concat\(\n(?:.*\n)*?\s*\)\s*\n/,
+          "  frontend_urls     = var.environment == \"prod\" ? [] : [\"http://localhost:3000\"]\n"
+        )
+
+        if replaced != content
+          File.write(main_tf, replaced)
+          puts "  update  #{main_tf} (reverted frontend_urls)"
+        end
+      end
+
       def destroy_views
         return unless @resource_name
 
         pages_dir = "frontend/src/pages/#{@resource_name}"
+
         if Dir.exist?(pages_dir)
           FileUtils.rm_rf(pages_dir)
           @removed << pages_dir
@@ -253,6 +282,10 @@ module Belt
           @updated << schema_file
           puts "  update  #{schema_file}"
         end
+      end
+
+      def sync_tables
+        Belt::CLI::TablesCommand.sync_all_environments
       end
 
       def remove_view_routes

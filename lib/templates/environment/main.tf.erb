@@ -38,7 +38,7 @@ resource "conveyor_belt" "main" {
   app_name          = var.app_name
   lambda_source_dir = "${path.module}/../../lambda"
   lambda_shared_dirs = ["controllers", "helpers", "lib", "models", "views"]
-  frontend_urls     = ["http://localhost:3000"]
+  frontend_urls     = var.environment == "prod" ? [] : ["http://localhost:3000"]
   friendly_errors   = var.environment != "prod"
 
   # Per-lambda configuration: env vars, timeouts, memory

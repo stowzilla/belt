@@ -292,15 +292,7 @@ module Belt
       end
 
       def singularize(word)
-        if word.end_with?('ies')
-          "#{word[0..-4]}y"
-        elsif word.end_with?('ses') || word.end_with?('xes') || word.end_with?('zes')
-          word[0..-3]
-        elsif word.end_with?('s') && !word.end_with?('ss')
-          word[0..-2]
-        else
-          word
-        end
+        Belt::Inflector.singularize(word)
       end
     end
   end

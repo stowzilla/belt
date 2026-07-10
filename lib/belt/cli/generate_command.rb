@@ -5,7 +5,9 @@ require 'erb'
 require_relative 'app_detection'
 require_relative 'environment_command'
 require_relative 'frontend_command'
+require_relative 'tables_command'
 require_relative 'views_command'
+require_relative '../inflector'
 
 module Belt
   module CLI
@@ -25,9 +27,9 @@ module Belt
             ['--skip-views', 'Skip generating frontend view pages']
           ],
           examples: [
-            ['belt g scaffold post title:string body:text', 'Post with title and body fields'],
-            ['belt g scaffold comment author:string body:text status:string', 'Scaffold with multiple fields'],
-            ['belt g scaffold task --skip-views', 'Scaffold without frontend pages']
+            ['belt g scaffold post title body:text'],
+            ['belt g scaffold comment author body:text status'],
+            ['belt g scaffold task --skip-views']
           ],
           notes: <<~NOTES
             Creates:
@@ -46,8 +48,8 @@ module Belt
           usage: 'belt generate model <name> [field:type ...]',
           options: [],
           examples: [
-            ['belt g model user email:string name:string', 'User model with email and name'],
-            ['belt g model event title:string starts_at:datetime', 'Event model with datetime field']
+            ['belt g model user email name'],
+            ['belt g model event title starts_at:datetime']
           ],
           notes: <<~NOTES
             Creates:
@@ -59,8 +61,8 @@ module Belt
           usage: 'belt generate controller <name>',
           options: [],
           examples: [
-            ['belt g controller posts', 'Posts controller with CRUD actions'],
-            ['belt g controller admin/users', 'Namespaced controller']
+            ['belt g controller posts'],
+            ['belt g controller admin/users']
           ],
           notes: <<~NOTES
             Creates:
@@ -132,7 +134,7 @@ module Belt
         errors << 'must only contain letters, numbers, and underscores' unless name.match?(/\A[a-zA-Z][a-zA-Z0-9_]*\z/)
         errors << 'must not start or end with an underscore' if name.match?(/\A_|_\z/)
         errors << 'must not contain consecutive underscores' if name.include?('__')
-        errors << "is a reserved name" if RESERVED_NAMES.include?(name.downcase.chomp('s'))
+        errors << "is a reserved name" if RESERVED_NAMES.include?(Belt::Inflector.singularize(name.downcase))
         errors << "is a reserved name" if RESERVED_NAMES.include?(name.downcase)
 
         return if errors.empty?
@@ -161,14 +163,15 @@ module Belt
 
           Field Types:
             #{FIELD_TYPES.join(', ')}
+            (defaults to string if omitted)
 
           Examples:
-            belt g scaffold post title:string body:text status:string
-            belt g model user email:string name:string
+            belt g scaffold post title body:text status
+            belt g model user email name
             belt g controller comments
             belt g environment staging
             belt g frontend react
-            belt g views post title:string body:text
+            belt g views post title body:text
 
           Run 'belt generate <generator> --help' for detailed help on a specific generator.
         HELP
@@ -197,21 +200,18 @@ module Belt
 
         puts "\nField Types:"
         puts "  #{FIELD_TYPES.join(', ')}"
+        puts "  (defaults to string if omitted)"
 
         puts "\nExamples:"
         info[:examples].each do |cmd, desc|
-          puts "  #{cmd}"
-          puts "    #{desc}" if desc
+          if desc
+            puts "  #{cmd}  — #{desc}"
+          else
+            puts "  #{cmd}"
+          end
         end
 
         puts "\n#{info[:notes]}" if info[:notes]
-
-        puts "Naming Rules:"
-        puts "  - Must start with a letter"
-        puts "  - At least 2 characters"
-        puts "  - Letters, numbers, and single underscores only"
-        puts "  - No leading/trailing/consecutive underscores"
-        puts "  - Cannot use reserved names (help, new, create, destroy, etc.)"
       end
 
       def initialize(generator, name, fields, skip_views: false)
@@ -221,15 +221,15 @@ module Belt
         @skip_views = skip_views
         @app_name = detect_namespace
         @module_name = @app_name.split(/[-_]/).map(&:capitalize).join
-        @resource_name = @name.end_with?('s') ? @name : "#{@name}s"
-        @singular_name = @name.end_with?('s') ? @name.chomp('s') : @name
-        @class_name = @singular_name.split('_').map(&:capitalize).join
+        @singular_name = Belt::Inflector.singularize(@name)
+        @resource_name = Belt::Inflector.pluralize(@singular_name)
+        @class_name = Belt::Inflector.classify(@singular_name)
       end
 
       def generate
         case @generator
         when 'scaffold'  then generate_resource
-        when 'model'     then generate_model
+        when 'model'     then generate_model_standalone
         when 'controller' then generate_controller
         end
       end
@@ -241,6 +241,7 @@ module Belt
         generate_controller
         inject_routes
         inject_schema
+        sync_tables
         generate_views_if_frontend
         puts "\n✓ Scaffold '#{@singular_name}' generated!"
         puts "\nFiles created/updated:"
@@ -250,6 +251,12 @@ module Belt
         puts '  infrastructure/schema.tf.rb (updated)'
         puts "  lambda/lib/routes/#{@app_name}_routes.rb (updated)"
         puts "  frontend/src/pages/#{@resource_name}/ (views)" if Dir.exist?('frontend/src')
+      end
+
+      def generate_model_standalone
+        generate_model
+        inject_schema
+        sync_tables
       end
 
       def generate_model
@@ -371,6 +378,10 @@ module Belt
 
         File.write(schema_file, content)
         puts "  update  #{schema_file}"
+      end
+
+      def sync_tables
+        Belt::CLI::TablesCommand.sync_all_environments
       end
 
       def write_template(template_name, dest_path)

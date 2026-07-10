@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'inflector'
+
 module Belt
   # DSL for defining API Gateway routes.
   # Ported from terraform-provider-conveyor-belt/scripts/lib/route_dsl.rb
@@ -256,17 +258,7 @@ module Belt
     end
 
     def singularize(word)
-      if word.end_with?('ies')
-        "#{word[0..-4]}y"
-      elsif word.end_with?('xes') || word.end_with?('zes') || word.end_with?('ses')
-        word[0..-3]
-      elsif word.end_with?('ches') || word.end_with?('shes')
-        word[0..-3]
-      elsif word.end_with?('s') && !word.end_with?('ss')
-        word[0..-2]
-      else
-        word
-      end
+      Belt::Inflector.singularize(word)
     end
   end
 

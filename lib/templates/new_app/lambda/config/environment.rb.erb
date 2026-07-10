@@ -15,4 +15,10 @@ end
 
 # Load lib and models
 Dir[File.join(__dir__, '..', 'lib', '**', '*.rb')].sort.each { |f| require f }
-Dir[File.join(__dir__, '..', 'models', '**', '*.rb')].sort.each { |f| require f }
+
+models_dir = File.join(__dir__, '..', 'models')
+all_models = Dir[File.join(models_dir, '**', '*.rb')].sort
+app_record = all_models.find { |f| File.basename(f) == 'application_record.rb' }
+rest = all_models - [app_record].compact
+require app_record if app_record
+rest.each { |f| require f }
