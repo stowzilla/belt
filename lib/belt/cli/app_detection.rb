@@ -28,6 +28,12 @@ module Belt
         File.basename(Dir.pwd)
       end
 
+      # Detects existing environments by scanning infrastructure/ directories.
+      # Each subdirectory with a main.tf is considered an environment.
+      def detect_environments
+        Dir.glob('infrastructure/*/main.tf').map { |f| File.basename(File.dirname(f)) }.sort
+      end
+
       # S3 bucket names follow DNS rules — underscores are not allowed.
       # App names often use underscores (Ruby namespaces); convert for S3.
       def s3_safe_name(name)

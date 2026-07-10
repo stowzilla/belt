@@ -82,8 +82,8 @@ module Belt
 
         puts "Creating new Belt application: #{@app_name}"
         create_structure
-        generate_frontend if @frontend
         generate_environments
+        generate_frontend if @frontend
         init_git
         run_bundle_install
         setup_state

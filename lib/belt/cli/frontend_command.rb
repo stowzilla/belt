@@ -53,13 +53,34 @@ module Belt
         copy_template(framework_dir, dest_dir)
 
         puts "\n✓ Frontend (#{@framework}) created in frontend/"
+
+        setup_frontend_infra_for_existing_environments
+
         puts "\nNext steps:"
         puts '  cd frontend && npm install && npm run dev'
-        puts '  belt setup frontend <env>    # Generate CloudFront + S3 infrastructure'
         puts '  belt deploy frontend <env>   # Build and deploy to AWS'
       end
 
       private
+
+      def setup_frontend_infra_for_existing_environments
+        environments = detect_environments
+        return if environments.empty?
+
+        puts "\n  Setting up frontend infrastructure for existing environments..."
+        require_relative 'frontend_setup_command'
+
+        environments.each do |env_name|
+          frontend_tf = "infrastructure/#{env_name}/frontend.tf"
+          if File.exist?(frontend_tf)
+            puts "  skip    #{frontend_tf} (already exists)"
+            next
+          end
+
+          FrontendSetupCommand.new(env_name, quiet: true).run
+          puts "  create  #{frontend_tf}"
+        end
+      end
 
       def copy_template(src_dir, dest_dir)
         Dir.glob("#{src_dir}/**/*", File::FNM_DOTMATCH).each do |src|

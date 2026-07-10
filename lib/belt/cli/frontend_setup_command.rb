@@ -29,15 +29,18 @@ module Belt
         new(env).run
       end
 
-      def initialize(env)
+      def initialize(env, quiet: false)
         @env = env
         @app_name = detect_app_name
         @env_dir = "infrastructure/#{@env}"
+        @quiet = quiet
       end
 
       def run
         validate!
         generate_frontend_tf
+        return if @quiet
+
         puts "\n✓ Frontend infrastructure generated for '#{@env}'!"
         puts "\nRun `belt apply #{@env}` to create the S3 bucket and CloudFront distribution."
         puts "Then `belt deploy frontend #{@env}` to build and deploy."
@@ -57,7 +60,7 @@ module Belt
         template_path = File.join(TEMPLATE_DIR, 'frontend.tf.erb')
         content = ERB.new(File.read(template_path), trim_mode: '-').result(binding)
         File.write(dest, content)
-        puts "  create  #{dest}"
+        puts "  create  #{dest}" unless @quiet
       end
     end
   end

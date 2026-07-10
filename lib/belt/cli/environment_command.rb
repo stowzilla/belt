@@ -51,6 +51,8 @@ module Belt
 
         puts "\n✓ Environment '#{@env_name}' created!"
 
+        setup_frontend_if_exists
+
         unless @quiet
           puts "\nNext steps:"
           puts "  cd #{dest_dir}"
@@ -61,6 +63,15 @@ module Belt
       end
 
       private
+
+      def setup_frontend_if_exists
+        return unless Dir.exist?('frontend') && !Dir.empty?('frontend')
+
+        puts "\n  Frontend detected — generating frontend infrastructure..."
+        require_relative 'frontend_setup_command'
+        FrontendSetupCommand.new(@env_name, quiet: true).run
+        puts "  create  infrastructure/#{@env_name}/frontend.tf"
+      end
 
       def templates
         {
