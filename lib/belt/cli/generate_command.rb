@@ -11,23 +11,23 @@ module Belt
   module CLI
     class GenerateCommand
       TEMPLATE_DIR = File.expand_path('../../templates/generate', __dir__)
-      GENERATORS = %w[resource model controller environment frontend views].freeze
+      GENERATORS = %w[scaffold resource model controller environment frontend views].freeze
 
       include AppDetection
 
       FIELD_TYPES = %w[string text integer float boolean date datetime].freeze
 
       GENERATOR_HELP = {
-        'resource' => {
-          description: 'Generate a model, controller, routes, and schema for a REST resource.',
-          usage: 'belt generate resource <name> [field:type ...] [options]',
+        'scaffold' => {
+          description: 'Generate a model, controller, routes, schema, and views for a REST resource.',
+          usage: 'belt generate scaffold <name> [field:type ...] [options]',
           options: [
             ['--skip-views', 'Skip generating frontend view pages']
           ],
           examples: [
-            ['belt g resource post title:string body:text', 'Post with title and body fields'],
-            ['belt g resource comment author:string body:text status:string', 'Comment with multiple fields'],
-            ['belt g resource task --skip-views', 'Task resource without frontend pages']
+            ['belt g scaffold post title:string body:text', 'Post with title and body fields'],
+            ['belt g scaffold comment author:string body:text status:string', 'Scaffold with multiple fields'],
+            ['belt g scaffold task --skip-views', 'Scaffold without frontend pages']
           ],
           notes: <<~NOTES
             Creates:
@@ -36,6 +36,9 @@ module Belt
               infrastructure/routes.tf.rb                        Route entry added
               infrastructure/schema.tf.rb                        DynamoDB table schema added
               lambda/lib/routes/<app>_routes.rb                  Route manifest updated
+              frontend/src/pages/<names>/                        React pages (if frontend exists)
+
+            Alias: `belt g resource` works the same way.
           NOTES
         },
         'model' => {
@@ -77,12 +80,15 @@ module Belt
 
         unless GENERATORS.include?(generator)
           puts "Unknown generator: '#{generator}'"
-          puts "Available generators: #{GENERATORS.join(', ')}"
+          puts "Available generators: #{(GENERATORS - ['resource']).join(', ')}"
           puts "\nRun 'belt generate --help' for usage information."
           exit 1
         end
 
-        # Per-generator help: belt g resource --help
+        # Normalize: resource is an alias for scaffold
+        generator = 'scaffold' if generator == 'resource'
+
+        # Per-generator help: belt g scaffold --help
         if args.include?('--help') || args.include?('-h')
           print_generator_help(generator)
           exit 0
@@ -143,18 +149,21 @@ module Belt
                  belt g <generator> <name> [field:type ...] [options]
 
           Generators:
-            resource      Generate model, controller, routes, and schema (full REST resource)
+            scaffold      Generate model, controller, routes, schema, and views (full REST resource)
             model         Generate an ActiveItem model
             controller    Generate a controller
             environment   Create a new deployment environment
             frontend      Scaffold a frontend app (react, vue, svelte)
             views         Generate React pages for a resource
 
+          Aliases:
+            resource      Same as scaffold
+
           Field Types:
             #{FIELD_TYPES.join(', ')}
 
           Examples:
-            belt g resource post title:string body:text status:string
+            belt g scaffold post title:string body:text status:string
             belt g model user email:string name:string
             belt g controller comments
             belt g environment staging
@@ -219,7 +228,7 @@ module Belt
 
       def generate
         case @generator
-        when 'resource'  then generate_resource
+        when 'scaffold'  then generate_resource
         when 'model'     then generate_model
         when 'controller' then generate_controller
         end
@@ -233,7 +242,7 @@ module Belt
         inject_routes
         inject_schema
         generate_views_if_frontend
-        puts "\n✓ Resource '#{@singular_name}' generated!"
+        puts "\n✓ Scaffold '#{@singular_name}' generated!"
         puts "\nFiles created/updated:"
         puts "  lambda/models/#{@singular_name}.rb"
         puts "  lambda/controllers/#{@app_name}/#{@resource_name}_controller.rb"

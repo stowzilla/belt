@@ -5,6 +5,7 @@ require_relative 'root'
 require_relative 'cli/env_resolver'
 require_relative 'cli/new_command'
 require_relative 'cli/generate_command'
+require_relative 'cli/destroy_command'
 require_relative 'cli/frontend_command'
 require_relative 'cli/frontend_setup_command'
 require_relative 'cli/frontend_deploy_command'
@@ -22,6 +23,7 @@ module Belt
     COMMANDS_DEFINITION = {
       'new' => Belt::CLI::NewCommand,
       %w[generate g] => Belt::CLI::GenerateCommand,
+      %w[destroy d] => Belt::CLI::DestroyCommand,
       'routes' => Belt::CLI::RoutesCommand,
       %w[console c] => Belt::CLI::ConsoleCommand,
       %w[tasks --tasks -T] => Belt::CLI::TasksCommand,
@@ -45,7 +47,21 @@ module Belt
         exit 1
       end
 
-      # Terraform shorthand: belt init wups, belt plan wups, belt apply wups
+      # `belt destroy` is ambiguous: could be terraform destroy or belt destroy <generator>.
+      # Route to DestroyCommand if the first arg is a known generator or help flag.
+      if command == 'destroy'
+        if args.empty? || args.first =~ /\A-/
+          # belt destroy --help → DestroyCommand help
+          # belt destroy (no args) → terraform destroy (needs env)
+          if args.include?('--help') || args.include?('-h')
+            return DestroyCommand.run(args)
+          end
+        elsif DestroyCommand::GENERATORS.include?(args.first)
+          return DestroyCommand.run(args)
+        end
+      end
+
+      # Terraform shorthand: belt init wups, belt plan wups, belt apply wups, belt destroy wups
       return Belt::CLI::TerraformCommand.run(command, args) if TERRAFORM_ACTIONS.include?(command)
 
       handler = COMMANDS[command]
@@ -71,10 +87,14 @@ module Belt
 
         Commands:
           new <app_name> [--frontend react]           Create a new Belt application
-          generate <resource|model|controller> <name> Generate components
+          generate <scaffold|model|controller> <name> Generate components
           generate frontend <react|vue|svelte>        Scaffold a frontend app
           generate views <resource> [fields...]       Generate React pages for REST actions
           generate environment <name>                 Create a new environment
+          destroy <scaffold|model|controller> <name>  Remove generated components
+          destroy frontend                            Remove the frontend/ directory
+          destroy views <resource>                    Remove React pages for a resource
+          destroy environment <name>                  Remove an environment directory
           server                                      Start local dev server (frontend)
           s                                           Alias for server
           deploy [environment]                        Deploy to AWS (init → plan → apply)
@@ -106,7 +126,8 @@ module Belt
 
         Examples:
           belt new blog --frontend react
-          belt generate resource post title:string content:text status:string
+          belt generate scaffold post title:string content:text status:string
+          belt destroy scaffold post
           belt generate frontend react
           belt server                   # Start local frontend server
           belt deploy                   # Deploy dev to AWS
