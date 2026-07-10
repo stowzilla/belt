@@ -1,5 +1,10 @@
 output "api_url" {
   description = "API Gateway base URL"
+  value       = values(conveyor_belt.main.api_gateway_urls)[0]
+}
+
+output "api_urls" {
+  description = "Map of gateway names to API Gateway URLs"
   value       = conveyor_belt.main.api_gateway_urls
 }
 
