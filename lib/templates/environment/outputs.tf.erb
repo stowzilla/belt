@@ -1,0 +1,9 @@
+output "api_url" {
+  description = "API Gateway base URL"
+  value       = conveyor_belt.main.api_gateway_urls
+}
+
+output "lambda_functions" {
+  description = "Map of action names to Lambda function ARNs"
+  value       = conveyor_belt.main.lambda_functions
+}

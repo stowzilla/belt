@@ -52,9 +52,17 @@ module Belt
 
       def run_state_setup
         unless aws_configured?
-          puts '✗ AWS credentials not configured. Set AWS_PROFILE or configure aws sso login.'
+          if @aws_error&.include?('ForbiddenException') || @aws_error&.include?('AccessDenied')
+            puts "✗ AWS credentials found but access denied — check your profile/role configuration."
+            puts "  #{@aws_error}"
+          else
+            puts '✗ AWS credentials not configured. Set AWS_PROFILE or configure aws sso login.'
+          end
           exit 1
         end
+
+        # Re-resolve bucket name with account ID suffix now that we have credentials
+        @bucket_name = resolve_bucket_name unless @custom_bucket
 
         @bucket_name = interactive_bucket_selection if @select_mode
         setup_or_verify_bucket
@@ -133,10 +141,14 @@ module Belt
       def resolve_bucket_name
         if @custom_bucket
           @custom_bucket
-        elsif @env_name
-          s3_safe_name("#{@app_name}-terraform-state-#{@env_name}")
         else
-          s3_safe_name("#{@app_name}-terraform-state")
+          base = if @env_name
+                   "#{@app_name}-terraform-state-#{@env_name}"
+                 else
+                   "#{@app_name}-terraform-state"
+                 end
+          base = "#{base}-#{@aws_account_id}-#{@region}" if @aws_account_id
+          s3_safe_name(base)
         end
       end
 
@@ -184,11 +196,33 @@ module Belt
       # --- AWS operations ---
 
       def aws_configured?
-        system('aws', 'sts', 'get-caller-identity', out: File::NULL, err: File::NULL)
+        output, status = Open3.capture2e('aws', 'sts', 'get-caller-identity')
+        if status.success?
+          data = JSON.parse(output) rescue {}
+          @aws_account_id = data['Account']
+          true
+        else
+          @aws_error = output.strip
+          false
+        end
+      end
+
+      def aws_account_id
+        @aws_account_id
       end
 
       def bucket_exists?(bucket)
-        system('aws', 's3api', 'head-bucket', '--bucket', bucket, err: File::NULL)
+        output, status = Open3.capture2e('aws', 's3api', 'head-bucket', '--bucket', bucket)
+        return true if status.success?
+
+        # 403 = bucket exists but owned by someone else; 404 = doesn't exist
+        if output.include?('403') || output.include?('Forbidden')
+          puts "\n✗ Bucket '#{bucket}' exists but is owned by a different AWS account."
+          puts '  S3 bucket names are globally unique. Choose a different name with --bucket.'
+          exit 1
+        end
+
+        false
       end
 
       def create_bucket(bucket)

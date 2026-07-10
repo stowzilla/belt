@@ -11,6 +11,8 @@ require_relative 'cli/frontend_deploy_command'
 require_relative 'cli/views_command'
 require_relative 'cli/setup_command'
 require_relative 'cli/terraform_command'
+require_relative 'cli/deploy_command'
+require_relative 'cli/server_command'
 require_relative 'cli/routes_command'
 require_relative 'cli/tasks_command'
 require_relative 'cli/console_command'
@@ -24,15 +26,8 @@ module Belt
       %w[console c] => Belt::CLI::ConsoleCommand,
       %w[tasks --tasks -T] => Belt::CLI::TasksCommand,
       'setup' => Belt::CLI::SetupCommand,
-      'deploy' => lambda { |args|
-        subcommand = args.shift
-        if subcommand == 'frontend'
-          Belt::CLI::FrontendDeployCommand.run(args)
-        else
-          puts 'Usage: belt deploy frontend <environment>'
-          exit 1
-        end
-      },
+      'deploy' => Belt::CLI::DeployCommand,
+      %w[server s] => Belt::CLI::ServerCommand,
       %w[version --version -v] => ->(_args) { puts "Belt #{Belt::VERSION}" }
     }.freeze
 
@@ -80,6 +75,10 @@ module Belt
           generate frontend <react|vue|svelte>        Scaffold a frontend app
           generate views <resource> [fields...]       Generate React pages for REST actions
           generate environment <name>                 Create a new environment
+          server                                      Start local dev server (frontend)
+          s                                           Alias for server
+          deploy [environment]                        Deploy to AWS (init → plan → apply)
+          deploy frontend <env>                       Build and deploy frontend to AWS
           routes [-g PATTERN] [-f json]               Show route definitions
           console                                     Start an interactive console (IRB)
           c                                           Alias for console
@@ -88,7 +87,6 @@ module Belt
           setup state                                 Create/select S3 state bucket
           setup tables <env>                          Generate DynamoDB tables from schema
           setup frontend <env>                        Generate S3 + CloudFront infrastructure
-          deploy frontend <env>                       Build and deploy frontend to AWS
           init [environment] <env>                    terraform init for environment
           plan [environment] <env>                    terraform plan for environment
           apply [environment] <env>                   terraform apply for environment
@@ -110,8 +108,11 @@ module Belt
           belt new blog --frontend react
           belt generate resource post title:string content:text status:string
           belt generate frontend react
-          belt setup frontend wups
+          belt server                   # Start local frontend server
+          belt deploy                   # Deploy dev to AWS
+          belt deploy prod --auto       # Deploy prod without confirmation
           belt deploy frontend wups
+          belt setup frontend wups
           belt apply wups
           belt tasks                    # list all rake tasks
           belt lambda:build_layer       # run a rake task directly

@@ -1,0 +1,112 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f8f9fa;
+  color: #2d3748;
+  min-height: 100vh;
+}
+
+/* Hero section — full width background image */
+.hero {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+}
+.hero-bg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.overlay {
+  position: absolute;
+  top: 35%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 2rem 3rem;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border-radius: 12px;
+  text-align: center;
+  max-width: 600px;
+  width: 90%;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+.overlay h1 {
+  font-size: 2.2rem;
+  font-weight: 700;
+  color: #2d3748;
+  margin-bottom: 0.4rem;
+}
+.overlay .subtitle {
+  font-size: 1.1rem;
+  color: #4a5568;
+}
+
+/* Content below the hero */
+.container {
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+.stack-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+}
+.check-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-weight: 500;
+}
+.check-pass {
+  background: rgba(39, 174, 96, 0.1);
+  border: 1px solid rgba(39, 174, 96, 0.3);
+  color: #1e8449;
+}
+.check-warn {
+  background: rgba(243, 156, 18, 0.1);
+  border: 1px solid rgba(243, 156, 18, 0.3);
+  color: #d68910;
+}
+.icon { font-size: 1.1rem; }
+.arrow { color: #718096; font-size: 1.2rem; }
+.info {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+.info p { margin-bottom: 0.5rem; color: #4a5568; }
+.info p:last-child { margin-bottom: 0; }
+.info strong { color: #2d3748; }
+.info code {
+  background: rgba(99, 45, 145, 0.08);
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  color: #632d91;
+  font-size: 0.85rem;
+}
+.next-steps {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1.5rem;
+}
+.next-steps h2 { font-size: 1.1rem; margin-bottom: 1rem; color: #2d3748; }
+.next-steps ol { padding-left: 1.5rem; }
+.next-steps li { margin-bottom: 0.6rem; color: #4a5568; line-height: 1.5; }
+.next-steps code {
+  background: rgba(99, 45, 145, 0.08);
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  color: #632d91;
+  font-size: 0.85rem;
+}

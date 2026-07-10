@@ -155,6 +155,13 @@ module Belt
         end
       end
 
+      # Final fallback: gem-embedded controllers under Belt:: namespace
+      class_name = "#{controller_name.split(%r{[_/]}).map(&:capitalize).join}Controller"
+      belt_class_name = "Belt::#{class_name}"
+      if Belt.const_defined?(class_name, false)
+        return Belt.const_get(class_name, false)
+      end
+
       raise Belt::ActionNotFound, "Controller not found: #{controller_name}"
     end
 

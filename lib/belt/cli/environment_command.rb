@@ -26,9 +26,10 @@ module Belt
         new(env_name).generate
       end
 
-      def initialize(env_name)
+      def initialize(env_name, quiet: false)
         @env_name = env_name.downcase.gsub(/[^a-z0-9_-]/, '')
         @app_name = detect_app_name
+        @quiet = quiet
       end
 
       def generate
@@ -49,11 +50,14 @@ module Belt
         end
 
         puts "\n✓ Environment '#{@env_name}' created!"
-        puts "\nNext steps:"
-        puts "  cd #{dest_dir}"
-        puts '  terraform init'
-        puts '  terraform plan'
-        puts '  terraform apply'
+
+        unless @quiet
+          puts "\nNext steps:"
+          puts "  cd #{dest_dir}"
+          puts '  terraform init'
+          puts '  terraform plan'
+          puts '  terraform apply'
+        end
       end
 
       private
@@ -63,7 +67,8 @@ module Belt
           'main.tf.erb' => 'main.tf',
           'backend.tf.erb' => 'backend.tf',
           'variables.tf.erb' => 'variables.tf',
-          'terraform.tfvars.erb' => 'terraform.tfvars'
+          'terraform.tfvars.erb' => 'terraform.tfvars',
+          'outputs.tf.erb' => 'outputs.tf'
         }
       end
 

@@ -55,3 +55,4 @@ module Belt
 end
 
 require_relative 'belt_controller/base'
+require_relative 'belt/controllers/welcome_controller'
