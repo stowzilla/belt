@@ -3,7 +3,13 @@ import { Link } from 'react-router-dom'
 
 export default function <%= @class_name %>Form({ initialValues = {}, onSubmit, submitLabel = 'Create' }) {
 <% @fields.each do |field| -%>
+<% if field[:type] == 'boolean' -%>
+  const [<%= field[:name] %>, set<%= field[:name].split('_').map(&:capitalize).join %>] = useState(initialValues.<%= field[:name] %> || false)
+<% elsif field[:type] == 'integer' || field[:type] == 'float' -%>
+  const [<%= field[:name] %>, set<%= field[:name].split('_').map(&:capitalize).join %>] = useState(initialValues.<%= field[:name] %> ?? '')
+<% else -%>
   const [<%= field[:name] %>, set<%= field[:name].split('_').map(&:capitalize).join %>] = useState(initialValues.<%= field[:name] %> || '')
+<% end -%>
 <% end -%>
 
   function handleSubmit(e) {
@@ -15,20 +21,70 @@ export default function <%= @class_name %>Form({ initialValues = {}, onSubmit, s
     <form onSubmit={handleSubmit}>
 <% @fields.each do |field| -%>
       <div style={{ marginBottom: '1rem' }}>
-        <label style={{ display: 'block', marginBottom: '0.25rem' }}><%= field[:name].split('_').map(&:capitalize).join(' ') %></label>
-<% if field[:type] == 'text' -%>
+        <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}><%= field[:name].split('_').map(&:capitalize).join(' ') %></label>
+<% case field[:type] -%>
+<% when 'text' -%>
         <textarea value={<%= field[:name] %>} onChange={e => set<%= field[:name].split('_').map(&:capitalize).join %>(e.target.value)}
-          rows={6} style={{ width: '100%' }} />
+          rows={6} style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
+<% when 'boolean' -%>
+        <label style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer', gap: '0.5rem' }}>
+          <span style={{
+            position: 'relative',
+            display: 'inline-block',
+            width: '44px',
+            height: '24px',
+            borderRadius: '12px',
+            backgroundColor: <%= field[:name] %> ? '#4f46e5' : '#d1d5db',
+            transition: 'background-color 0.2s'
+          }}>
+            <span style={{
+              position: 'absolute',
+              top: '2px',
+              left: <%= field[:name] %> ? '22px' : '2px',
+              width: '20px',
+              height: '20px',
+              borderRadius: '50%',
+              backgroundColor: '#fff',
+              transition: 'left 0.2s',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+            }} />
+          </span>
+          <input type="checkbox" checked={<%= field[:name] %>}
+            onChange={e => set<%= field[:name].split('_').map(&:capitalize).join %>(e.target.checked)}
+            style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }} />
+          <span style={{ fontSize: '0.875rem', color: '#6b7280' }}>{<%= field[:name] %> ? 'Yes' : 'No'}</span>
+        </label>
+<% when 'date' -%>
+        <input type="date" value={<%= field[:name] %>} onChange={e => set<%= field[:name].split('_').map(&:capitalize).join %>(e.target.value)}
+          style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
+<% when 'datetime' -%>
+        <input type="datetime-local" value={<%= field[:name] %>} onChange={e => set<%= field[:name].split('_').map(&:capitalize).join %>(e.target.value)}
+          style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
+<% when 'integer' -%>
+        <input type="number" value={<%= field[:name] %>} onChange={e => set<%= field[:name].split('_').map(&:capitalize).join %>(e.target.value)}
+          step="1" style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
+<% when 'float' -%>
+        <input type="number" value={<%= field[:name] %>} onChange={e => set<%= field[:name].split('_').map(&:capitalize).join %>(e.target.value)}
+          step="any" style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
 <% else -%>
         <input type="text" value={<%= field[:name] %>} onChange={e => set<%= field[:name].split('_').map(&:capitalize).join %>(e.target.value)}
-          style={{ width: '100%', padding: '0.5rem' }} />
+          style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
 <% end -%>
       </div>
 <% end -%>
 
-      <button type="submit">{submitLabel}</button>
-      {' '}
-      <Link to="/<%= @resource_name %>">Cancel</Link>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '1.5rem' }}>
+        <button type="submit" style={{
+          padding: '0.5rem 1.5rem',
+          backgroundColor: '#4f46e5',
+          color: '#fff',
+          border: 'none',
+          borderRadius: '0.375rem',
+          cursor: 'pointer',
+          fontWeight: 500
+        }}>{submitLabel}</button>
+        <Link to="/<%= @resource_name %>" style={{ color: '#4f46e5' }}>Cancel</Link>
+      </div>
     </form>
   )
 }

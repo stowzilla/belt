@@ -18,21 +18,52 @@ export default function <%= @class_name %>sIndex() {
     <main style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1><%= @class_name %>s</h1>
-        <Link to="/<%= @resource_name %>/new">New <%= @class_name %></Link>
+        <Link to="/<%= @resource_name %>/new" style={{
+          padding: '0.5rem 1rem',
+          backgroundColor: '#4f46e5',
+          color: '#fff',
+          borderRadius: '0.375rem',
+          textDecoration: 'none',
+          fontWeight: 500
+        }}>New <%= @class_name %></Link>
       </div>
 
       {<%= @resource_name %>.length === 0 ? (
         <p>No <%= @resource_name %> yet.</p>
       ) : (
-        <ul style={{ listStyle: 'none', padding: 0 }}>
-          {<%= @resource_name %>.map(<%= @singular_name %> => (
-            <li key={<%= @singular_name %>.id} style={{ padding: '0.5rem 0', borderBottom: '1px solid #eee' }}>
-              <Link to={`/<%= @resource_name %>/${<%= @singular_name %>.id}`}>
-                {<%= @singular_name %>.<%= @fields.first&.dig(:name) || 'id' %>}
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1rem' }}>
+          <thead>
+            <tr style={{ borderBottom: '2px solid #e5e7eb', textAlign: 'left' }}>
+<% @fields.each do |field| -%>
+              <th style={{ padding: '0.5rem' }}><%= field[:name].split('_').map(&:capitalize).join(' ') %></th>
+<% end -%>
+              <th style={{ padding: '0.5rem' }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {<%= @resource_name %>.map(<%= @singular_name %> => (
+              <tr key={<%= @singular_name %>.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
+<% @fields.each do |field| -%>
+<% case field[:type] -%>
+<% when 'boolean' -%>
+                <td style={{ padding: '0.5rem' }}>{<%= @singular_name %>.<%= field[:name] %> ? '✓' : '✗'}</td>
+<% when 'date' -%>
+                <td style={{ padding: '0.5rem' }}>{<%= @singular_name %>.<%= field[:name] %> ? new Date(<%= @singular_name %>.<%= field[:name] %>).toLocaleDateString() : '—'}</td>
+<% when 'datetime' -%>
+                <td style={{ padding: '0.5rem' }}>{<%= @singular_name %>.<%= field[:name] %> ? new Date(<%= @singular_name %>.<%= field[:name] %>).toLocaleString() : '—'}</td>
+<% when 'text' -%>
+                <td style={{ padding: '0.5rem', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{<%= @singular_name %>.<%= field[:name] %>}</td>
+<% else -%>
+                <td style={{ padding: '0.5rem' }}>{<%= @singular_name %>.<%= field[:name] %>}</td>
+<% end -%>
+<% end -%>
+                <td style={{ padding: '0.5rem' }}>
+                  <Link to={`/<%= @resource_name %>/${<%= @singular_name %>.id}`}>Show</Link>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       )}
     </main>
   )

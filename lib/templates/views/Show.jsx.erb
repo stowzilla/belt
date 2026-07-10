@@ -27,8 +27,18 @@ export default function <%= @class_name %>Show() {
     <main style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
       <Link to="/<%= @resource_name %>">&larr; Back to <%= @resource_name %></Link>
 <% @fields.each do |field| -%>
-<% if field[:type] == 'text' -%>
-      <div style={{ margin: '1rem 0', whiteSpace: 'pre-wrap' }}>{<%= @singular_name %>.<%= field[:name] %>}</div>
+<% case field[:type] -%>
+<% when 'text' -%>
+      <div style={{ margin: '1rem 0' }}>
+        <strong><%= field[:name].split('_').map(&:capitalize).join(' ') %></strong>
+        <div style={{ whiteSpace: 'pre-wrap', marginTop: '0.25rem' }}>{<%= @singular_name %>.<%= field[:name] %>}</div>
+      </div>
+<% when 'boolean' -%>
+      <p><strong><%= field[:name].split('_').map(&:capitalize).join(' ') %>:</strong> {<%= @singular_name %>.<%= field[:name] %> ? 'Yes' : 'No'}</p>
+<% when 'date' -%>
+      <p><strong><%= field[:name].split('_').map(&:capitalize).join(' ') %>:</strong> {<%= @singular_name %>.<%= field[:name] %> ? new Date(<%= @singular_name %>.<%= field[:name] %>).toLocaleDateString() : '—'}</p>
+<% when 'datetime' -%>
+      <p><strong><%= field[:name].split('_').map(&:capitalize).join(' ') %>:</strong> {<%= @singular_name %>.<%= field[:name] %> ? new Date(<%= @singular_name %>.<%= field[:name] %>).toLocaleString() : '—'}</p>
 <% else -%>
       <p><strong><%= field[:name].split('_').map(&:capitalize).join(' ') %>:</strong> {<%= @singular_name %>.<%= field[:name] %>}</p>
 <% end -%>
