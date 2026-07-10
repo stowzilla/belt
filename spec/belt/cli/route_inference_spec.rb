@@ -16,16 +16,22 @@ RSpec.describe Belt::CLI::RoutesCommand::RouteInference do
   end
 
   describe '#infer_controller' do
-    it 'uses path segment for single-segment routes' do
+    it 'uses gateway name for non-resource single-segment routes' do
       route = build_route(:post, '/webhook')
       gateway = build_gateway(:ebay_events)
-      expect(test_class.send(:infer_controller, route, gateway)).to eq('webhook')
+      expect(test_class.send(:infer_controller, route, gateway)).to eq('ebay_events')
     end
 
-    it 'uses path segment even when lambda matches gateway' do
-      route = build_route(:get, '/unsubscribe')
-      gateway = build_gateway(:customer)
-      expect(test_class.send(:infer_controller, route, gateway)).to eq('unsubscribe')
+    it 'uses gateway name for standalone action routes' do
+      route = build_route(:post, '/signup')
+      gateway = build_gateway(:onboarding)
+      expect(test_class.send(:infer_controller, route, gateway)).to eq('onboarding')
+    end
+
+    it 'uses gateway name for hyphenated standalone routes' do
+      route = build_route(:post, '/resend-verification')
+      gateway = build_gateway(:onboarding)
+      expect(test_class.send(:infer_controller, route, gateway)).to eq('onboarding')
     end
 
     it 'returns gateway name when path has no non-param segments' do
@@ -46,10 +52,16 @@ RSpec.describe Belt::CLI::RoutesCommand::RouteInference do
       expect(test_class.send(:infer_controller, route, gateway)).to eq('operations')
     end
 
-    it 'handles hyphenated paths' do
+    it 'uses gateway name for hyphenated standalone routes too' do
       route = build_route(:get, '/upload-image')
       gateway = build_gateway(:customer)
-      expect(test_class.send(:infer_controller, route, gateway)).to eq('upload_image')
+      expect(test_class.send(:infer_controller, route, gateway)).to eq('customer')
+    end
+
+    it 'uses first segment for multi-segment non-resource routes' do
+      route = build_route(:get, '/items/:id/upload-image')
+      gateway = build_gateway(:customer)
+      expect(test_class.send(:infer_controller, route, gateway)).to eq('items')
     end
   end
 end

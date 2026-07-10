@@ -16,6 +16,10 @@ module Belt
 
           return non_param.map { |s| s.gsub('-', '_') }.join('/') if route.resource? && nested_resource?(segments)
 
+          # For non-resource routes with a single segment (e.g., post '/signup' in :onboarding),
+          # the segment is the action name, not the controller. Use the gateway name as controller.
+          return gateway.name if !route.resource? && non_param.length == 1
+
           non_param.first.gsub('-', '_')
         end
 
