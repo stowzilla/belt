@@ -270,14 +270,35 @@ module Belt
 
         content = File.read(routes_file)
         tables_arg = @fields.any? ? ", tables: [:#{@resource_name}]" : ''
+        resource_line = "resources :#{@resource_name}#{tables_arg}"
 
-        # Insert before the closing `end` of the namespace block
+        # Replace the commented placeholder if it exists
         if content.include?('# resources :posts')
-          content.sub!('# resources :posts', "resources :#{@resource_name}#{tables_arg}")
-        elsif content.match?(/namespace :\w+[^\n]*do\n(\s+#[^\n]*\n)*\s+end/)
-          content.sub!(/^(\s+)(end\s*\z)/m, "\\1  resources :#{@resource_name}#{tables_arg}\n\\1\\2")
+          content.sub!('# resources :posts', resource_line)
         else
-          content.sub!(/^(\s*end\s*\z)/m, "    resources :#{@resource_name}#{tables_arg}\n\\1")
+          # Find the target namespace block and insert before its closing `end`
+          # Match: `namespace :<name> do` ... `end` (the first `end` at the same indent level)
+          namespace_pattern = /^(\s*)namespace :#{Regexp.escape(@app_name)}\b[^\n]*do\s*\n(.*?)^\1end/m
+
+          if content.match?(namespace_pattern)
+            content.sub!(namespace_pattern) do |match|
+              indent = $1
+              # Insert the resource line before the namespace's closing `end`
+              match.sub(/^(#{indent})end\z/m, "#{indent}  #{resource_line}\n#{indent}end")
+            end
+          else
+            # Fallback: find any single namespace block and insert into it
+            single_ns_pattern = /^(\s*)namespace :\w+\b[^\n]*do\s*\n(.*?)^\1end/m
+            if content.match?(single_ns_pattern)
+              content.sub!(single_ns_pattern) do |match|
+                indent = $1
+                match.sub(/^(#{indent})end\z/m, "#{indent}  #{resource_line}\n#{indent}end")
+              end
+            else
+              # No namespace block found at all — insert at top level before final end
+              content.sub!(/^(\s*end\s*)\z/m, "  #{resource_line}\n\\1")
+            end
+          end
         end
 
         File.write(routes_file, content)
