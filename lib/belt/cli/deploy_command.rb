@@ -127,6 +127,9 @@ module Belt
 
         puts "\n✅ Deployed #{@env} successfully!"
         print_outputs(env_dir)
+
+        deploy_frontend_if_exists
+
         puts "\n   Run `belt server` to view your app locally (auto-connects to the deployed API)."
       end
 
@@ -477,6 +480,18 @@ module Belt
 
       def cleanup_plan
         File.delete('tfplan') if File.exist?('tfplan')
+      end
+
+      def deploy_frontend_if_exists
+        frontend_dir = File.join(@project_root, 'frontend')
+        return unless Dir.exist?(frontend_dir) && File.exist?(File.join(frontend_dir, 'package.json'))
+
+        puts "\n━━━ frontend deploy ━━━"
+        require_relative 'frontend_deploy_command'
+        Belt::CLI::FrontendDeployCommand.new(@env).run
+      rescue StandardError => e
+        puts "\n  ⚠ Frontend deploy failed: #{e.message}"
+        puts "    Run `belt deploy frontend #{@env}` manually to retry."
       end
 
       def print_outputs(env_dir)

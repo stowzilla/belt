@@ -54,14 +54,25 @@ module Belt
 
         puts "\n✓ Frontend (#{@framework}) created in frontend/"
 
+        install_dependencies(dest_dir)
         setup_frontend_infra_for_existing_environments
 
         puts "\nNext steps:"
-        puts '  cd frontend && npm install && npm run dev'
-        puts '  belt deploy frontend <env>   # Build and deploy to AWS'
+        puts '  belt server                   # Start local dev server'
+        puts '  belt deploy                   # Deploy everything to AWS'
       end
 
       private
+
+      def install_dependencies(dest_dir)
+        puts "\n  Installing npm dependencies..."
+        success = system('npm', 'install', '--prefix', dest_dir, '--loglevel', 'error')
+        if success
+          puts "  ✓ Dependencies installed"
+        else
+          puts "  ⚠ npm install failed — run `cd #{dest_dir} && npm install` manually"
+        end
+      end
 
       def setup_frontend_infra_for_existing_environments
         environments = detect_environments
