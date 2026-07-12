@@ -178,28 +178,11 @@ module Belt
         return if @environments.empty?
 
         Dir.chdir(@app_name) do
-          # Resolve bucket name — include account ID + region if AWS credentials are available
-          if @bucket
-            @resolved_bucket = @bucket
-          elsif aws_configured?
-            region = detect_region
-            @resolved_bucket = s3_safe_name("#{@app_name}-terraform-state-#{@aws_account_id}-#{region}")
-          else
-            @resolved_bucket = s3_safe_name("#{@app_name}-terraform-state")
-          end
-
-          # Update backend.tf files with the resolved bucket name
-          @environments.each do |env_name|
-            backend_file = "infrastructure/#{env_name}/backend.tf"
-            next unless File.exist?(backend_file)
-
-            content = File.read(backend_file)
-            updated = content.gsub(/bucket\s*=\s*"[^"]+"/, "bucket  = \"#{@resolved_bucket}\"")
-            File.write(backend_file, updated) if updated != content
-          end
+          # Shared bucket: one per AWS account, all belt apps share it
+          @resolved_bucket = @bucket || 'belt-terraform-state'
 
           # Attempt to actually create the bucket if credentials are available
-          if @aws_account_id
+          if aws_configured?
             puts "\n  Setting up Terraform state bucket..."
             begin
               Belt::CLI::SetupCommand.new(["--bucket", @resolved_bucket]).run_state_setup
@@ -210,6 +193,7 @@ module Belt
             end
           else
             puts "\n  State bucket: #{@resolved_bucket}"
+            puts "  State keys:   #{s3_safe_name(@app_name)}/<env>/terraform.tfstate"
             if @aws_error&.include?('ForbiddenException') || @aws_error&.include?('AccessDenied')
               puts "  ⚠ AWS credentials found but access denied — check your profile/role configuration."
               puts "    #{@aws_error}" if @aws_error
@@ -220,14 +204,6 @@ module Belt
             @state_setup_succeeded = false
           end
         end
-      end
-
-      def detect_region
-        Dir.glob('infrastructure/*/backend.tf').each do |f|
-          match = File.read(f).match(/region\s*=\s*"([^"]+)"/)
-          return match[1] if match
-        end
-        'us-east-1'
       end
 
       def aws_configured?

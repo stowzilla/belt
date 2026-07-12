@@ -61,7 +61,7 @@ module Belt
           exit 1
         end
 
-        # Re-resolve bucket name with account ID suffix now that we have credentials
+        # Resolve final bucket name now that we have credentials
         @bucket_name = resolve_bucket_name unless @custom_bucket
 
         @bucket_name = interactive_bucket_selection if @select_mode
@@ -142,13 +142,7 @@ module Belt
         if @custom_bucket
           @custom_bucket
         else
-          base = if @env_name
-                   "#{@app_name}-terraform-state-#{@env_name}"
-                 else
-                   "#{@app_name}-terraform-state"
-                 end
-          base = "#{base}-#{@aws_account_id}-#{@region}" if @aws_account_id
-          s3_safe_name(base)
+          'belt-terraform-state'
         end
       end
 
