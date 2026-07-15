@@ -35,15 +35,17 @@ resource "aws_acm_certificate" "app" {
 }
 
 # DNS validation record for the certificate.
-# Key by resource_record_name: apex + wildcard SAN usually share one CNAME.
-# Keying by domain_name creates two resources fighting over the same record.
+# Apex + wildcard SAN usually share one CNAME — distinct() collapses them so
+# for_each does not error on duplicate keys and Route53 is not double-written.
 resource "aws_route53_record" "cert_validation" {
   for_each = local.dns_enabled ? {
-    for dvo in aws_acm_certificate.app[0].domain_validation_options : dvo.resource_record_name => {
-      name   = dvo.resource_record_name
-      type   = dvo.resource_record_type
-      record = dvo.resource_record_value
-    }
+    for pair in distinct([
+      for dvo in aws_acm_certificate.app[0].domain_validation_options : {
+        name   = dvo.resource_record_name
+        type   = dvo.resource_record_type
+        record = dvo.resource_record_value
+      }
+    ]) : pair.name => pair
   } : {}
 
   allow_overwrite = true
