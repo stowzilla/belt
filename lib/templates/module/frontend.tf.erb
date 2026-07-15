@@ -8,8 +8,9 @@ resource "random_string" "frontend_suffix" {
 }
 
 # S3 bucket for frontend static assets
+# S3 bucket names are DNS-compliant — no underscores (Ruby app names often have them)
 resource "aws_s3_bucket" "frontend" {
-  bucket = "${var.app_name}-frontend-${var.environment}-${random_string.frontend_suffix.result}"
+  bucket = "${replace(lower(var.app_name), "_", "-")}-frontend-${var.environment}-${random_string.frontend_suffix.result}"
 
   lifecycle {
     ignore_changes = [bucket]

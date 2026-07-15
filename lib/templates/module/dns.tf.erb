@@ -34,21 +34,24 @@ resource "aws_acm_certificate" "app" {
   }
 }
 
-# DNS validation record for the certificate
+# DNS validation record for the certificate.
+# Key by resource_record_name: apex + wildcard SAN usually share one CNAME.
+# Keying by domain_name creates two resources fighting over the same record.
 resource "aws_route53_record" "cert_validation" {
   for_each = local.dns_enabled ? {
-    for dvo in aws_acm_certificate.app[0].domain_validation_options : dvo.domain_name => {
+    for dvo in aws_acm_certificate.app[0].domain_validation_options : dvo.resource_record_name => {
       name   = dvo.resource_record_name
       type   = dvo.resource_record_type
       record = dvo.resource_record_value
     }
   } : {}
 
-  zone_id = aws_route53_zone.app[0].zone_id
-  name    = each.value.name
-  type    = each.value.type
-  ttl     = 300
-  records = [each.value.record]
+  allow_overwrite = true
+  zone_id         = aws_route53_zone.app[0].zone_id
+  name            = each.value.name
+  type            = each.value.type
+  ttl             = 300
+  records         = [each.value.record]
 }
 
 resource "aws_acm_certificate_validation" "app" {
