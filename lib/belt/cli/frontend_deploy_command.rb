@@ -60,9 +60,29 @@ module Belt
         run!(*install_cmd, chdir: 'frontend')
 
         puts '🏗️  Building frontend...'
-        api_url = fetch_api_url
-        env = api_url ? { 'VITE_API_URL' => api_url } : {}
+        env = frontend_build_env
         run!(env, 'npm', 'run', 'build', chdir: 'frontend')
+      end
+
+      # Inject terraform outputs as Vite env vars when present.
+      def frontend_build_env
+        env = {}
+        api_url = fetch_api_url
+        env['VITE_API_URL'] = api_url if api_url
+
+        pool_id = fetch_tf_output('cognito_user_pool_id')
+        client_id = fetch_tf_output('cognito_user_pool_client_id')
+        region = fetch_tf_output('cognito_region')
+
+        env['VITE_COGNITO_USER_POOL_ID'] = pool_id if pool_id
+        env['VITE_COGNITO_CLIENT_ID'] = client_id if client_id
+        env['VITE_AWS_REGION'] = region if region
+
+        if pool_id || client_id
+          puts "🔐 Cognito config: pool=#{pool_id || '(missing)'} client=#{client_id || '(missing)'}"
+        end
+
+        env
       end
 
       def sync_to_s3
@@ -95,23 +115,27 @@ module Belt
       end
 
       def fetch_api_url
-        output, status = Open3.capture2('terraform', 'output', '-raw', 'api_url', chdir: @env_dir)
-        status.success? && !output.strip.empty? ? output.strip : nil
+        fetch_tf_output('api_url')
       end
 
       def fetch_bucket_name
-        output, status = Open3.capture2('terraform', 'output', '-raw', 'frontend_bucket_name', chdir: @env_dir)
-        status.success? && !output.strip.empty? ? output.strip : nil
+        fetch_tf_output('frontend_bucket_name')
       end
 
       def fetch_distribution_id
-        output, status = Open3.capture2('terraform', 'output', '-raw', 'frontend_distribution_id', chdir: @env_dir)
-        status.success? && !output.strip.empty? ? output.strip : nil
+        fetch_tf_output('frontend_distribution_id')
       end
 
       def fetch_frontend_url
-        output, status = Open3.capture2('terraform', 'output', '-raw', 'frontend_url', chdir: @env_dir)
-        status.success? && !output.strip.empty? ? output.strip : nil
+        fetch_tf_output('frontend_url')
+      end
+
+      def fetch_tf_output(name)
+        output, status = Open3.capture2('terraform', 'output', '-raw', name, chdir: @env_dir)
+        return nil unless status.success?
+
+        value = output.strip
+        value.empty? || value == 'null' ? nil : value
       end
 
       def run!(*args, **)
