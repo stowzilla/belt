@@ -9,6 +9,7 @@ require_relative 'cli/destroy_command'
 require_relative 'cli/frontend_command'
 require_relative 'cli/frontend_setup_command'
 require_relative 'cli/frontend_deploy_command'
+require_relative 'cli/frontend_env_command'
 require_relative 'cli/views_command'
 require_relative 'cli/setup_command'
 require_relative 'cli/terraform_command'
@@ -29,9 +30,11 @@ module Belt
       %w[tasks --tasks -T] => Belt::CLI::TasksCommand,
       'setup' => Belt::CLI::SetupCommand,
       'deploy' => Belt::CLI::DeployCommand,
+      'frontend' => Belt::CLI::FrontendEnvCommand,
       %w[server s] => Belt::CLI::ServerCommand,
       %w[version --version -v] => ->(_args) { puts "Belt #{Belt::VERSION}" }
     }.freeze
+
 
     COMMANDS = COMMANDS_DEFINITION.each_with_object({}) do |(keys, handler), hash|
       Array(keys).each { |key| hash[key] = handler }
@@ -99,7 +102,9 @@ module Belt
           s                                           Alias for server
           deploy [environment]                        Deploy to AWS (init → plan → apply)
           deploy frontend <env>                       Build and deploy frontend to AWS
+          frontend env <env>                          Write frontend/.env from terraform outputs
           routes [-g PATTERN] [-f json]               Show route definitions
+
           console                                     Start an interactive console (IRB)
           c                                           Alias for console
           tasks [-g PATTERN] [-a]                     List available rake tasks
@@ -133,6 +138,7 @@ module Belt
           belt deploy                   # Deploy dev to AWS
           belt deploy prod --auto       # Deploy prod without confirmation
           belt deploy frontend wups
+          belt frontend env wups        # Smart-merge TF outputs into frontend/.env
           belt setup frontend wups
           belt apply wups
           belt tasks                    # list all rake tasks
