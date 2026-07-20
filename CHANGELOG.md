@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.1.11
+
+### Route DSL
+
+- `resources` / `resource` honor `scope path:` (and nested path scopes).  
+  Example: `scope path: "admin", auth: :cognito { resources :users }` → `/admin/users…` with Cognito auth.
+- Nested `scope path:` segments stack (`a` then `b` → `a/b`) instead of replacing.
+- `scope controller:` is applied to `resources` / `resource` the same way as verb routes.
+- Controller inference for multi-segment resource paths joins segments (`/admin/users` → `admin/users`), matching nested-resource convention.
+
 ## 0.1.10
 
 ### Frontend env map

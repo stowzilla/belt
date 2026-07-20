@@ -174,20 +174,22 @@ module Belt
       resource_name = name.to_s
       singular = singularize(resource_name)
       param_name = options[:param] || "#{singular}_id"
+      base_path = resource_base_path(resource_name, options)
+      options = options.except(:path_prefix)
       options = auto_infer_tables(resource_name, options)
       resource_options = options.merge(route_type: :resources)
       actions = determine_actions(options)
 
-      add_route(:get, "/#{resource_name}", resource_options) if actions.include?(:index)
-      add_route(:post, "/#{resource_name}", resource_options) if actions.include?(:create)
-      add_route(:get, "/#{resource_name}/{#{param_name}}", resource_options) if actions.include?(:show)
-      add_route(:put, "/#{resource_name}/{#{param_name}}", resource_options) if actions.include?(:update)
-      add_route(:delete, "/#{resource_name}/{#{param_name}}", resource_options) if actions.include?(:destroy)
+      add_route(:get, base_path, resource_options) if actions.include?(:index)
+      add_route(:post, base_path, resource_options) if actions.include?(:create)
+      add_route(:get, "#{base_path}/{#{param_name}}", resource_options) if actions.include?(:show)
+      add_route(:put, "#{base_path}/{#{param_name}}", resource_options) if actions.include?(:update)
+      add_route(:delete, "#{base_path}/{#{param_name}}", resource_options) if actions.include?(:destroy)
 
       return unless block_given?
 
-      collection_prefix = "/#{resource_name}"
-      member_prefix = "/#{resource_name}/{#{param_name}}"
+      collection_prefix = base_path
+      member_prefix = "#{base_path}/{#{param_name}}"
       resource_tables = Array(options[:tables] || [])
       inherited_tables = (@default_tables + resource_tables).uniq
       inherited_auth = options[:auth] || @default_auth
@@ -199,16 +201,24 @@ module Belt
 
     def resource(name, options = {})
       resource_name = name.to_s
+      base_path = resource_base_path(resource_name, options)
+      options = options.except(:path_prefix)
       actions = determine_actions(options, default: %i[show update destroy])
       resource_options = options.merge(route_type: :resource)
 
-      add_route(:get, "/#{resource_name}", resource_options) if actions.include?(:show)
-      add_route(:put, "/#{resource_name}", resource_options) if actions.include?(:update)
-      add_route(:delete, "/#{resource_name}", resource_options) if actions.include?(:destroy)
-      add_route(:post, "/#{resource_name}", resource_options) if actions.include?(:create)
+      add_route(:get, base_path, resource_options) if actions.include?(:show)
+      add_route(:put, base_path, resource_options) if actions.include?(:update)
+      add_route(:delete, base_path, resource_options) if actions.include?(:destroy)
+      add_route(:post, base_path, resource_options) if actions.include?(:create)
     end
 
     private
+
+    # Builds "/users" or "/admin/users" when path_prefix is set (from scope path:).
+    def resource_base_path(resource_name, options)
+      prefix = options[:path_prefix].to_s.gsub(%r{^/|/$}, '')
+      prefix.empty? ? "/#{resource_name}" : "/#{prefix}/#{resource_name}"
+    end
 
     def add_route(method, path, options = {})
       lambda_to_use = options[:lambda] || @current_lambda_context || @default_lambda
@@ -308,7 +318,11 @@ module Belt
         previous_tables = @scope_tables
         previous_controller = @scope_controller
 
-        @scope_prefix = options[:path] || @scope_prefix
+        # Nest path segments (Rails-style): scope path: "a" { scope path: "b" } → "a/b"
+        if options.key?(:path)
+          segment = options[:path].to_s.gsub(%r{^/|/$}, '')
+          @scope_prefix = @scope_prefix.to_s.empty? ? segment : "#{@scope_prefix}/#{segment}"
+        end
         @scope_module = options[:module] || @scope_module
         @scope_auth = options[:auth] || @scope_auth
         @scope_tables = (@scope_tables + Array(options[:tables] || [])).uniq
@@ -340,11 +354,13 @@ module Belt
 
       def resources(name, options = {}, &)
         options = apply_scope_options(options)
+        options = options.merge(path_prefix: @scope_prefix) unless @scope_prefix.to_s.empty?
         @gateway.resources(name, options, &)
       end
 
       def resource(name, options = {})
         options = apply_scope_options(options)
+        options = options.merge(path_prefix: @scope_prefix) unless @scope_prefix.to_s.empty?
         @gateway.resource(name, options)
       end
 
@@ -400,6 +416,7 @@ module Belt
         result = options.dup
         result[:auth] ||= @scope_auth if @scope_auth
         result[:lambda] ||= @scope_module if @scope_module
+        result[:controller] ||= @scope_controller if @scope_controller
         result[:tables] = (@scope_tables + Array(result[:tables] || [])).uniq if @scope_tables.any? || result[:tables]
         result
       end
