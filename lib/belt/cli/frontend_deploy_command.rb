@@ -4,6 +4,7 @@ require 'shellwords'
 require 'open3'
 require_relative 'app_detection'
 require_relative 'env_resolver'
+require_relative 'frontend_env_map'
 
 module Belt
   module CLI
@@ -60,9 +61,16 @@ module Belt
         run!(*install_cmd, chdir: 'frontend')
 
         puts '🏗️  Building frontend...'
-        api_url = fetch_api_url
-        env = api_url ? { 'VITE_API_URL' => api_url } : {}
+        env = frontend_build_env
+        if env.any?
+          puts "   Injecting env: #{env.keys.sort.join(', ')}"
+        end
         run!(env, 'npm', 'run', 'build', chdir: 'frontend')
+      end
+
+      # Resolve build env from frontend/env.yml map (or default VITE_API_URL ← api_url).
+      def frontend_build_env
+        FrontendEnvMap.new(@env, env_dir: @env_dir).process_env
       end
 
       def sync_to_s3
@@ -94,24 +102,24 @@ module Belt
         puts '✅ CloudFront cache invalidated'
       end
 
-      def fetch_api_url
-        output, status = Open3.capture2('terraform', 'output', '-raw', 'api_url', chdir: @env_dir)
-        status.success? && !output.strip.empty? ? output.strip : nil
-      end
-
       def fetch_bucket_name
-        output, status = Open3.capture2('terraform', 'output', '-raw', 'frontend_bucket_name', chdir: @env_dir)
-        status.success? && !output.strip.empty? ? output.strip : nil
+        fetch_tf_output('frontend_bucket_name')
       end
 
       def fetch_distribution_id
-        output, status = Open3.capture2('terraform', 'output', '-raw', 'frontend_distribution_id', chdir: @env_dir)
-        status.success? && !output.strip.empty? ? output.strip : nil
+        fetch_tf_output('frontend_distribution_id')
       end
 
       def fetch_frontend_url
-        output, status = Open3.capture2('terraform', 'output', '-raw', 'frontend_url', chdir: @env_dir)
-        status.success? && !output.strip.empty? ? output.strip : nil
+        fetch_tf_output('frontend_url')
+      end
+
+      def fetch_tf_output(name)
+        output, status = Open3.capture2('terraform', 'output', '-raw', name, chdir: @env_dir)
+        return nil unless status.success?
+
+        value = output.strip
+        value.empty? || value == 'null' ? nil : value
       end
 
       def run!(*args, **)

@@ -3,6 +3,7 @@
 require 'base64'
 require 'json'
 require_relative 'app_detection'
+require_relative 'frontend_env_map'
 require_relative 'terraform_command'
 
 module Belt
@@ -50,13 +51,14 @@ module Belt
 
           Behavior:
             • If frontend/ exists → runs the frontend dev server (npm run dev)
-              Automatically sets VITE_API_URL from terraform outputs if deployed.
+              Injects env from frontend/env.yml (or default VITE_API_URL) using
+              terraform outputs when available.
             • If no frontend → serves the welcome page via a local HTTP server
               After deploy, shows live API URL and deployment status.
 
           Note: The backend is serverless (AWS Lambda). Use `belt deploy` to deploy
-          your backend to AWS. Local frontend development automatically points to
-          your deployed API via VITE_API_URL.
+          your backend to AWS. Local frontend development reads the env map (or
+          frontend/.env via `belt frontend env <env>`).
 
           Examples:
             belt server                 # Start on port #{DEFAULT_PORT}
@@ -84,22 +86,38 @@ module Belt
 
       def run_frontend_dev_server
         puts "🚀 Starting frontend dev server on port #{@port}..."
-        if @api_url
-          puts "   Backend API: #{@api_url}"
+        build_env = frontend_process_env
+        api_url = build_env['VITE_API_URL'] || build_env['REACT_APP_API_URL'] ||
+                  build_env['NEXT_PUBLIC_API_URL'] || @api_url
+        if api_url
+          puts "   Backend API: #{api_url}"
         else
           puts '   Backend is serverless — deploy with `belt deploy` to set up AWS resources.'
+        end
+        if build_env.any?
+          puts "   Env: #{build_env.keys.sort.join(', ')}"
         end
         puts ''
 
         open_browser_later if @open_browser
 
-        env = { 'PORT' => @port.to_s }
-        env['VITE_API_URL'] = @api_url if @api_url
+        env = { 'PORT' => @port.to_s }.merge(build_env)
 
         # Prefer the dev script with the port flag for Vite-based setups
         Dir.chdir('frontend') do
           exec(env, 'npx', 'vite', '--port', @port.to_s)
         end
+      end
+
+      # Process env from the declarative map (or default VITE_API_URL), if an env is available.
+      def frontend_process_env
+        env_name = @deploy_env || ENV.fetch('BELT_ENV', nil) || TerraformCommand.list_environments.first
+        return {} unless env_name
+
+        FrontendEnvMap.new(env_name).process_env
+      rescue StandardError
+        # Fall back to legacy api_url detection if map resolution fails
+        @api_url ? { 'VITE_API_URL' => @api_url } : {}
       end
 
       def run_welcome_server

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.1.10
+
+### Frontend env map
+
+- Declarative map (`frontend/env.yml` or `.belt/frontend_env.yml`) maps process env names → terraform output names (framework-agnostic: `VITE_*`, `REACT_APP_*`, `NEXT_PUBLIC_*`, etc.)
+- `belt deploy frontend <env>` injects mapped vars into `npm run build` process env
+- `belt frontend env <env>` smart-merges mapped keys into `frontend/.env` (preserves unmapped keys/comments; missing TF outputs warn and do not clobber)
+- No map → previous default: only `VITE_API_URL` ← `api_url`
+- `belt server` uses the same map for local process env
+
 ## 0.1.4
 
 ### Bug fixes
