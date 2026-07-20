@@ -1,6 +1,13 @@
 output "api_url" {
   description = "API Gateway base URL (custom domain if configured, otherwise default)"
-  value       = var.domain != "" ? "https://${local.api_domain}" : values(conveyor_belt.main.api_gateway_urls)[0]
+  # Conveyor-belt maps each gateway name as the custom-domain base path (e.g. "api").
+  # Bare https://api.<env>.domain returns API Gateway 403; the SPA base URL must
+  # include that path so /users → https://api.../api/users.
+  value = var.domain != "" ? (
+    length(conveyor_belt.main.base_path_mappings) > 0
+    ? "https://${local.api_domain}/${values(conveyor_belt.main.base_path_mappings)[0]}"
+    : "https://${local.api_domain}"
+  ) : values(conveyor_belt.main.api_gateway_urls)[0]
 }
 
 output "api_urls" {
