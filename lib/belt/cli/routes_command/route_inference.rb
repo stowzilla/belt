@@ -14,7 +14,11 @@ module Belt
           non_param = segments.reject { |s| s.start_with?(':', '{') }
           return gateway.name if non_param.empty?
 
-          return non_param.map { |s| s.gsub('-', '_') }.join('/') if route.resource? && nested_resource?(segments)
+          # Nested resources (/posts/{id}/comments) and scoped resources (/admin/users):
+          # join non-param segments → posts/comments, admin/users
+          if route.resource? && non_param.length > 1
+            return non_param.map { |s| s.gsub('-', '_') }.join('/')
+          end
 
           # For non-resource routes with a single segment (e.g., post '/signup' in :onboarding),
           # the segment is the action name, not the controller. Use the gateway name as controller.
