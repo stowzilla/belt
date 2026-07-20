@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.10
+
 ### Frontend env map
 
 - Declarative map (`frontend/env.yml` or `.belt/frontend_env.yml`) maps process env names → terraform output names (framework-agnostic: `VITE_*`, `REACT_APP_*`, `NEXT_PUBLIC_*`, etc.)
