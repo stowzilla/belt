@@ -1,6 +1,6 @@
 AllCops:
   NewCops: enable
-  TargetRubyVersion: 3.2
+  TargetRubyVersion: 3.3
   SuggestExtensions: false
 
 Metrics/MethodLength:
@@ -8,18 +8,27 @@ Metrics/MethodLength:
   CountAsOne: ['array', 'hash', 'heredoc']
   Exclude:
     - 'lib/belt/lambda_handler.rb'
+    - 'lib/belt/cli/**/*'
 
 Metrics/AbcSize:
   Max: 40
+  Exclude:
+    - 'lib/belt/cli/**/*'
 
 Metrics/CyclomaticComplexity:
   Max: 15
+  Exclude:
+    - 'lib/belt/cli/**/*'
 
 Metrics/PerceivedComplexity:
   Max: 15
+  Exclude:
+    - 'lib/belt/cli/**/*'
 
 Metrics/ClassLength:
   Max: 250
+  Exclude:
+    - 'lib/belt/cli/**/*'
 
 Metrics/BlockLength:
   Exclude:

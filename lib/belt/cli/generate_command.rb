@@ -139,14 +139,15 @@ module Belt
         errors << 'must only contain letters, numbers, and underscores' unless name.match?(/\A[a-zA-Z][a-zA-Z0-9_]*\z/)
         errors << 'must not start or end with an underscore' if name.match?(/\A_|_\z/)
         errors << 'must not contain consecutive underscores' if name.include?('__')
-        errors << "is a reserved name" if RESERVED_NAMES.include?(Belt::Inflector.singularize(name.downcase))
-        errors << "is a reserved name" if RESERVED_NAMES.include?(name.downcase)
+        errors << 'is a reserved name' if RESERVED_NAMES.include?(Belt::Inflector.singularize(name.downcase))
+        errors << 'is a reserved name' if RESERVED_NAMES.include?(name.downcase)
 
         return if errors.empty?
 
         puts "\n✗ Invalid #{generator} name '#{name}':"
         errors.uniq.each { |e| puts "  - #{e}" }
-        puts "\nName must start with a letter, be at least 2 characters, and contain only letters, numbers, and single underscores."
+        puts "\nName must start with a letter, be at least 2 characters, " \
+             'and contain only letters, numbers, and single underscores.'
         exit 1
       end
 
@@ -199,13 +200,13 @@ module Belt
         if info[:options].any?
           puts "\nOptions:"
           info[:options].each do |flag, desc|
-            puts "  %-20s %s" % [flag, desc]
+            puts format('  %<flag>-20s %<desc>s', flag: flag, desc: desc)
           end
         end
 
         puts "\nField Types:"
         puts "  #{FIELD_TYPES.join(', ')}"
-        puts "  (defaults to string if omitted)"
+        puts '  (defaults to string if omitted)'
 
         puts "\nExamples:"
         info[:examples].each do |cmd, desc|
@@ -249,7 +250,9 @@ module Belt
       def check_resource_collision!
         conflicts = []
         conflicts << "lambda/models/#{@singular_name}.rb" if File.exist?("lambda/models/#{@singular_name}.rb")
-        conflicts << "lambda/controllers/#{@app_name}/#{@resource_name}_controller.rb" if File.exist?("lambda/controllers/#{@app_name}/#{@resource_name}_controller.rb")
+        if File.exist?("lambda/controllers/#{@app_name}/#{@resource_name}_controller.rb")
+          conflicts << "lambda/controllers/#{@app_name}/#{@resource_name}_controller.rb"
+        end
 
         schema_file = 'infrastructure/schema.tf.rb'
         if File.exist?(schema_file) && File.read(schema_file).match?(/^\s*model :#{Regexp.escape(@singular_name)}\b/)
@@ -348,7 +351,7 @@ module Belt
 
           if content.match?(namespace_pattern)
             content.sub!(namespace_pattern) do |match|
-              indent = $1
+              indent = ::Regexp.last_match(1)
               # Insert the resource line before the namespace's closing `end`
               match.sub(/^(#{indent})end\z/m, "#{indent}  #{resource_line}\n#{indent}end")
             end
@@ -357,7 +360,7 @@ module Belt
             single_ns_pattern = /^(\s*)namespace :\w+\b[^\n]*do\s*\n(.*?)^\1end/m
             if content.match?(single_ns_pattern)
               content.sub!(single_ns_pattern) do |match|
-                indent = $1
+                indent = ::Regexp.last_match(1)
                 match.sub(/^(#{indent})end\z/m, "#{indent}  #{resource_line}\n#{indent}end")
               end
             else

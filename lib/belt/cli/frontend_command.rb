@@ -68,7 +68,7 @@ module Belt
         puts "\n  Installing npm dependencies..."
         success = system('npm', 'install', '--prefix', dest_dir, '--loglevel', 'error')
         if success
-          puts "  ✓ Dependencies installed"
+          puts '  ✓ Dependencies installed'
         else
           puts "  ⚠ npm install failed — run `cd #{dest_dir} && npm install` manually"
         end

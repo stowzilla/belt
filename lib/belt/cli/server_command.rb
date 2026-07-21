@@ -94,9 +94,7 @@ module Belt
         else
           puts '   Backend is serverless — deploy with `belt deploy` to set up AWS resources.'
         end
-        if build_env.any?
-          puts "   Env: #{build_env.keys.sort.join(', ')}"
-        end
+        puts "   Env: #{build_env.keys.sort.join(', ')}" if build_env.any?
         puts ''
 
         open_browser_later if @open_browser
@@ -121,24 +119,20 @@ module Belt
       end
 
       def run_welcome_server
+        puts "🚀 Serving Belt welcome page on http://localhost:#{@port}"
         if @api_url
-          puts "🚀 Serving Belt welcome page on http://localhost:#{@port}"
           puts "   Backend API: #{@api_url}"
-          puts ''
-          puts '   Tip: Run `belt generate frontend react` to scaffold a frontend app.'
-          puts ''
         else
-          puts "🚀 Serving Belt welcome page on http://localhost:#{@port}"
           puts '   No deployment detected — showing pre-deploy welcome page.'
           puts '   Backend is serverless — deploy with `belt deploy` to set up AWS resources.'
-          puts ''
-          puts '   Tip: Run `belt generate frontend react` to scaffold a frontend app.'
-          puts ''
         end
+        puts ''
+        puts '   Tip: Run `belt generate frontend react` to scaffold a frontend app.'
+        puts ''
 
         require 'webrick'
 
-        server = WEBrick::HTTPServer.new(Port: @port, Logger: WEBrick::Log.new('/dev/null'), AccessLog: [])
+        server = WEBrick::HTTPServer.new(Port: @port, Logger: WEBrick::Log.new(File::NULL), AccessLog: [])
 
         server.mount_proc '/' do |_req, res|
           res['Content-Type'] = 'text/html; charset=utf-8'

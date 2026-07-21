@@ -62,9 +62,7 @@ module Belt
 
         puts '🏗️  Building frontend...'
         env = frontend_build_env
-        if env.any?
-          puts "   Injecting env: #{env.keys.sort.join(', ')}"
-        end
+        puts "   Injecting env: #{env.keys.sort.join(', ')}" if env.any?
         run!(env, 'npm', 'run', 'build', chdir: 'frontend')
       end
 

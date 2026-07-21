@@ -52,15 +52,15 @@ module Belt
 
         puts "\n✓ Environment '#{@env_name}' created!"
 
-        unless @quiet
-          puts "\nNext steps:"
-          puts "  cd #{dest_dir}"
-          puts '  terraform init'
-          puts '  terraform plan'
-          puts '  terraform apply'
-          puts "\nTo configure a custom domain, set `domain` in #{dest_dir}/terraform.tfvars:"
-          puts "  domain = \"myapp.com\""
-        end
+        return if @quiet
+
+        puts "\nNext steps:"
+        puts "  cd #{dest_dir}"
+        puts '  terraform init'
+        puts '  terraform plan'
+        puts '  terraform apply'
+        puts "\nTo configure a custom domain, set `domain` in #{dest_dir}/terraform.tfvars:"
+        puts '  domain = "myapp.com"'
       end
 
       private

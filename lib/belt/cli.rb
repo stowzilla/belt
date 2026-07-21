@@ -35,7 +35,6 @@ module Belt
       %w[version --version -v] => ->(_args) { puts "Belt #{Belt::VERSION}" }
     }.freeze
 
-
     COMMANDS = COMMANDS_DEFINITION.each_with_object({}) do |(keys, handler), hash|
       Array(keys).each { |key| hash[key] = handler }
     end.freeze
@@ -56,9 +55,7 @@ module Belt
         if args.empty? || args.first =~ /\A-/
           # belt destroy --help → DestroyCommand help
           # belt destroy (no args) → terraform destroy (needs env)
-          if args.include?('--help') || args.include?('-h')
-            return DestroyCommand.run(args)
-          end
+          return DestroyCommand.run(args) if args.include?('--help') || args.include?('-h')
         elsif DestroyCommand::GENERATORS.include?(args.first)
           return DestroyCommand.run(args)
         end

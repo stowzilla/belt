@@ -185,7 +185,7 @@ module Belt
           if aws_configured?
             puts "\n  Setting up Terraform state bucket..."
             begin
-              Belt::CLI::SetupCommand.new(["--bucket", @resolved_bucket]).run_state_setup
+              Belt::CLI::SetupCommand.new(['--bucket', @resolved_bucket]).run_state_setup
               @state_setup_succeeded = true
             rescue SystemExit
               puts '  ⚠ State bucket setup encountered an issue — run `belt setup state` to retry.'
@@ -195,7 +195,7 @@ module Belt
             puts "\n  State bucket: #{@resolved_bucket}"
             puts "  State keys:   #{s3_safe_name(@app_name)}/<env>/terraform.tfstate"
             if @aws_error&.include?('ForbiddenException') || @aws_error&.include?('AccessDenied')
-              puts "  ⚠ AWS credentials found but access denied — check your profile/role configuration."
+              puts '  ⚠ AWS credentials found but access denied — check your profile/role configuration.'
               puts "    #{@aws_error}" if @aws_error
             else
               puts '  ⚠ AWS credentials not detected — skipping state bucket creation.'
@@ -209,7 +209,11 @@ module Belt
       def aws_configured?
         output, status = Open3.capture2e('aws', 'sts', 'get-caller-identity')
         if status.success?
-          data = JSON.parse(output) rescue {}
+          data = begin
+            JSON.parse(output)
+          rescue StandardError
+            {}
+          end
           @aws_account_id = data['Account']
           true
         else
@@ -284,7 +288,7 @@ module Belt
           puts '       → Edit → paste the 4 values from step 1.'
           puts ''
           puts '  3. Wait for propagation (usually 5–30 min, can take up to 48h).'
-          puts '     Verify: dig +short NS #{@domain}'
+          puts "     Verify: dig +short NS #{@domain}"
           puts '  ─────────────────────────────────────────────────────────────────'
         else
           puts "\n  To add a custom domain later, set `domain` in infrastructure/<env>/terraform.tfvars:"

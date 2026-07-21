@@ -65,10 +65,10 @@ module Belt
         end
         return if Dir.exist?(MODULE_DIR)
 
-        unless @quiet
-          abort "Error: Module directory not found at #{MODULE_DIR}/.\n" \
-                "Run `belt new` to create a project with the correct structure."
-        end
+        return if @quiet
+
+        abort "Error: Module directory not found at #{MODULE_DIR}/.\n" \
+              'Run `belt new` to create a project with the correct structure.'
       end
 
       def parse_schema

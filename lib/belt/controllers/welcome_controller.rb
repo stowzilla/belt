@@ -34,11 +34,11 @@ module Belt
     end
 
     def welcome_css
-      @welcome_css_content ||= File.read(File.join(ASSETS_DIR, 'welcome.css'))
+      @welcome_css ||= File.read(File.join(ASSETS_DIR, 'welcome.css'))
     end
 
     def background_image_base64
-      @background_image_content ||= Base64.strict_encode64(
+      @background_image_base64 ||= Base64.strict_encode64(
         File.binread(File.join(ASSETS_DIR, 'belt-default.jpg'))
       )
     end

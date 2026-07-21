@@ -20,7 +20,7 @@ module Belt
         new.run
       end
 
-      def initialize(env = nil, quiet: false)
+      def initialize(_env = nil, quiet: false)
         @app_name = detect_app_name
         @quiet = quiet
       end
@@ -32,7 +32,7 @@ module Belt
 
         puts "\n✓ Frontend infrastructure generated in #{MODULE_DIR}!"
         puts "\nRun `belt deploy` to create the S3 bucket and CloudFront distribution."
-        puts "Then `belt deploy frontend` to build and deploy."
+        puts 'Then `belt deploy frontend` to build and deploy.'
       end
 
       private
@@ -41,7 +41,7 @@ module Belt
         return if Dir.exist?(MODULE_DIR)
 
         abort "Error: Module directory not found at #{MODULE_DIR}/.\n" \
-              "Run `belt new` to create a project with the correct structure."
+              'Run `belt new` to create a project with the correct structure.'
       end
 
       def generate_frontend_tf

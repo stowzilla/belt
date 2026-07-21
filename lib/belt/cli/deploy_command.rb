@@ -121,7 +121,8 @@ module Belt
         Dir.chdir(env_dir) do
           run_init
           run_plan
-          return unless confirm_apply
+          return unless confirm_apply?
+
           run_apply
         end
 
@@ -157,6 +158,7 @@ module Belt
         dir = @infra_dir ? File.dirname(@infra_dir) : Dir.pwd
         while dir != '/'
           return dir if File.exist?(File.join(dir, 'Gemfile'))
+
           dir = File.dirname(dir)
         end
         Dir.pwd
@@ -188,9 +190,13 @@ module Belt
         stdout, status = Open3.capture2('aws', 'sts', 'get-caller-identity', '--output', 'json')
         unless status.success?
           abort "Error: AWS credentials not available.\n" \
-                "Run `aws sso login` or configure AWS_PROFILE."
+                'Run `aws sso login` or configure AWS_PROFILE.'
         end
-        @aws_account = JSON.parse(stdout)['Account'] rescue nil
+        @aws_account = begin
+          JSON.parse(stdout)['Account']
+        rescue StandardError
+          nil
+        end
       end
 
       # Ensure Gemfile.lock doesn't have stale PATH references that will break
@@ -208,7 +214,8 @@ module Belt
         stale_path_gems = detect_stale_path_gems(gemfile_content, lockfile_content)
         return if stale_path_gems.empty?
 
-        puts "  🔧 Fixing stale Gemfile.lock (#{stale_path_gems.join(', ')} referenced as PATH but Gemfile uses RubyGems)"
+        puts '  🔧 Fixing stale Gemfile.lock ' \
+             "(#{stale_path_gems.join(', ')} referenced as PATH but Gemfile uses RubyGems)"
         Dir.chdir(@project_root) do
           success = system('bundle', 'lock', '--update', *stale_path_gems)
           unless success
@@ -250,7 +257,11 @@ module Belt
           output, status = Open3.capture2('terraform', 'output', '-json')
           return nil unless status.success?
 
-          data = JSON.parse(output) rescue {}
+          data = begin
+            JSON.parse(output)
+          rescue StandardError
+            {}
+          end
 
           # Try lambda_functions output first
           if data['lambda_functions']
@@ -372,9 +383,10 @@ module Belt
         end
 
         # Remove non-essential files
-        exts = %w[*.md *.rdoc *.txt *.c *.h *.o Makefile *.log CHANGELOG* HISTORY* LICENSE* README* .gitignore .travis.yml .rubocop.yml Rakefile]
+        exts = %w[*.md *.rdoc *.txt *.c *.h *.o Makefile *.log CHANGELOG* HISTORY* LICENSE* README* .gitignore
+                  .travis.yml .rubocop.yml Rakefile]
         exts.each do |pattern|
-          Dir.glob(File.join(vendor_dir, "**", pattern)).each do |f|
+          Dir.glob(File.join(vendor_dir, '**', pattern)).each do |f|
             File.delete(f) if File.file?(f)
           end
         end
@@ -409,12 +421,12 @@ module Belt
           '--output', 'json'
         )
 
-        File.delete(zip_file) if File.exist?(zip_file)
+        FileUtils.rm_f(zip_file)
 
         unless status.success?
-          abort "\n✗ Failed to update Lambda function code.\n" \
-                "  Function: #{function_name}\n" \
-                "  Check that the function exists and you have permissions."
+          abort "\n✗ Failed to update Lambda function code.\n  " \
+                "Function: #{function_name}\n  " \
+                'Check that the function exists and you have permissions.'
         end
 
         # Wait for update to complete
@@ -454,7 +466,7 @@ module Belt
         puts ''
       end
 
-      def confirm_apply
+      def confirm_apply?
         return true if @auto_approve
 
         if @env == 'prod' || @env == 'production'
@@ -479,7 +491,7 @@ module Belt
       end
 
       def cleanup_plan
-        File.delete('tfplan') if File.exist?('tfplan')
+        FileUtils.rm_f('tfplan')
       end
 
       def deploy_frontend_if_exists

@@ -51,12 +51,14 @@ module Belt
   end
 
   class NestedResourceBuilder
-    def initialize(gateway, prefix, collection_prefix, inherited_tables: [], inherited_auth: nil)
+    def initialize(gateway, prefix, collection_prefix, inherited_tables: [], inherited_auth: nil, # rubocop:disable Metrics/ParameterLists
+                   inherited_controller: nil)
       @gateway = gateway
       @prefix = prefix
       @collection_prefix = collection_prefix
       @inherited_tables = inherited_tables
       @inherited_auth = inherited_auth
+      @inherited_controller = inherited_controller
     end
 
     def resources(name, options = {})
@@ -85,12 +87,13 @@ module Belt
     end
 
     def member(&)
-      MemberCollectionBuilder.new(@gateway, @prefix, @inherited_tables, @inherited_auth).instance_eval(&)
+      MemberCollectionBuilder.new(@gateway, @prefix, @inherited_tables, @inherited_auth,
+                                  @inherited_controller).instance_eval(&)
     end
 
     def collection(&)
       MemberCollectionBuilder.new(@gateway, @collection_prefix, @inherited_tables,
-                                  @inherited_auth).instance_eval(&)
+                                  @inherited_auth, @inherited_controller).instance_eval(&)
     end
 
     %i[get post put delete patch].each do |method|
@@ -111,16 +114,18 @@ module Belt
         result[:tables] = (@inherited_tables + explicit_tables).uniq
       end
       result[:auth] ||= @inherited_auth if @inherited_auth
+      result[:controller] ||= @inherited_controller if @inherited_controller
       result
     end
   end
 
   class MemberCollectionBuilder
-    def initialize(gateway, prefix, inherited_tables, inherited_auth)
+    def initialize(gateway, prefix, inherited_tables, inherited_auth, inherited_controller = nil)
       @gateway = gateway
       @prefix = prefix
       @inherited_tables = inherited_tables
       @inherited_auth = inherited_auth
+      @inherited_controller = inherited_controller
     end
 
     %i[get post put delete patch].each do |method|
@@ -140,6 +145,7 @@ module Belt
         result[:tables] = (@inherited_tables + explicit_tables).uniq
       end
       result[:auth] ||= @inherited_auth if @inherited_auth
+      result[:controller] ||= @inherited_controller if @inherited_controller
       result
     end
   end
@@ -174,22 +180,20 @@ module Belt
       resource_name = name.to_s
       singular = singularize(resource_name)
       param_name = options[:param] || "#{singular}_id"
-      base_path = resource_base_path(resource_name, options)
-      options = options.except(:path_prefix)
       options = auto_infer_tables(resource_name, options)
       resource_options = options.merge(route_type: :resources)
       actions = determine_actions(options)
 
-      add_route(:get, base_path, resource_options) if actions.include?(:index)
-      add_route(:post, base_path, resource_options) if actions.include?(:create)
-      add_route(:get, "#{base_path}/{#{param_name}}", resource_options) if actions.include?(:show)
-      add_route(:put, "#{base_path}/{#{param_name}}", resource_options) if actions.include?(:update)
-      add_route(:delete, "#{base_path}/{#{param_name}}", resource_options) if actions.include?(:destroy)
+      add_route(:get, "/#{resource_name}", resource_options) if actions.include?(:index)
+      add_route(:post, "/#{resource_name}", resource_options) if actions.include?(:create)
+      add_route(:get, "/#{resource_name}/{#{param_name}}", resource_options) if actions.include?(:show)
+      add_route(:put, "/#{resource_name}/{#{param_name}}", resource_options) if actions.include?(:update)
+      add_route(:delete, "/#{resource_name}/{#{param_name}}", resource_options) if actions.include?(:destroy)
 
       return unless block_given?
 
-      collection_prefix = base_path
-      member_prefix = "#{base_path}/{#{param_name}}"
+      collection_prefix = "/#{resource_name}"
+      member_prefix = "/#{resource_name}/{#{param_name}}"
       resource_tables = Array(options[:tables] || [])
       inherited_tables = (@default_tables + resource_tables).uniq
       inherited_auth = options[:auth] || @default_auth
@@ -201,24 +205,16 @@ module Belt
 
     def resource(name, options = {})
       resource_name = name.to_s
-      base_path = resource_base_path(resource_name, options)
-      options = options.except(:path_prefix)
       actions = determine_actions(options, default: %i[show update destroy])
       resource_options = options.merge(route_type: :resource)
 
-      add_route(:get, base_path, resource_options) if actions.include?(:show)
-      add_route(:put, base_path, resource_options) if actions.include?(:update)
-      add_route(:delete, base_path, resource_options) if actions.include?(:destroy)
-      add_route(:post, base_path, resource_options) if actions.include?(:create)
+      add_route(:get, "/#{resource_name}", resource_options) if actions.include?(:show)
+      add_route(:put, "/#{resource_name}", resource_options) if actions.include?(:update)
+      add_route(:delete, "/#{resource_name}", resource_options) if actions.include?(:destroy)
+      add_route(:post, "/#{resource_name}", resource_options) if actions.include?(:create)
     end
 
     private
-
-    # Builds "/users" or "/admin/users" when path_prefix is set (from scope path:).
-    def resource_base_path(resource_name, options)
-      prefix = options[:path_prefix].to_s.gsub(%r{^/|/$}, '')
-      prefix.empty? ? "/#{resource_name}" : "/#{prefix}/#{resource_name}"
-    end
 
     def add_route(method, path, options = {})
       lambda_to_use = options[:lambda] || @current_lambda_context || @default_lambda
@@ -352,16 +348,64 @@ module Belt
         end
       end
 
-      def resources(name, options = {}, &)
+      def resources(name, options = {}, &block)
         options = apply_scope_options(options)
-        options = options.merge(path_prefix: @scope_prefix) unless @scope_prefix.to_s.empty?
-        @gateway.resources(name, options, &)
+
+        if @scope_prefix.empty?
+          @gateway.resources(name, options, &block)
+        else
+          # When inside a scope, generate routes with the prefix applied.
+          # Also set the controller explicitly so inference resolves correctly
+          # (e.g., scope "admin" + resources :users → controller "admin/users").
+          resource_name = name.to_s
+          singular = Belt::Inflector.singularize(resource_name)
+          param_name = options[:param] || "#{singular}_id"
+          controller = "#{@scope_prefix}/#{resource_name}"
+          resource_options = options.merge(route_type: :resources, controller: controller)
+          actions = determine_scoped_actions(options)
+
+          add_scoped_resource_routes(resource_name, param_name, resource_options, actions)
+
+          if block
+            collection_prefix = build_path("/#{resource_name}")
+            member_prefix = build_path("/#{resource_name}/{#{param_name}}")
+            resource_tables = Array(options[:tables] || [])
+            inherited_tables = (@gateway.default_tables + resource_tables).uniq
+            inherited_auth = options[:auth] || @gateway.default_auth
+            nested_builder = NestedResourceBuilder.new(@gateway, member_prefix, collection_prefix,
+                                                       inherited_tables: inherited_tables,
+                                                       inherited_auth: inherited_auth,
+                                                       inherited_controller: controller)
+            nested_builder.instance_eval(&block)
+          end
+        end
       end
 
       def resource(name, options = {})
         options = apply_scope_options(options)
-        options = options.merge(path_prefix: @scope_prefix) unless @scope_prefix.to_s.empty?
-        @gateway.resource(name, options)
+
+        if @scope_prefix.empty?
+          @gateway.resource(name, options)
+        else
+          resource_name = name.to_s
+          controller = "#{@scope_prefix}/#{resource_name}"
+          resource_options = options.merge(route_type: :resource, controller: controller)
+          actions = determine_scoped_actions(options, default: %i[show update destroy create])
+
+          @gateway.send(:add_route, :get, build_path("/#{resource_name}"), resource_options) if actions.include?(:show)
+          if actions.include?(:update)
+            @gateway.send(:add_route, :put, build_path("/#{resource_name}"),
+                          resource_options)
+          end
+          if actions.include?(:destroy)
+            @gateway.send(:add_route, :delete, build_path("/#{resource_name}"),
+                          resource_options)
+          end
+          if actions.include?(:create)
+            @gateway.send(:add_route, :post, build_path("/#{resource_name}"),
+                          resource_options)
+          end
+        end
       end
 
       def lambda(name, &)
@@ -410,6 +454,30 @@ module Belt
 
       def build_path(path)
         @scope_prefix.empty? ? path : "/#{@scope_prefix}#{path}"
+      end
+
+      def determine_scoped_actions(options, default: %i[index create show update destroy])
+        if options[:only]
+          Array(options[:only])
+        elsif options[:except]
+          default - Array(options[:except])
+        else
+          default
+        end
+      end
+
+      def add_scoped_resource_routes(resource_name, param_name, resource_options, actions)
+        @gateway.send(:add_route, :get, build_path("/#{resource_name}"), resource_options) if actions.include?(:index)
+        @gateway.send(:add_route, :post, build_path("/#{resource_name}"), resource_options) if actions.include?(:create)
+        if actions.include?(:show)
+          @gateway.send(:add_route, :get, build_path("/#{resource_name}/{#{param_name}}"), resource_options)
+        end
+        if actions.include?(:update)
+          @gateway.send(:add_route, :put, build_path("/#{resource_name}/{#{param_name}}"), resource_options)
+        end
+        return unless actions.include?(:destroy)
+
+        @gateway.send(:add_route, :delete, build_path("/#{resource_name}/{#{param_name}}"), resource_options)
       end
 
       def apply_scope_options(options)
