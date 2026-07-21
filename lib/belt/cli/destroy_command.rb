@@ -237,11 +237,11 @@ module Belt
         # Clean up trailing commas and empty arrays
         content.gsub!(/,(\s*\n\s*\]\.freeze)/, '\1')
 
-        if content != original
-          File.write(manifest_file, content)
-          @updated << manifest_file
-          puts "  update  #{manifest_file}"
-        end
+        return unless content != original
+
+        File.write(manifest_file, content)
+        @updated << manifest_file
+        puts "  update  #{manifest_file}"
       end
 
       def remove_schema
@@ -257,11 +257,11 @@ module Belt
         # Clean up excessive blank lines
         content.gsub!(/\n{3,}/, "\n\n")
 
-        if content != original
-          File.write(schema_file, content)
-          @updated << schema_file
-          puts "  update  #{schema_file}"
-        end
+        return unless content != original
+
+        File.write(schema_file, content)
+        @updated << schema_file
+        puts "  update  #{schema_file}"
       end
 
       def sync_tables
@@ -276,16 +276,16 @@ module Belt
         original = content.dup
 
         # Remove import lines for this resource's pages
-        content.gsub!(/^import #{@class_name}\w* from '.\/pages\/#{@resource_name}\/.*'\n/, '')
+        content.gsub!(%r{^import #{@class_name}\w* from './pages/#{@resource_name}/.*'\n}, '')
 
         # Remove Route elements for this resource
-        content.gsub!(/^\s*<Route path="\/#{@resource_name}.*?\/>\n/, '')
+        content.gsub!(%r{^\s*<Route path="/#{@resource_name}.*?/>\n}, '')
 
-        if content != original
-          File.write(app_jsx, content)
-          @updated << app_jsx
-          puts "  update  #{app_jsx}"
-        end
+        return unless content != original
+
+        File.write(app_jsx, content)
+        @updated << app_jsx
+        puts "  update  #{app_jsx}"
       end
 
       def print_summary

@@ -51,7 +51,8 @@ module Belt
   end
 
   class NestedResourceBuilder
-    def initialize(gateway, prefix, collection_prefix, inherited_tables: [], inherited_auth: nil, inherited_controller: nil)
+    def initialize(gateway, prefix, collection_prefix, inherited_tables: [], inherited_auth: nil, # rubocop:disable Metrics/ParameterLists
+                   inherited_controller: nil)
       @gateway = gateway
       @prefix = prefix
       @collection_prefix = collection_prefix
@@ -86,7 +87,8 @@ module Belt
     end
 
     def member(&)
-      MemberCollectionBuilder.new(@gateway, @prefix, @inherited_tables, @inherited_auth, @inherited_controller).instance_eval(&)
+      MemberCollectionBuilder.new(@gateway, @prefix, @inherited_tables, @inherited_auth,
+                                  @inherited_controller).instance_eval(&)
     end
 
     def collection(&)
@@ -371,9 +373,9 @@ module Belt
             inherited_tables = (@gateway.default_tables + resource_tables).uniq
             inherited_auth = options[:auth] || @gateway.default_auth
             nested_builder = NestedResourceBuilder.new(@gateway, member_prefix, collection_prefix,
-                                                      inherited_tables: inherited_tables,
-                                                      inherited_auth: inherited_auth,
-                                                      inherited_controller: controller)
+                                                       inherited_tables: inherited_tables,
+                                                       inherited_auth: inherited_auth,
+                                                       inherited_controller: controller)
             nested_builder.instance_eval(&block)
           end
         end
@@ -391,9 +393,18 @@ module Belt
           actions = determine_scoped_actions(options, default: %i[show update destroy create])
 
           @gateway.send(:add_route, :get, build_path("/#{resource_name}"), resource_options) if actions.include?(:show)
-          @gateway.send(:add_route, :put, build_path("/#{resource_name}"), resource_options) if actions.include?(:update)
-          @gateway.send(:add_route, :delete, build_path("/#{resource_name}"), resource_options) if actions.include?(:destroy)
-          @gateway.send(:add_route, :post, build_path("/#{resource_name}"), resource_options) if actions.include?(:create)
+          if actions.include?(:update)
+            @gateway.send(:add_route, :put, build_path("/#{resource_name}"),
+                          resource_options)
+          end
+          if actions.include?(:destroy)
+            @gateway.send(:add_route, :delete, build_path("/#{resource_name}"),
+                          resource_options)
+          end
+          if actions.include?(:create)
+            @gateway.send(:add_route, :post, build_path("/#{resource_name}"),
+                          resource_options)
+          end
         end
       end
 
@@ -456,21 +467,17 @@ module Belt
       end
 
       def add_scoped_resource_routes(resource_name, param_name, resource_options, actions)
-        if actions.include?(:index)
-          @gateway.send(:add_route, :get, build_path("/#{resource_name}"), resource_options)
-        end
-        if actions.include?(:create)
-          @gateway.send(:add_route, :post, build_path("/#{resource_name}"), resource_options)
-        end
+        @gateway.send(:add_route, :get, build_path("/#{resource_name}"), resource_options) if actions.include?(:index)
+        @gateway.send(:add_route, :post, build_path("/#{resource_name}"), resource_options) if actions.include?(:create)
         if actions.include?(:show)
           @gateway.send(:add_route, :get, build_path("/#{resource_name}/{#{param_name}}"), resource_options)
         end
         if actions.include?(:update)
           @gateway.send(:add_route, :put, build_path("/#{resource_name}/{#{param_name}}"), resource_options)
         end
-        if actions.include?(:destroy)
-          @gateway.send(:add_route, :delete, build_path("/#{resource_name}/{#{param_name}}"), resource_options)
-        end
+        return unless actions.include?(:destroy)
+
+        @gateway.send(:add_route, :delete, build_path("/#{resource_name}/{#{param_name}}"), resource_options)
       end
 
       def apply_scope_options(options)

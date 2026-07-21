@@ -112,7 +112,7 @@ module Belt
       def load_map
         return DEFAULT_MAP.dup if @map_path.nil?
 
-        raw = YAML.safe_load(File.read(@map_path), aliases: false)
+        raw = YAML.safe_load_file(@map_path, aliases: false)
         unless raw.is_a?(Hash) && raw.any?
           abort "Error: frontend env map #{@map_path} must be a non-empty YAML mapping " \
                 '(e.g. VITE_API_URL: api_url).'
@@ -124,7 +124,7 @@ module Belt
           next if k.empty? || v.empty?
 
           hash[k] = v
-        end.tap do |parsed|
+        end.tap do |parsed| # rubocop:disable Style/MultilineBlockChain
           abort "Error: frontend env map #{@map_path} has no valid entries." if parsed.empty?
         end
       rescue Psych::SyntaxError => e

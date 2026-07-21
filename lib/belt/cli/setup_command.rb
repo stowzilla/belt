@@ -53,7 +53,7 @@ module Belt
       def run_state_setup
         unless aws_configured?
           if @aws_error&.include?('ForbiddenException') || @aws_error&.include?('AccessDenied')
-            puts "✗ AWS credentials found but access denied — check your profile/role configuration."
+            puts '✗ AWS credentials found but access denied — check your profile/role configuration.'
             puts "  #{@aws_error}"
           else
             puts '✗ AWS credentials not configured. Set AWS_PROFILE or configure aws sso login.'
@@ -139,11 +139,7 @@ module Belt
       end
 
       def resolve_bucket_name
-        if @custom_bucket
-          @custom_bucket
-        else
-          'belt-terraform-state'
-        end
+        @custom_bucket || 'belt-terraform-state'
       end
 
       # --- Interactive selection ---
@@ -192,7 +188,11 @@ module Belt
       def aws_configured?
         output, status = Open3.capture2e('aws', 'sts', 'get-caller-identity')
         if status.success?
-          data = JSON.parse(output) rescue {}
+          data = begin
+            JSON.parse(output)
+          rescue StandardError
+            {}
+          end
           @aws_account_id = data['Account']
           true
         else
@@ -201,9 +201,7 @@ module Belt
         end
       end
 
-      def aws_account_id
-        @aws_account_id
-      end
+      attr_reader :aws_account_id
 
       def bucket_exists?(bucket)
         output, status = Open3.capture2e('aws', 's3api', 'head-bucket', '--bucket', bucket)

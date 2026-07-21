@@ -16,9 +16,7 @@ module Belt
 
           # Nested resources (/posts/{id}/comments) and scoped resources (/admin/users):
           # join non-param segments → posts/comments, admin/users
-          if route.resource? && non_param.length > 1
-            return non_param.map { |s| s.gsub('-', '_') }.join('/')
-          end
+          return non_param.map { |s| s.gsub('-', '_') }.join('/') if route.resource? && non_param.length > 1
 
           # For non-resource routes with a single segment (e.g., post '/signup' in :onboarding),
           # the segment is the action name, not the controller. Use the gateway name as controller.
