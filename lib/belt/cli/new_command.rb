@@ -122,6 +122,7 @@ module Belt
           #{@app_name}/lambda/lib/routes
           #{@app_name}/lambda/config
           #{@app_name}/lambda/spec
+          #{@app_name}/config/lambda
           #{@app_name}/infrastructure/modules/app
         ]
       end
@@ -136,8 +137,9 @@ module Belt
           'lambda/controllers/application_controller.rb.erb' =>
             "#{@app_name}/lambda/controllers/api/application_controller.rb",
           'lambda/lib/routes/routes.rb.erb' => "#{@app_name}/lambda/lib/routes/api_routes.rb",
-          'infrastructure/routes.tf.rb.erb' => "#{@app_name}/infrastructure/routes.tf.rb",
-          'infrastructure/schema.tf.rb.erb' => "#{@app_name}/infrastructure/schema.tf.rb",
+          'config/routes.tf.rb.erb' => "#{@app_name}/config/routes.tf.rb",
+          'config/schema.tf.rb.erb' => "#{@app_name}/config/schema.tf.rb",
+          'config/lambda/api.yml.erb' => "#{@app_name}/config/lambda/api.yml",
           'README.md.erb' => "#{@app_name}/README.md",
           'AGENTS.md.erb' => "#{@app_name}/AGENTS.md",
           'gitignore.erb' => "#{@app_name}/.gitignore"

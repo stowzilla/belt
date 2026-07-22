@@ -22,9 +22,12 @@ This file explains the project structure, tooling, and conventions for AI agents
 │   │   └── concerns/                   # Shared model concerns
 │   ├── lib/routes/                     # Route manifests (auto-generated)
 │   └── Gemfile                         # Lambda-specific dependencies
-├── infrastructure/
+├── config/
 │   ├── routes.tf.rb                    # API routes (Conveyor Belt DSL)
 │   ├── schema.tf.rb                    # Model schema definitions
+│   └── lambda/                         # Per-lambda config (like database.yml)
+│       └── api.yml                     # Lambda timeout, memory, env vars
+├── infrastructure/
 │   └── <env>/                          # Per-environment Terraform configs
 ├── Gemfile                             # Project-level dependencies
 └── AGENTS.md                           # This file
@@ -50,7 +53,7 @@ belt output <env>                                      # terraform output
 
 ## How Routing Works
 
-1. `infrastructure/routes.tf.rb` defines routes using a DSL:
+1. `config/routes.tf.rb` defines routes using a DSL:
    ```ruby
    Belt.application.routes.draw do
      namespace :<%= @app_name %> do

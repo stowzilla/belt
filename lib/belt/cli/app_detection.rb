@@ -6,8 +6,8 @@ module Belt
       # Detects the primary namespace from the route definitions.
       # Used by generators to determine controller directory and route file naming.
       def detect_namespace
-        routes_file = 'infrastructure/routes.tf.rb'
-        if File.exist?(routes_file)
+        routes_file = find_routes_file_path
+        if routes_file && File.exist?(routes_file)
           match = File.read(routes_file).match(/namespace :(\w+)/)
           return match[1] if match
         end
@@ -38,6 +38,18 @@ module Belt
       # App names often use underscores (Ruby namespaces); convert for S3.
       def s3_safe_name(name)
         name.to_s.downcase.tr('_', '-')
+      end
+
+      # Finds routes.tf.rb checking config/ first, then infrastructure/ (legacy).
+      def find_routes_file_path
+        candidates = ['config/routes.tf.rb', 'infrastructure/routes.tf.rb']
+        candidates.find { |f| File.exist?(f) }
+      end
+
+      # Finds schema.tf.rb checking config/ first, then infrastructure/ (legacy).
+      def find_schema_file_path
+        candidates = ['config/schema.tf.rb', 'infrastructure/schema.tf.rb']
+        candidates.find { |f| File.exist?(f) }
       end
     end
   end

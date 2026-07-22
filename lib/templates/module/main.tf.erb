@@ -13,7 +13,7 @@ terraform {
     }
     conveyor-belt = {
       source  = "stowzilla/conveyor-belt"
-      version = "~> 0.0.1"
+      version = "~> 0.0.2"
     }
   }
 }
@@ -21,7 +21,7 @@ terraform {
 resource "conveyor_belt" "main" {
   provider = conveyor-belt
 
-  source            = "${path.module}/../../routes.tf.rb"
+  source            = "${path.module}/../../config/routes.tf.rb"
   app_name          = var.app_name
   lambda_source_dir = "${path.module}/../../../lambda"
   lambda_shared_dirs = ["controllers", "helpers", "lib", "models", "views"]
@@ -30,13 +30,10 @@ resource "conveyor_belt" "main" {
 
   custom_domain_name = local.dns_enabled ? local.api_domain : ""
 
-  # Per-lambda configuration: env vars, timeouts, memory
-  lambda_config = {
-    api = {
-      env_vars = {
-        WELCOME_TITLE    = "Welcome to ${var.app_name}"
-        WELCOME_SUBTITLE = "API Gateway → Lambda → DynamoDB — all connected."
-      }
-    }
-  }
+  # Per-lambda configuration from config/lambda/*.yml
+  lambda_config_dir = "${path.module}/../../config/lambda"
+
+  # Additional lambda_config overrides can still be passed for dynamic values
+  # (Terraform references like module outputs that can't live in YAML)
+  lambda_config = var.lambda_config
 }

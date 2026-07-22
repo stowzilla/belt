@@ -1,0 +1,30 @@
+# Lambda configuration for the api function.
+# Works like Rails' database.yml — define defaults and override per environment.
+#
+# Keys:
+#   timeout           Lambda timeout in seconds (default: 30)
+#   memory_size       Lambda memory in MB (default: 256)
+#   env_keys          Env var names this lambda needs (values come from Terraform)
+#   env_vars          Static env vars (key: value pairs baked into the function)
+#   s3_buckets        S3 bucket access declarations
+#   dynamodb_tables   DynamoDB table access declarations
+#   sns_triggers      SNS topic triggers
+#   sqs_triggers      SQS queue triggers
+#
+# Usage:
+#   belt lambda-config -e prod         # View merged config for prod
+#   belt lambda-config -f terraform    # Output as Terraform-ready lambda_config
+
+default: &default
+  timeout: 30
+  memory_size: 256
+  env_vars:
+    WELCOME_TITLE: "Welcome to <%= @app_name %>"
+    WELCOME_SUBTITLE: "API Gateway → Lambda → DynamoDB — all connected."
+
+dev:
+  <<: *default
+
+prod:
+  <<: *default
+  memory_size: 512

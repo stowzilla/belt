@@ -25,3 +25,9 @@ variable "frontend_urls" {
   type        = list(string)
   default     = []
 }
+
+variable "lambda_config" {
+  description = "Additional lambda configuration overrides (for dynamic Terraform values)"
+  type        = any
+  default     = {}
+}

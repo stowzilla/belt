@@ -5,9 +5,12 @@ A serverless application built with [Belt](https://github.com/stowzilla/belt) an
 ## Structure
 
 ```
-├── infrastructure/
+├── config/
 │   ├── routes.tf.rb        # API route definitions
-│   └── schema.tf.rb        # Model schema definitions
+│   ├── schema.tf.rb        # Model schema definitions
+│   └── lambda/             # Per-lambda config (timeout, memory, env vars)
+│       └── api.yml
+├── infrastructure/         # Terraform environments
 └── lambda/
     ├── api.rb              # Lambda entry point
     ├── controllers/<%= @app_name %>/  # Controllers

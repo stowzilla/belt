@@ -215,8 +215,8 @@ module Belt
       end
 
       def remove_routes
-        routes_file = 'infrastructure/routes.tf.rb'
-        return unless File.exist?(routes_file)
+        routes_file = find_routes_file_path
+        return unless routes_file && File.exist?(routes_file)
 
         content = File.read(routes_file)
         original = content.dup
@@ -255,8 +255,8 @@ module Belt
       end
 
       def remove_schema
-        schema_file = 'infrastructure/schema.tf.rb'
-        return unless File.exist?(schema_file)
+        schema_file = find_schema_file_path
+        return unless schema_file && File.exist?(schema_file)
 
         content = File.read(schema_file)
         original = content.dup

@@ -38,8 +38,8 @@ module Belt
             Creates:
               lambda/models/<name>.rb                            Model with validations and fields
               lambda/controllers/<app>/<names>_controller.rb    RESTful controller (index, show, create, update, destroy)
-              infrastructure/routes.tf.rb                        Route entry added
-              infrastructure/schema.tf.rb                        DynamoDB table schema added
+              config/routes.tf.rb                                Route entry added
+              config/schema.tf.rb                                DynamoDB table schema added
               lambda/lib/routes/<app>_routes.rb                  Route manifest updated
               frontend/src/pages/<names>/                        React pages (if frontend exists)
 
@@ -279,13 +279,13 @@ module Belt
           conflicts << "lambda/controllers/#{@app_name}/#{@resource_name}_controller.rb"
         end
 
-        schema_file = 'infrastructure/schema.tf.rb'
-        if File.exist?(schema_file) && File.read(schema_file).match?(/^\s*model :#{Regexp.escape(@singular_name)}\b/)
+        schema_file = find_schema_file_path
+        if schema_file && File.exist?(schema_file) && File.read(schema_file).match?(/^\s*model :#{Regexp.escape(@singular_name)}\b/)
           conflicts << "#{schema_file} (model :#{@singular_name})"
         end
 
-        routes_file = 'infrastructure/routes.tf.rb'
-        if File.exist?(routes_file) && File.read(routes_file).match?(/resources :#{Regexp.escape(@resource_name)}\b/)
+        routes_file = find_routes_file_path
+        if routes_file && File.exist?(routes_file) && File.read(routes_file).match?(/resources :#{Regexp.escape(@resource_name)}\b/)
           conflicts << "#{routes_file} (resources :#{@resource_name})"
         end
 
@@ -302,8 +302,8 @@ module Belt
         conflicts = []
         conflicts << "lambda/models/#{@singular_name}.rb" if File.exist?("lambda/models/#{@singular_name}.rb")
 
-        schema_file = 'infrastructure/schema.tf.rb'
-        if File.exist?(schema_file) && File.read(schema_file).match?(/^\s*model :#{Regexp.escape(@singular_name)}\b/)
+        schema_file = find_schema_file_path
+        if schema_file && File.exist?(schema_file) && File.read(schema_file).match?(/^\s*model :#{Regexp.escape(@singular_name)}\b/)
           conflicts << "#{schema_file} (model :#{@singular_name})"
         end
 
@@ -327,8 +327,8 @@ module Belt
         puts "\nFiles created/updated:"
         puts "  lambda/models/#{@singular_name}.rb"
         puts "  lambda/controllers/#{@app_name}/#{@resource_name}_controller.rb"
-        puts '  infrastructure/routes.tf.rb (updated)'
-        puts '  infrastructure/schema.tf.rb (updated)'
+        puts "  #{find_routes_file_path || 'config/routes.tf.rb'} (updated)"
+        puts "  #{find_schema_file_path || 'config/schema.tf.rb'} (updated)"
         puts "  lambda/lib/routes/#{@app_name}_routes.rb (updated)"
         puts "  frontend/src/pages/#{@resource_name}/ (views)" if Dir.exist?('frontend/src')
       end
@@ -352,8 +352,8 @@ module Belt
       end
 
       def inject_routes
-        routes_file = 'infrastructure/routes.tf.rb'
-        return unless File.exist?(routes_file)
+        routes_file = find_routes_file_path
+        return unless routes_file && File.exist?(routes_file)
 
         content = File.read(routes_file)
         tables_arg = @fields.any? ? ", tables: [:#{@resource_name}]" : ''
@@ -444,8 +444,8 @@ module Belt
       end
 
       def inject_schema
-        schema_file = 'infrastructure/schema.tf.rb'
-        return unless File.exist?(schema_file)
+        schema_file = find_schema_file_path
+        return unless schema_file && File.exist?(schema_file)
 
         content = File.read(schema_file)
 
