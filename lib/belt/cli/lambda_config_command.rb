@@ -123,9 +123,7 @@ module Belt
       end
 
       def run
-        unless Dir.exist?(@config_dir)
-          abort "Error: #{@config_dir}/ not found. Create lambda config files there."
-        end
+        abort "Error: #{@config_dir}/ not found. Create lambda config files there." unless Dir.exist?(@config_dir)
 
         configs = load_all_configs
         configs = configs.select { |name, _| name == @lambda_filter } if @lambda_filter
@@ -147,9 +145,9 @@ module Belt
         return {} unless Dir.exist?(config_dir)
 
         configs = {}
-        Dir.glob(File.join(config_dir, '*.yml')).sort.each do |file|
+        Dir.glob(File.join(config_dir, '*.yml')).each do |file|
           name = File.basename(file, '.yml')
-          raw = YAML.safe_load(File.read(file), aliases: true) || {}
+          raw = YAML.safe_load_file(file, aliases: true) || {}
           configs[name] = resolve_environment(raw, environment)
         end
         configs
@@ -170,6 +168,7 @@ module Belt
         # Remove the YAML anchor/environment keys from output
         merged.reject { |k, _| k == 'default' || !SUPPORTED_KEYS.include?(k) }
       end
+      private_class_method :resolve_environment
 
       def self.deep_merge(base, override)
         base.merge(override) do |_key, old_val, new_val|
@@ -180,6 +179,7 @@ module Belt
           end
         end
       end
+      private_class_method :deep_merge
 
       def output(configs)
         case @format
@@ -200,12 +200,8 @@ module Belt
           puts "  #{name} = {"
           puts "    timeout     = #{config['timeout']}" if config['timeout']
           puts "    memory_size = #{config['memory_size']}" if config['memory_size']
-          if config['reserved_concurrency']
-            puts "    reserved_concurrency = #{config['reserved_concurrency']}"
-          end
-          if config['ephemeral_storage']
-            puts "    ephemeral_storage = #{config['ephemeral_storage']}"
-          end
+          puts "    reserved_concurrency = #{config['reserved_concurrency']}" if config['reserved_concurrency']
+          puts "    ephemeral_storage = #{config['ephemeral_storage']}" if config['ephemeral_storage']
 
           output_env_vars_tf(config) if config['env_vars'] || config['env_keys']
           output_s3_buckets_tf(config['s3_buckets']) if config['s3_buckets']
@@ -213,7 +209,7 @@ module Belt
           output_sns_triggers_tf(config['sns_triggers']) if config['sns_triggers']
           output_sqs_triggers_tf(config['sqs_triggers']) if config['sqs_triggers']
 
-          puts "  }#{idx < configs.size - 1 ? '' : ''}"
+          puts "  }#{'' unless idx < configs.size - 1}"
           puts '' if idx < configs.size - 1
         end
         puts '}'

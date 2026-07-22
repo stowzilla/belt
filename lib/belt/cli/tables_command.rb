@@ -65,7 +65,10 @@ module Belt
       def validate!
         schema_file = self.class.schema_file_path
         unless schema_file
-          abort 'Error: No schema.tf.rb found (checked config/ and infrastructure/). Run `belt generate resource` first.' unless @quiet
+          unless @quiet
+            abort 'Error: No schema.tf.rb found (checked config/ and infrastructure/). ' \
+                  'Run `belt generate resource` first.'
+          end
           return
         end
         return if Dir.exist?(MODULE_DIR)

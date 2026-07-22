@@ -280,12 +280,14 @@ module Belt
         end
 
         schema_file = find_schema_file_path
-        if schema_file && File.exist?(schema_file) && File.read(schema_file).match?(/^\s*model :#{Regexp.escape(@singular_name)}\b/)
+        if schema_file && File.exist?(schema_file) &&
+           File.read(schema_file).match?(/^\s*model :#{Regexp.escape(@singular_name)}\b/)
           conflicts << "#{schema_file} (model :#{@singular_name})"
         end
 
         routes_file = find_routes_file_path
-        if routes_file && File.exist?(routes_file) && File.read(routes_file).match?(/resources :#{Regexp.escape(@resource_name)}\b/)
+        if routes_file && File.exist?(routes_file) &&
+           File.read(routes_file).match?(/resources :#{Regexp.escape(@resource_name)}\b/)
           conflicts << "#{routes_file} (resources :#{@resource_name})"
         end
 
@@ -303,7 +305,8 @@ module Belt
         conflicts << "lambda/models/#{@singular_name}.rb" if File.exist?("lambda/models/#{@singular_name}.rb")
 
         schema_file = find_schema_file_path
-        if schema_file && File.exist?(schema_file) && File.read(schema_file).match?(/^\s*model :#{Regexp.escape(@singular_name)}\b/)
+        if schema_file && File.exist?(schema_file) &&
+           File.read(schema_file).match?(/^\s*model :#{Regexp.escape(@singular_name)}\b/)
           conflicts << "#{schema_file} (model :#{@singular_name})"
         end
 
