@@ -86,7 +86,7 @@ RSpec.describe Belt::CLI::FrontendEnvCommand do
       File.write('Gemfile', "source 'https://rubygems.org'\n")
       stub_tf_output('api_url' => 'https://dev.example.com')
 
-      expect { described_class.run(['env', 'dev']) }
+      expect { described_class.run(%w[env dev]) }
         .to raise_error(SystemExit)
     end
 
@@ -95,7 +95,7 @@ RSpec.describe Belt::CLI::FrontendEnvCommand do
       File.write('Gemfile', "source 'https://rubygems.org'\n")
       stub_tf_output('api_url' => 'https://dev.example.com')
 
-      expect { described_class.run(['env', 'dev']) }
+      expect { described_class.run(%w[env dev]) }
         .to raise_error(SystemExit)
     end
 
@@ -105,8 +105,8 @@ RSpec.describe Belt::CLI::FrontendEnvCommand do
       File.write('Gemfile', "source 'https://rubygems.org'\n")
       stub_tf_output('api_url' => 'https://dev.example.com')
 
-      expect { described_class.run(['env', 'dev']) }
-        .to output(/No frontend\/env.yml found.*default map/m).to_stdout
+      expect { described_class.run(%w[env dev]) }
+        .to output(%r{No frontend/env.yml found.*default map}m).to_stdout
 
       content = File.read('frontend/.env')
       expect(content).to include('VITE_API_URL=https://dev.example.com')
@@ -122,8 +122,8 @@ RSpec.describe Belt::CLI::FrontendEnvCommand do
       YAML
       stub_tf_output('api_url' => 'https://dev.example.com', 'pool_id' => 'us-east-1_ABC123')
 
-      expect { described_class.run(['env', 'dev']) }
-        .to output(/Loading env map from frontend\/env.yml/m).to_stdout
+      expect { described_class.run(%w[env dev]) }
+        .to output(%r{Loading env map from frontend/env.yml}m).to_stdout
 
       content = File.read('frontend/.env')
       expect(content).to include('VITE_API_URL=https://dev.example.com')
@@ -136,7 +136,7 @@ RSpec.describe Belt::CLI::FrontendEnvCommand do
       File.write('Gemfile', "source 'https://rubygems.org'\n")
       stub_tf_output({})
 
-      expect { described_class.run(['env', 'dev']) }
+      expect { described_class.run(%w[env dev]) }
         .to output(/No values written.*terraform outputs missing/).to_stdout
     end
   end

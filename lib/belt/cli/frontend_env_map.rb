@@ -181,7 +181,7 @@ module Belt
         return str if str.empty?
         return str unless str.match?(/[\s\#"'\\$`]/)
 
-        %("#{str.gsub('\\', '\\\\').gsub('"', '\\"')}")
+        %("#{str.gsub('\\') { '\\\\' }.gsub('"') { '\\"' }}")
       end
     end
   end

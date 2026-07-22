@@ -25,7 +25,7 @@ RSpec.describe Belt::CLI::FrontendEnvMap do
   end
 
   def stub_tf_output(outputs)
-    allow(Open3).to receive(:capture2) do |*args, **kwargs|
+    allow(Open3).to receive(:capture2) do |*args, **_kwargs|
       name = args[3] # 'terraform', 'output', '-raw', name
       value = outputs[name]
       if value
@@ -68,9 +68,9 @@ RSpec.describe Belt::CLI::FrontendEnvMap do
 
       map = described_class.new('dev')
       expect(map.map).to eq({
-        'VITE_API_URL' => 'api_url',
-        'VITE_COGNITO_POOL' => 'cognito_user_pool_id'
-      })
+                              'VITE_API_URL' => 'api_url',
+                              'VITE_COGNITO_POOL' => 'cognito_user_pool_id'
+                            })
       expect(map.using_default_map?).to be false
     end
 
@@ -132,9 +132,9 @@ RSpec.describe Belt::CLI::FrontendEnvMap do
 
       map = described_class.new('dev')
       expect(map.process_env).to eq({
-        'VITE_API_URL' => 'https://api.dev.example.com',
-        'VITE_REGION' => 'us-east-1'
-      })
+                                      'VITE_API_URL' => 'https://api.dev.example.com',
+                                      'VITE_REGION' => 'us-east-1'
+                                    })
     end
 
     it 'skips keys with missing terraform outputs' do
@@ -305,18 +305,17 @@ RSpec.describe Belt::CLI::FrontendEnvMap do
     end
 
     it 'escapes values with backslashes and quotes' do
-      stub_tf_output('api_url' => "value\\with\"quotes")
+      stub_tf_output('api_url' => 'value\\with"quotes')
 
       map = described_class.new('dev')
       map.write_dotenv!
 
       content = File.read(dotenv_path)
       # The value contains a backslash and a quote, so it should be wrapped
-      # in double quotes with the quote escaped.
+      # in double quotes with backslash doubled and quote escaped.
       # Input chars:  v a l u e \ w i t h " q u o t e s
-      # Output line:  VITE_API_URL="value\with\"quotes"
-      expected_line = "VITE_API_URL=\"value\\with\\\"quotes\""
-      expect(content).to include(expected_line)
+      # Output line:  VITE_API_URL="value\\with\"quotes"
+      expect(content).to include('VITE_API_URL="value\\\\with\\"quotes"')
     end
   end
 
