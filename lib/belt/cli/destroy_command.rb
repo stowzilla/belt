@@ -31,12 +31,10 @@ module Belt
         # Delegate to gem-provided generator if not a built-in
         unless GENERATORS.include?(generator)
           klass = GeneratorRegistry.find(generator)
-          if klass.respond_to?(:destroy)
-            return klass.destroy(args)
-          else
-            puts "Generator '#{generator}' does not support destroy."
-            exit 1
-          end
+          return klass.destroy(args) if klass.respond_to?(:destroy)
+
+          puts "Generator '#{generator}' does not support destroy."
+          exit 1
         end
 
         # Normalize: resource is an alias for scaffold

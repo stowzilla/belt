@@ -152,10 +152,10 @@ RSpec.describe Belt::CLI::GeneratorRegistry do
 
         fake_spec_a = instance_double(Gem::Specification, gem_dir: gem_dir_a)
         fake_spec_b = instance_double(Gem::Specification, gem_dir: gem_dir_b)
-        allow(Gem).to receive(:loaded_specs).and_return({
+        allow(Gem).to receive(:loaded_specs).and_return(
           'belt-notifications' => fake_spec_a,
           'belt-payments' => fake_spec_b
-        })
+        )
       end
 
       after do

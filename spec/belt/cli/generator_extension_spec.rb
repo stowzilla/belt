@@ -51,10 +51,7 @@ RSpec.describe 'Generator extension integration' do
   after do
     Belt::CLI::GeneratorRegistry.reset!
     FileUtils.rm_rf(gem_dir)
-    # Clean up the const if it was loaded
-    if Belt::Generators.const_defined?(:MessagingGenerator)
-      Belt::Generators.send(:remove_const, :MessagingGenerator)
-    end
+    Belt::Generators.send(:remove_const, :MessagingGenerator) if Belt::Generators.const_defined?(:MessagingGenerator)
   end
 
   describe 'GenerateCommand' do
@@ -98,9 +95,7 @@ RSpec.describe 'Generator extension integration' do
       end
 
       after do
-        if Belt::Generators.const_defined?(:ReadonlyGenerator)
-          Belt::Generators.send(:remove_const, :ReadonlyGenerator)
-        end
+        Belt::Generators.send(:remove_const, :ReadonlyGenerator) if Belt::Generators.const_defined?(:ReadonlyGenerator)
       end
 
       it 'prints an error and exits' do

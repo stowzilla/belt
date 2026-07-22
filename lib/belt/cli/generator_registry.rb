@@ -85,10 +85,8 @@ module Belt
       end
     end
   end
-end
 
-# Namespace for generator classes provided by external gems
-module Belt
+  # Namespace for generator classes provided by external gems
   module Generators
   end
 end
