@@ -2,6 +2,7 @@
 
 require 'fileutils'
 require_relative 'app_detection'
+require_relative 'generator_registry'
 require_relative 'tables_command'
 require_relative '../inflector'
 
@@ -20,11 +21,22 @@ module Belt
           exit 0
         end
 
-        unless GENERATORS.include?(generator)
+        unless GENERATORS.include?(generator) || GeneratorRegistry.generator_names.include?(generator)
           puts "Unknown generator: '#{generator}'"
-          puts "Available: #{GENERATORS.uniq.join(', ')}"
+          puts "Available: #{(GENERATORS + GeneratorRegistry.generator_names).uniq.join(', ')}"
           puts "\nRun 'belt destroy --help' for usage information."
           exit 1
+        end
+
+        # Delegate to gem-provided generator if not a built-in
+        unless GENERATORS.include?(generator)
+          klass = GeneratorRegistry.find(generator)
+          if klass.respond_to?(:destroy)
+            return klass.destroy(args)
+          else
+            puts "Generator '#{generator}' does not support destroy."
+            exit 1
+          end
         end
 
         # Normalize: resource is an alias for scaffold

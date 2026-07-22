@@ -56,7 +56,7 @@ module Belt
           # belt destroy --help → DestroyCommand help
           # belt destroy (no args) → terraform destroy (needs env)
           return DestroyCommand.run(args) if args.include?('--help') || args.include?('-h')
-        elsif DestroyCommand::GENERATORS.include?(args.first)
+        elsif DestroyCommand::GENERATORS.include?(args.first) || GeneratorRegistry.generator_names.include?(args.first)
           return DestroyCommand.run(args)
         end
       end

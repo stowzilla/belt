@@ -7,6 +7,7 @@ require_relative 'environment_command'
 require_relative 'frontend_command'
 require_relative 'tables_command'
 require_relative 'views_command'
+require_relative 'generator_registry'
 require_relative '../inflector'
 
 module Belt
@@ -84,11 +85,17 @@ module Belt
           exit 0
         end
 
-        unless GENERATORS.include?(generator)
+        unless GENERATORS.include?(generator) || GeneratorRegistry.generator_names.include?(generator)
           puts "Unknown generator: '#{generator}'"
-          puts "Available generators: #{(GENERATORS - ['resource']).join(', ')}"
+          puts "Available generators: #{all_generator_names.join(', ')}"
           puts "\nRun 'belt generate --help' for usage information."
           exit 1
+        end
+
+        # Delegate to gem-provided generator if not a built-in
+        unless GENERATORS.include?(generator)
+          klass = GeneratorRegistry.find(generator)
+          return klass.run(args)
         end
 
         # Normalize: resource is an alias for scaffold
@@ -131,6 +138,10 @@ module Belt
         belt setup environment frontend views routes
       ].freeze
 
+      def self.all_generator_names
+        ((GENERATORS - ['resource']) + GeneratorRegistry.generator_names).uniq
+      end
+
       def self.validate_resource_name!(name, generator)
         errors = []
 
@@ -152,6 +163,8 @@ module Belt
       end
 
       def self.print_generate_help
+        gem_generators = GeneratorRegistry.discovered_generators
+
         puts <<~HELP
           Usage: belt generate <generator> <name> [field:type ...] [options]
                  belt g <generator> <name> [field:type ...] [options]
@@ -167,6 +180,18 @@ module Belt
           Aliases:
             resource      Same as scaffold
 
+        HELP
+
+        if gem_generators.any?
+          puts '  Gem Generators:'
+          gem_generators.each do |name, klass|
+            desc = klass.respond_to?(:description) ? klass.description : "Generate #{name} (from gem)"
+            puts format('    %<name>-14s %<desc>s', name: name, desc: desc)
+          end
+          puts
+        end
+
+        puts <<~HELP
           Field Types:
             #{FIELD_TYPES.join(', ')}
             (defaults to string if omitted)
