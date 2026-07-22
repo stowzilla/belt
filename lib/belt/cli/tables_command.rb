@@ -8,7 +8,7 @@ require_relative '../inflector'
 module Belt
   module CLI
     class TablesCommand
-      SCHEMA_FILE = 'infrastructure/schema.tf.rb'
+      SCHEMA_FILE_CANDIDATES = ['config/schema.tf.rb', 'infrastructure/schema.tf.rb'].freeze
       MODULE_DIR = 'infrastructure/modules/app'
 
       include AppDetection
@@ -33,10 +33,14 @@ module Belt
       # Automatically sync dynamodb.tf in the app module.
       # Called by generators after updating schema.tf.rb.
       def self.sync_all_environments
-        return unless File.exist?(SCHEMA_FILE)
+        return unless schema_file_path
 
         # With the module approach, we only need to generate once into modules/app/
         new(nil, quiet: true).run
+      end
+
+      def self.schema_file_path
+        SCHEMA_FILE_CANDIDATES.find { |f| File.exist?(f) }
       end
 
       def initialize(env, quiet: false)
@@ -59,8 +63,12 @@ module Belt
       private
 
       def validate!
-        unless File.exist?(SCHEMA_FILE)
-          abort "Error: #{SCHEMA_FILE} not found. Run `belt generate resource` first." unless @quiet
+        schema_file = self.class.schema_file_path
+        unless schema_file
+          unless @quiet
+            abort 'Error: No schema.tf.rb found (checked config/ and infrastructure/). ' \
+                  'Run `belt generate resource` first.'
+          end
           return
         end
         return if Dir.exist?(MODULE_DIR)
@@ -72,10 +80,11 @@ module Belt
       end
 
       def parse_schema
-        return [] unless File.exist?(SCHEMA_FILE)
+        schema_file = self.class.schema_file_path
+        return [] unless schema_file && File.exist?(schema_file)
 
         parser = SchemaParser.new
-        schema_content = File.read(SCHEMA_FILE)
+        schema_content = File.read(schema_file)
 
         # Replace DSL wrapper with direct parser call
         inner = schema_content.sub(/\A(?:Belt\.application)\.schema\.draw do\n?/, '').sub(/\n?end\s*\z/, '')
@@ -83,7 +92,7 @@ module Belt
 
         return [] if inner.empty? || inner.match?(/\A\s*\z/m)
 
-        parser.instance_eval(inner, SCHEMA_FILE)
+        parser.instance_eval(inner, schema_file)
         parser.models
       end
 

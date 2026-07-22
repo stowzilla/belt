@@ -9,9 +9,33 @@ module Belt
     @root = path
   end
 
+  # Resolves the path to routes.tf.rb, checking config/ first then infrastructure/ (legacy).
+  def self.routes_file
+    candidates = [
+      File.join(root, 'config/routes.tf.rb'),
+      File.join(root, 'infrastructure/routes.tf.rb')
+    ]
+    candidates.find { |f| File.exist?(f) }
+  end
+
+  # Resolves the path to schema.tf.rb, checking config/ first then infrastructure/ (legacy).
+  def self.schema_file
+    candidates = [
+      File.join(root, 'config/schema.tf.rb'),
+      File.join(root, 'infrastructure/schema.tf.rb')
+    ]
+    candidates.find { |f| File.exist?(f) }
+  end
+
+  # Resolves the lambda config directory.
+  def self.lambda_config_dir
+    File.join(root, 'config/lambda')
+  end
+
   def self.detect_root
     dir = Dir.pwd
     loop do
+      return dir if File.exist?(File.join(dir, 'config/routes.tf.rb'))
       return dir if File.exist?(File.join(dir, 'infrastructure/routes.tf.rb'))
 
       parent = File.dirname(dir)

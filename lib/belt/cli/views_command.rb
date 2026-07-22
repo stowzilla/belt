@@ -32,8 +32,8 @@ module Belt
       end
 
       def self.read_schema_fields(name)
-        schema_file = 'infrastructure/schema.tf.rb'
-        return [] unless File.exist?(schema_file)
+        schema_file = ['config/schema.tf.rb', 'infrastructure/schema.tf.rb'].find { |f| File.exist?(f) }
+        return [] unless schema_file
 
         content = File.read(schema_file)
         singular = Belt::Inflector.singularize(name)

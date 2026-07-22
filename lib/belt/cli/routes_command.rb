@@ -25,7 +25,10 @@ module Belt
 
       def run
         routes_file = find_routes_file
-        abort 'Error: No routes file found. Expected infrastructure/routes.tf.rb' unless routes_file
+        unless routes_file
+          abort 'Error: No routes file found. ' \
+                'Expected config/routes.tf.rb (or infrastructure/routes.tf.rb)'
+        end
 
         dsl = load_routes(routes_file)
         @table_inference = TableInference.new(@options[:tables_file])
@@ -84,8 +87,8 @@ module Belt
       end
 
       def find_routes_file
-        path = 'infrastructure/routes.tf.rb'
-        File.exist?(path) ? path : nil
+        candidates = ['config/routes.tf.rb', 'infrastructure/routes.tf.rb']
+        candidates.find { |f| File.exist?(f) }
       end
 
       def load_routes(file)

@@ -28,6 +28,11 @@ module Belt
           unless schema_file
             routes_dir = File.dirname(File.expand_path(routes_file))
             schema_file = File.join(routes_dir, 'schema.tf.rb')
+            # Fall back to infrastructure/ if not found in same directory as routes
+            unless File.exist?(schema_file)
+              alt = 'infrastructure/schema.tf.rb'
+              schema_file = alt if File.exist?(alt)
+            end
           end
           schema_file
         end
