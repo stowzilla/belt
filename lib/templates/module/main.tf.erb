@@ -30,10 +30,12 @@ resource "conveyor_belt" "main" {
 
   custom_domain_name = local.dns_enabled ? local.api_domain : ""
 
-  # Per-lambda configuration from config/lambda/*.yml
+  # Per-lambda configuration from config/lambda/*.yml (database.yml style)
   lambda_config_dir = "${path.module}/../../config/lambda"
 
-  # Additional lambda_config overrides can still be passed for dynamic values
-  # (Terraform references like module outputs that can't live in YAML)
+  # Dynamic value references — YAML env_vars use ref(name) to pull these in
+  lambda_env_refs = var.lambda_env_refs
+
+  # Terraform overrides for values that need interpolation (${var.app_name}, module outputs, etc.)
   lambda_config = var.lambda_config
 }

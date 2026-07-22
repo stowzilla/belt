@@ -26,6 +26,12 @@ variable "frontend_urls" {
   default     = []
 }
 
+variable "lambda_env_refs" {
+  description = "Map of reference names to dynamic Terraform values. YAML env_vars use ref(name) to resolve these."
+  type        = map(string)
+  default     = {}
+}
+
 variable "lambda_config" {
   description = "Additional lambda configuration overrides (for dynamic Terraform values)"
   type        = any
