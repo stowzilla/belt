@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.13
+
+### Generator Extension API
+
+- Gems can now register generators by placing a file at `lib/belt/generators/<name>_generator.rb`.
+- Discovered automatically via `Gem.loaded_specs` — no manual registration needed.
+- Available as `belt generate <name>` / `belt destroy <name>`.
+- Generator contract: `.run(args)` (required), `.destroy(args)` (optional), `.description` (optional).
+- Help output includes gem-provided generators under "Gem Generators" section.
+
 ## Unreleased
 
 ## 0.1.11
