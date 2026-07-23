@@ -14,20 +14,11 @@ module Belt
       include AppDetection
 
       def self.run(args)
-        env = EnvResolver.resolve(args)
+        # Environment argument accepted for backwards compatibility but unused —
+        # dynamodb.tf lives in infrastructure/modules/app and uses var.environment.
+        EnvResolver.resolve(args)
 
-        if env.nil?
-          puts 'Usage: belt setup tables [environment]'
-          puts "\nReads schema.tf.rb and generates dynamodb.tf in the app module."
-          puts 'You can also set BELT_ENV to skip the environment argument.'
-          puts "\nExamples:"
-          puts '  belt setup tables'
-          puts '  belt setup tables dev'
-          puts '  BELT_ENV=dev belt setup tables'
-          exit 1
-        end
-
-        new(env).run
+        new.run
       end
 
       # Automatically sync dynamodb.tf in the app module.
@@ -35,16 +26,14 @@ module Belt
       def self.sync_all_environments
         return unless schema_file_path
 
-        # With the module approach, we only need to generate once into modules/app/
-        new(nil, quiet: true).run
+        new(quiet: true).run
       end
 
       def self.schema_file_path
         SCHEMA_FILE_CANDIDATES.find { |f| File.exist?(f) }
       end
 
-      def initialize(env, quiet: false)
-        @env = env
+      def initialize(quiet: false)
         @quiet = quiet
         @app_name = detect_app_name
       end
