@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require_relative 'app_detection'
 require_relative 'env_resolver'
 require_relative 'terraform_command'
 require_relative '../inflector'
@@ -10,8 +9,6 @@ module Belt
     class TablesCommand
       SCHEMA_FILE_CANDIDATES = ['config/schema.tf.rb', 'infrastructure/schema.tf.rb'].freeze
       MODULE_DIR = 'infrastructure/modules/app'
-
-      include AppDetection
 
       def self.run(args)
         # Environment argument accepted for backwards compatibility but unused —
@@ -35,7 +32,6 @@ module Belt
 
       def initialize(quiet: false)
         @quiet = quiet
-        @app_name = detect_app_name
       end
 
       def run
@@ -152,7 +148,7 @@ module Belt
       end
 
       def table_name(model_name)
-        "#{@app_name}-${var.environment}-#{Belt::Inflector.pluralize(model_name)}"
+        "${var.app_name}-${var.environment}-#{Belt::Inflector.pluralize(model_name)}"
       end
 
       # Minimal DSL parser for schema.tf.rb
