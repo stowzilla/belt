@@ -268,7 +268,7 @@ module Belt
       end
 
       def run_backup_phase(backup_config)
-        puts "━━━ pre-deploy backup ━━━"
+        puts '━━━ pre-deploy backup ━━━'
         app_name = detect_app_name_for_backup
         runner = BackupRunner.new(@env, backup_config, infra_dir: @infra_dir, app_name: app_name)
         runner.run

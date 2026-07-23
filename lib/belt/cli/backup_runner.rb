@@ -54,35 +54,33 @@ module Belt
                 '--public-access-block-configuration',
                 'BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true')
 
-        puts "  ✅ Backup bucket created and secured"
+        puts '  ✅ Backup bucket created and secured'
       end
 
       # ─── DynamoDB ────────────────────────────────────────────────────
 
       def backup_dynamodb
-        puts "  💾 DynamoDB backups..."
+        puts '  💾 DynamoDB backups...'
         table_names = resolve_table_names
 
         if table_names.empty?
           @errors << 'Could not resolve DynamoDB table names'
-          puts "  ⚠️  No table names found"
+          puts '  ⚠️  No table names found'
           return
         end
 
         # Filter tables if specific ones configured
         if @config.dynamodb_tables.is_a?(Array)
           table_names = table_names.select do |name|
-            @config.dynamodb_tables.any? { |t| name.include?(t) }
+            @config.dynamodb_tables.intersect?(name)
           end
         end
 
         # Ensure PITR is enabled on all tables
         table_names.each do |table_name|
           ensure_pitr(table_name)
-        end
 
-        # Create on-demand snapshots
-        table_names.each do |table_name|
+          # Create on-demand snapshots
           create_snapshot(table_name)
         end
 
@@ -97,7 +95,8 @@ module Belt
 
         if status.success?
           data = JSON.parse(output)
-          pitr_status = data.dig('ContinuousBackupsDescription', 'PointInTimeRecoveryDescription', 'PointInTimeRecoveryStatus')
+          pitr_status = data.dig('ContinuousBackupsDescription', 'PointInTimeRecoveryDescription',
+                                 'PointInTimeRecoveryStatus')
 
           return if pitr_status == 'ENABLED'
         end
@@ -128,12 +127,12 @@ module Belt
       # ─── Cognito ─────────────────────────────────────────────────────
 
       def backup_cognito
-        puts "  👥 Cognito backups..."
+        puts '  👥 Cognito backups...'
         pool_id = resolve_cognito_pool_id
 
         if pool_id.nil? || pool_id.empty?
           @errors << 'Could not resolve Cognito user pool ID'
-          puts "  ⚠️  No Cognito pool ID found"
+          puts '  ⚠️  No Cognito pool ID found'
           return
         end
 
@@ -169,7 +168,7 @@ module Belt
           pagination_token = data['PaginationToken']
           break if pagination_token.nil? || pagination_token.empty?
 
-          puts "    Fetching next page of users..."
+          puts '    Fetching next page of users...'
         end
 
         # Upload to backup bucket
@@ -177,7 +176,7 @@ module Belt
         File.write(tmp_file, JSON.pretty_generate(all_users))
 
         run_aws('s3', 'cp', tmp_file, "s3://#{@backup_bucket}/cognito/users-#{@timestamp}.json", '--quiet')
-        File.delete(tmp_file) if File.exist?(tmp_file)
+        FileUtils.rm_f(tmp_file)
 
         puts "    ✅ Cognito users exported (#{all_users.size} users)"
       end
@@ -197,15 +196,15 @@ module Belt
         File.write(tmp_file, output)
 
         run_aws('s3', 'cp', tmp_file, "s3://#{@backup_bucket}/cognito/pool-config-#{@timestamp}.json", '--quiet')
-        File.delete(tmp_file) if File.exist?(tmp_file)
+        FileUtils.rm_f(tmp_file)
 
-        puts "    ✅ Cognito pool configuration exported"
+        puts '    ✅ Cognito pool configuration exported'
       end
 
       # ─── S3 Bucket Sync ──────────────────────────────────────────────
 
       def backup_s3_buckets
-        puts "  📄 S3 bucket backups..."
+        puts '  📄 S3 bucket backups...'
 
         @config.s3_buckets.each do |bucket_key|
           bucket_name = resolve_s3_bucket_name(bucket_key)
@@ -238,7 +237,7 @@ module Belt
       # ─── Cleanup ─────────────────────────────────────────────────────
 
       def cleanup_old_backups!
-        puts "  🧹 Cleaning up old backups..."
+        puts '  🧹 Cleaning up old backups...'
         cleanup_cognito_backups if @config.cognito?
         cleanup_s3_backups if @config.s3_buckets.any?
         cleanup_dynamodb_snapshots if @config.dynamodb?
@@ -331,49 +330,58 @@ module Belt
       # ─── Terraform Output Resolution ─────────────────────────────────
 
       def resolve_table_names
-        @table_names ||= begin
-          env_dir = File.join(@infra_dir, @env)
-          return [] unless Dir.exist?(env_dir)
+        @resolve_table_names ||= fetch_table_names_from_terraform
+      end
 
-          Dir.chdir(env_dir) do
-            # Try terraform output first
-            output, status = Open3.capture2('terraform', 'output', '-json', 'dynamodb_table_names')
-            if status.success?
-              names = begin
-                JSON.parse(output)
-              rescue StandardError
-                nil
-              end
-              return Array(names) if names.is_a?(Array) && names.any?
-            end
+      def fetch_table_names_from_terraform
+        env_dir = File.join(@infra_dir, @env)
+        return [] unless Dir.exist?(env_dir)
 
-            # Fallback: get all outputs and look for table-related ones
-            output, status = Open3.capture2('terraform', 'output', '-json')
-            if status.success?
-              all_outputs = begin
-                JSON.parse(output)
-              rescue StandardError
-                {}
-              end
+        Dir.chdir(env_dir) do
+          names = try_terraform_table_output
+          return names if names
 
-              # Look for dynamodb_table_names in output
-              if all_outputs['dynamodb_table_names']
-                val = all_outputs['dynamodb_table_names']['value']
-                return Array(val) if val
-              end
-
-              # Try to find any output that looks like table names
-              all_outputs.each do |key, data|
-                next unless key.include?('table')
-
-                val = data['value']
-                return Array(val) if val.is_a?(Array) && val.any?
-              end
-            end
-          end
-
-          []
+          fetch_table_names_from_all_outputs
         end
+      end
+
+      def try_terraform_table_output
+        output, status = Open3.capture2('terraform', 'output', '-json', 'dynamodb_table_names')
+        return nil unless status.success?
+
+        names = begin
+          JSON.parse(output)
+        rescue StandardError
+          nil
+        end
+        names.is_a?(Array) && names.any? ? Array(names) : nil
+      end
+
+      def fetch_table_names_from_all_outputs
+        output, status = Open3.capture2('terraform', 'output', '-json')
+        return [] unless status.success?
+
+        all_outputs = begin
+          JSON.parse(output)
+        rescue StandardError
+          {}
+        end
+
+        # Look for dynamodb_table_names in output
+        if all_outputs['dynamodb_table_names']
+          val = all_outputs['dynamodb_table_names']['value']
+          return Array(val) if val
+        end
+
+        # Try to find any output that looks like table names
+        all_outputs.each do |key, data|
+          next unless key.include?('table')
+
+          val = data['value']
+          return Array(val) if val.is_a?(Array) && val.any?
+        end
+
+        []
       end
 
       def resolve_cognito_pool_id
@@ -413,42 +421,45 @@ module Belt
         env_dir = File.join(@infra_dir, @env)
         return nil unless Dir.exist?(env_dir)
 
-        Dir.chdir(env_dir) do
-          # Try exact output name
-          key_name = "#{bucket_key}_bucket_name"
-          output, status = Open3.capture2('terraform', 'output', '-json', key_name)
-          if status.success?
-            val = begin
-              JSON.parse(output)
-            rescue StandardError
-              nil
-            end
-            return val if val.is_a?(String) && !val.empty?
-          end
+        name = Dir.chdir(env_dir) { fetch_s3_bucket_from_terraform(bucket_key) }
+        name || discover_bucket_by_prefix(bucket_key)
+      end
 
-          # Fallback: search all outputs for bucket-related keys
-          output, status = Open3.capture2('terraform', 'output', '-json')
-          if status.success?
-            all_outputs = begin
-              JSON.parse(output)
-            rescue StandardError
-              {}
-            end
-            # Try variations of the bucket key
-            variations = [
-              "#{bucket_key}_bucket_name",
-              "#{bucket_key}_bucket",
-              bucket_key.to_s
-            ]
-            variations.each do |var|
-              val = all_outputs.dig(var, 'value')
-              return val if val.is_a?(String) && !val.empty?
-            end
+      def fetch_s3_bucket_from_terraform(bucket_key)
+        key_name = "#{bucket_key}_bucket_name"
+        output, status = Open3.capture2('terraform', 'output', '-json', key_name)
+        if status.success?
+          val = begin
+            JSON.parse(output)
+          rescue StandardError
+            nil
           end
+          return val if val.is_a?(String) && !val.empty?
         end
 
-        # Final fallback: try to discover by naming convention
-        discover_bucket_by_prefix(bucket_key)
+        fetch_s3_bucket_from_all_outputs(bucket_key)
+      end
+
+      def fetch_s3_bucket_from_all_outputs(bucket_key)
+        output, status = Open3.capture2('terraform', 'output', '-json')
+        return nil unless status.success?
+
+        all_outputs = begin
+          JSON.parse(output)
+        rescue StandardError
+          {}
+        end
+
+        [
+          "#{bucket_key}_bucket_name",
+          "#{bucket_key}_bucket",
+          bucket_key.to_s
+        ].each do |var|
+          val = all_outputs.dig(var, 'value')
+          return val if val.is_a?(String) && !val.empty?
+        end
+
+        nil
       end
 
       def discover_bucket_by_prefix(bucket_key)
@@ -489,10 +500,10 @@ module Belt
           puts "  ✅ Backup complete (#{@backup_bucket})"
           @summary.each { |s| puts "     • #{s}" }
         end
-        if @errors.any?
-          puts "  ⚠️  #{@errors.size} warning(s):"
-          @errors.each { |e| puts "     • #{e}" }
-        end
+        return unless @errors.any?
+
+        puts "  ⚠️  #{@errors.size} warning(s):"
+        @errors.each { |e| puts "     • #{e}" }
       end
     end
   end
