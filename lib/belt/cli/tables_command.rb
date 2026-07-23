@@ -136,6 +136,23 @@ module Belt
               type = "S"
             }
 
+            attribute {
+              name = "_recent_pk"
+              type = "S"
+            }
+
+            attribute {
+              name = "createdAt"
+              type = "S"
+            }
+
+            global_secondary_index {
+              name            = "RecentIndex"
+              hash_key        = "_recent_pk"
+              range_key       = "createdAt"
+              projection_type = "ALL"
+            }
+
             tags = {
               Name        = "#{name}"
               Environment = var.environment
