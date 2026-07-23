@@ -39,8 +39,9 @@ module Belt
               lambda/models/<name>.rb                            Model with validations and fields
               lambda/controllers/<app>/<names>_controller.rb    RESTful controller (index, show, create, update, destroy)
               config/routes.tf.rb                                Route entry added
-              config/schema.tf.rb                                DynamoDB table schema added
+              config/schema.tf.rb                                API response contract added
               lambda/lib/routes/<app>_routes.rb                  Route manifest updated
+              infrastructure/modules/app/dynamodb.tf             DynamoDB table generated
               frontend/src/pages/<names>/                        React pages (if frontend exists)
 
             Alias: `belt g resource` works the same way.
@@ -58,7 +59,9 @@ module Belt
           ],
           notes: <<~NOTES
             Creates:
-              lambda/models/<name>.rb    Model class inheriting from ActiveItem::Base
+              lambda/models/<name>.rb                            Model class inheriting from ApplicationRecord
+              config/schema.tf.rb                                API response contract added
+              infrastructure/modules/app/dynamodb.tf             DynamoDB table generated
           NOTES
         },
         'controller' => {
@@ -452,11 +455,12 @@ module Belt
 
         content = File.read(schema_file)
 
-        field_lines = @fields.map { |f| "    field :#{f[:name]}, type: :#{f[:type]}" }
-        field_lines << '    field :created_at, type: :string'
-        field_lines << '    field :updated_at, type: :string'
+        # Generate OpenAPI-style model block for API response contracts
+        response_fields = @fields.map { |f| "    #{schema_type_for(f[:type])} :#{f[:name]}" }
+        response_fields << '    string :created_at'
+        response_fields << '    string :updated_at'
 
-        schema_block = "  model :#{@singular_name} do\n#{field_lines.join("\n")}\n  end\n"
+        schema_block = "  model :#{@singular_name} do\n#{response_fields.join("\n")}\n  end\n"
 
         # If model already exists (force mode), replace it
         existing_model_pattern = /^  model :#{Regexp.escape(@singular_name)} do\n.*?^  end\n/m
@@ -472,6 +476,18 @@ module Belt
 
         File.write(schema_file, content)
         puts "  update  #{schema_file}"
+      end
+
+      # Map generator field types to OpenAPI schema DSL types
+      def schema_type_for(field_type)
+        case field_type.to_s
+        when 'text' then 'string'
+        when 'integer' then 'integer'
+        when 'float' then 'number'
+        when 'boolean' then 'boolean'
+        when 'date', 'datetime' then 'string'
+        else 'string'
+        end
       end
 
       def sync_tables
