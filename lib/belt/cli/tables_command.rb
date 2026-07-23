@@ -110,47 +110,82 @@ module Belt
 
       def render_table(model)
         name = table_name(model[:name])
-        <<~HCL
-          resource "aws_dynamodb_table" "#{Belt::Inflector.pluralize(model[:name])}" {
-            name         = "#{name}"
-            billing_mode = "PAY_PER_REQUEST"
-            hash_key     = "id"
+        custom_indexes = model[:indexes] || []
 
-            attribute {
-              name = "id"
-              type = "S"
-            }
+        # Collect all custom index attribute names, deduplicating against built-in ones
+        builtin_attrs = Set.new(%w[id _recent_pk createdAt])
+        extra_attrs = []
+        custom_indexes.each do |idx|
+          extra_attrs << idx[:partition_key] unless builtin_attrs.include?(idx[:partition_key])
+          builtin_attrs.add(idx[:partition_key])
+          if idx[:sort_key] && !builtin_attrs.include?(idx[:sort_key])
+            extra_attrs << idx[:sort_key]
+            builtin_attrs.add(idx[:sort_key])
+          end
+        end
 
-            attribute {
-              name = "_recent_pk"
-              type = "S"
-            }
+        lines = []
+        lines << "resource \"aws_dynamodb_table\" \"#{Belt::Inflector.pluralize(model[:name])}\" {"
+        lines << "  name         = \"#{name}\""
+        lines << '  billing_mode = "PAY_PER_REQUEST"'
+        lines << '  hash_key     = "id"'
+        lines << ''
+        lines << '  attribute {'
+        lines << '    name = "id"'
+        lines << '    type = "S"'
+        lines << '  }'
+        lines << ''
+        lines << '  attribute {'
+        lines << '    name = "_recent_pk"'
+        lines << '    type = "S"'
+        lines << '  }'
+        lines << ''
+        lines << '  attribute {'
+        lines << '    name = "createdAt"'
+        lines << '    type = "S"'
+        lines << '  }'
 
-            attribute {
-              name = "createdAt"
-              type = "S"
-            }
+        extra_attrs.each do |attr|
+          lines << ''
+          lines << '  attribute {'
+          lines << "    name = \"#{attr}\""
+          lines << '    type = "S"'
+          lines << '  }'
+        end
 
-            global_secondary_index {
-              name            = "RecentIndex"
-              hash_key        = "_recent_pk"
-              range_key       = "createdAt"
-              projection_type = "ALL"
-            }
+        lines << ''
+        lines << '  global_secondary_index {'
+        lines << '    name            = "RecentIndex"'
+        lines << '    hash_key        = "_recent_pk"'
+        lines << '    range_key       = "createdAt"'
+        lines << '    projection_type = "ALL"'
+        lines << '  }'
 
-            point_in_time_recovery {
-              enabled = var.enable_pitr
-            }
+        custom_indexes.each do |idx|
+          lines << ''
+          lines << '  global_secondary_index {'
+          lines << "    name            = \"#{idx[:name]}\""
+          lines << "    hash_key        = \"#{idx[:partition_key]}\""
+          lines << "    range_key       = \"#{idx[:sort_key]}\"" if idx[:sort_key]
+          lines << '    projection_type = "ALL"'
+          lines << '  }'
+        end
 
-            deletion_protection_enabled = var.deletion_protection
+        lines << ''
+        lines << '  point_in_time_recovery {'
+        lines << '    enabled = var.enable_pitr'
+        lines << '  }'
+        lines << ''
+        lines << '  deletion_protection_enabled = var.deletion_protection'
+        lines << ''
+        lines << '  tags = {'
+        lines << "    Name        = \"#{name}\""
+        lines << '    Environment = var.environment'
+        lines << '    ManagedBy   = "Terraform"'
+        lines << '  }'
+        lines << '}'
 
-            tags = {
-              Name        = "#{name}"
-              Environment = var.environment
-              ManagedBy   = "Terraform"
-            }
-          }
-        HCL
+        lines.join("\n")
       end
 
       def table_name(model_name)
@@ -168,19 +203,24 @@ module Belt
         def model(name, &block)
           model_def = ModelParser.new
           model_def.instance_eval(&block) if block
-          @models << { name: name.to_s, fields: model_def.fields }
+          @models << { name: name.to_s, fields: model_def.fields, indexes: model_def.indexes }
         end
       end
 
       class ModelParser
-        attr_reader :fields
+        attr_reader :fields, :indexes
 
         def initialize
           @fields = []
+          @indexes = []
         end
 
         def field(name, **opts)
           @fields << { name: name.to_s, type: opts[:type]&.to_s || 'string' }
+        end
+
+        def index(name, partition_key:, sort_key: nil)
+          @indexes << { name: name.to_s, partition_key: partition_key.to_s, sort_key: sort_key&.to_s }
         end
       end
     end
