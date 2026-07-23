@@ -117,6 +117,7 @@ module Belt
         puts "belt → deploying #{@env} (in #{env_dir}/)\n\n"
 
         ensure_lockfile_consistent!
+        generate_routes_if_needed
 
         Dir.chdir(env_dir) do
           run_init
@@ -278,6 +279,13 @@ module Belt
           # Look for lambda function names in state
           state_output.match(/function_name\s*=\s*"([^"]+)"/)&.captures&.first
         end
+      end
+
+      def generate_routes_if_needed
+        lambda_dir = find_lambda_dir
+        return unless lambda_dir
+
+        generate_routes(lambda_dir)
       end
 
       def generate_routes(lambda_dir)
