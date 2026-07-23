@@ -4,3 +4,10 @@ domain      = "<%= @domain %>"
 <% else -%>
 # domain      = "myapp.com"
 <% end -%>
+
+# DynamoDB protection (PITR is true by default everywhere)
+<% if @env_name == 'prod' || @env_name == 'production' -%>
+deletion_protection = true
+<% else -%>
+# deletion_protection = true  # Enable in production environments
+<% end -%>

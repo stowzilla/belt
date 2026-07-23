@@ -6,6 +6,8 @@ require 'open3'
 require 'tmpdir'
 require_relative 'env_resolver'
 require_relative 'terraform_command'
+require_relative 'backup_config'
+require_relative 'backup_runner'
 
 module Belt
   module CLI
@@ -20,6 +22,8 @@ module Belt
 
         auto_approve = false
         rebuild = false
+        skip_backup = false
+        backup_only = false
         filtered_args = []
 
         args.each do |arg|
@@ -28,6 +32,10 @@ module Belt
             auto_approve = true
           when '--rebuild'
             rebuild = true
+          when '--skip-backup', '--no-backup'
+            skip_backup = true
+          when '--backup-only'
+            backup_only = true
           when '-h', '--help'
             puts help_text
             exit 0
@@ -61,10 +69,12 @@ module Belt
           end
         end
 
-        if rebuild
-          new(env, auto_approve: auto_approve, extra_args: filtered_args).run_rebuild
+        if backup_only
+          new(env, auto_approve: auto_approve, skip_backup: false, extra_args: filtered_args).run_backup_only
+        elsif rebuild
+          new(env, auto_approve: auto_approve, skip_backup: skip_backup, extra_args: filtered_args).run_rebuild
         else
-          new(env, auto_approve: auto_approve, extra_args: filtered_args).run
+          new(env, auto_approve: auto_approve, skip_backup: skip_backup, extra_args: filtered_args).run
         end
       end
 
@@ -77,20 +87,37 @@ module Belt
 
           This runs the full deployment lifecycle:
             1. Ensure Gemfile.lock is consistent (fix stale PATH refs)
-            2. terraform init    (initialize providers/modules)
-            3. terraform plan    (preview changes)
-            4. Prompt for confirmation (unless --auto)
-            5. terraform apply   (deploy changes)
+            2. Regenerate route manifests
+            3. Run pre-deploy backups (if configured in belt.rb)
+            4. terraform init    (initialize providers/modules)
+            5. terraform plan    (preview changes)
+            6. Prompt for confirmation (unless --auto)
+            7. terraform apply   (deploy changes)
 
           Options:
             --auto, --yes, -y    Skip confirmation prompt (auto-approve)
             --rebuild            Rebuild and push Lambda code directly (bypasses Terraform).
                                  Much faster for code-only changes — packages gems via Docker,
                                  zips, and pushes with `aws lambda update-function-code`.
+            --skip-backup        Skip pre-deploy backup phase
+            --no-backup          Alias for --skip-backup
+            --backup-only        Run backups only, do not deploy
             -h, --help           Show this help
 
           Environment:
             Defaults to BELT_ENV if set, otherwise the first available environment.
+
+          Backup Configuration:
+            Create `infrastructure/<env>/belt.rb` to configure backups:
+
+              Belt.configure do |config|
+                config.backups do
+                  dynamodb :all
+                  cognito :users, :pool_config
+                  s3 :legal_documents
+                  retention snapshots: 90, cognito: 10, s3: 10
+                end
+              end
 
           Examples:
             belt deploy                # Deploy dev (or BELT_ENV)
@@ -98,13 +125,16 @@ module Belt
             belt deploy dev --auto     # Deploy without confirmation (CI mode)
             belt deploy --rebuild      # Fast code push to dev (no infra changes)
             belt deploy prod --rebuild # Fast code push to prod
+            belt deploy prod --skip-backup  # Skip backups for this deploy
+            belt deploy prod --backup-only  # Run backups without deploying
             belt deploy frontend dev   # Deploy frontend assets only
         HELP
       end
 
-      def initialize(env, auto_approve: false, extra_args: [])
+      def initialize(env, auto_approve: false, skip_backup: false, extra_args: [])
         @env = env
         @auto_approve = auto_approve
+        @skip_backup = skip_backup
         @extra_args = extra_args
         @infra_dir = TerraformCommand.find_infrastructure_dir
         @project_root = find_project_root
@@ -118,6 +148,7 @@ module Belt
 
         ensure_lockfile_consistent!
         generate_routes_if_needed
+        run_backups unless @skip_backup
 
         Dir.chdir(env_dir) do
           run_init
@@ -133,6 +164,28 @@ module Belt
         deploy_frontend_if_exists
 
         puts "\n   Run `belt server` to view your app locally (auto-connects to the deployed API)."
+      end
+
+      def run_backup_only
+        validate!
+
+        puts "belt → running backups for #{@env}\n\n"
+
+        backup_config = load_backup_config
+        if backup_config.nil?
+          puts "No backup configuration found for #{@env}."
+          puts "Create infrastructure/#{@env}/belt.rb to configure backups."
+          puts "\nExample:"
+          puts '  Belt.configure do |config|'
+          puts '    config.backups do'
+          puts '      dynamodb :all'
+          puts '    end'
+          puts '  end'
+          exit 1
+        end
+
+        run_backup_phase(backup_config)
+        puts "\n✅ Backups complete for #{@env}!"
       end
 
       def run_rebuild
@@ -198,6 +251,42 @@ module Belt
         rescue StandardError
           nil
         end
+      end
+
+      # ─── Backup Phase ───────────────────────────────────────────────
+
+      def run_backups
+        backup_config = load_backup_config
+        return unless backup_config
+
+        run_backup_phase(backup_config)
+        puts ''
+      end
+
+      def load_backup_config
+        BackupConfig.load(@env, infra_dir: @infra_dir)
+      end
+
+      def run_backup_phase(backup_config)
+        puts '━━━ pre-deploy backup ━━━'
+        app_name = detect_app_name_for_backup
+        runner = BackupRunner.new(@env, backup_config, infra_dir: @infra_dir, app_name: app_name)
+        runner.run
+      end
+
+      def detect_app_name_for_backup
+        # Try terraform.tfvars first for the app name
+        tfvars_file = File.join(@infra_dir, @env, 'terraform.tfvars')
+        if File.exist?(tfvars_file)
+          match = File.read(tfvars_file).match(/^\s*app_name\s*=\s*"([^"]+)"/)
+          return match[1] if match
+
+          match = File.read(tfvars_file).match(/^\s*project\s*=\s*"([^"]+)"/)
+          return match[1] if match
+        end
+
+        # Fall back to directory name
+        File.basename(@project_root)
       end
 
       # Ensure Gemfile.lock doesn't have stale PATH references that will break
