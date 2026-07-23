@@ -153,6 +153,12 @@ module Belt
               projection_type = "ALL"
             }
 
+            point_in_time_recovery {
+              enabled = var.enable_pitr
+            }
+
+            deletion_protection_enabled = var.deletion_protection
+
             tags = {
               Name        = "#{name}"
               Environment = var.environment

@@ -20,3 +20,15 @@ variable "domain" {
   type        = string
   default     = ""
 }
+
+variable "enable_pitr" {
+  description = "Enable DynamoDB Point-in-Time Recovery (PITR) for all tables"
+  type        = bool
+  default     = true
+}
+
+variable "deletion_protection" {
+  description = "Enable deletion protection on DynamoDB tables (prevents accidental terraform destroy)"
+  type        = bool
+  default     = false
+}

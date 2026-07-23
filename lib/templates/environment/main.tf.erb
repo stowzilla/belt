@@ -39,6 +39,8 @@ module "app" {
   environment  = var.environment
   aws_region   = var.aws_region
   domain       = var.domain
+  enable_pitr  = var.enable_pitr
+  deletion_protection = var.deletion_protection
   frontend_urls = concat(
     var.domain != "" ? ["https://${var.environment == "prod" ? var.domain : "${var.environment}.${var.domain}"}"] : [],
     var.environment == "prod" ? [] : ["http://localhost:3000"]
