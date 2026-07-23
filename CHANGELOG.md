@@ -1,5 +1,63 @@
 # Changelog
 
+## 0.3.0
+
+### Pre-Deploy Backups
+
+Belt now runs automated backups before each deploy when configured. No standalone scripts or generators — `belt deploy` owns the entire lifecycle.
+
+**New: Backup Config DSL** — configure backups per environment in `infrastructure/<env>/belt.rb`:
+
+```ruby
+Belt.configure do |config|
+  config.backups do
+    dynamodb :all                    # PITR + on-demand snapshot before deploy
+    cognito :users, :pool_config    # Export users + pool config to backup bucket
+    s3 :legal_documents             # Sync bucket to backup bucket
+    retention snapshots: 90, cognito: 10, s3: 10
+  end
+end
+```
+
+Simple mode: `config.backups = true` enables DynamoDB backups for all tables.
+
+**Backup types supported:**
+- **DynamoDB**: Verifies PITR is enabled, creates on-demand snapshots (retained per policy)
+- **Cognito**: Paginated user export + pool configuration → versioned backup bucket
+- **S3**: Syncs configured buckets to a dedicated backup bucket
+
+**Deploy lifecycle (updated):**
+1. Validate
+2. Generate route manifests
+3. **Run backups** (if configured for this environment)
+4. `terraform init`
+5. `terraform plan`
+6. Confirm apply
+7. `terraform apply`
+
+**New CLI flags:**
+- `belt deploy prod --skip-backup` — skip backup phase (CI re-runs, etc.)
+- `belt deploy prod --backup-only` — run backups without deploying
+
+**TablesCommand** — all generated DynamoDB tables now include PITR and deletion protection by default:
+
+```hcl
+point_in_time_recovery {
+  enabled = var.enable_pitr  # true by default
+}
+deletion_protection_enabled = var.deletion_protection  # true in prod, false in dev
+```
+
+## 0.2.5
+
+### Table Generation Separation
+
+- Separated table generation from API schema contracts
+
+### Schema DSL
+
+- Added index support to schema DSL for custom GSIs
+
 ## 0.1.13
 
 ### Generator Extension API
