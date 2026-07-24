@@ -336,7 +336,10 @@ module Belt
       # ─── Terraform Output Resolution ─────────────────────────────────
 
       def resolve_table_names
-        @resolve_table_names ||= fetch_table_names_from_terraform
+        @resolve_table_names ||= begin
+          names = fetch_table_names_from_terraform
+          names.any? ? names : discover_tables_from_aws
+        end
       end
 
       def fetch_table_names_from_terraform
@@ -388,6 +391,28 @@ module Belt
         end
 
         []
+      end
+
+      def discover_tables_from_aws
+        # Fallback: list all DynamoDB tables matching the app-env prefix
+        prefix = sanitize_bucket_name("#{@app_name}-#{@env}-")
+        # Also try with underscores since app names may use them in table names
+        alt_prefix = "#{@app_name}-#{@env}-"
+
+        output, status = Open3.capture2('aws', 'dynamodb', 'list-tables', '--output', 'json')
+        return [] unless status.success?
+
+        all_tables = begin
+          JSON.parse(output)['TableNames'] || []
+        rescue StandardError
+          []
+        end
+
+        matches = all_tables.select { |t| t.start_with?(prefix) || t.start_with?(alt_prefix) }
+        if matches.any?
+          puts "    ℹ️  Discovered #{matches.size} table(s) via AWS (terraform output incomplete)"
+        end
+        matches
       end
 
       def resolve_cognito_pool_id
