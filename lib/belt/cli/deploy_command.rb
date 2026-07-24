@@ -443,6 +443,9 @@ module Belt
       def build_gems(build_dir)
         puts '    🐳 Building gems in Docker (Lambda-compatible)...'
 
+        uid = Process.uid
+        gid = Process.gid
+
         docker_cmd = [
           'docker', 'run', '--rm',
           '--platform', 'linux/amd64',
@@ -454,7 +457,8 @@ module Belt
           "bundle config set --local without 'development test' && " \
           'bundle config set silence_root_warning 1 && ' \
           'bundle install --jobs 4 && ' \
-          'bundle clean --force'
+          'bundle clean --force && ' \
+          "chown -R #{uid}:#{gid} vendor/"
         ]
 
         output, status = Open3.capture2e(*docker_cmd)
@@ -484,7 +488,7 @@ module Belt
                   .travis.yml .rubocop.yml Rakefile]
         exts.each do |pattern|
           Dir.glob(File.join(vendor_dir, '**', pattern)).each do |f|
-            File.delete(f) if File.file?(f)
+            FileUtils.rm_f(f) if File.file?(f)
           end
         end
 
