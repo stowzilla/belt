@@ -114,61 +114,19 @@ module Belt
         new_content = render_dynamodb(models)
 
         # Skip if content is unchanged
-        tf_changed = existing_content != new_content
-        if tf_changed
-          File.write(dest, new_content)
+        return if existing_content == new_content
 
-          if @quiet
-            verb = existing_content ? 'update' : 'create'
-            puts "  #{verb}  #{dest}"
-          else
-            puts "  create  #{dest}"
-            puts "\n✓ Generated DynamoDB tables for #{models.size} model(s):"
-            models.each { |m| puts "    • #{Belt::Inflector.pluralize(m[:name])}" }
-            puts "\nRun `belt deploy` to create them."
-          end
-        end
+        File.write(dest, new_content)
 
-        # Always sync the dynamodb_table_names output
-        sync_table_names_output(models)
-      end
-
-      def sync_table_names_output(models)
-        outputs_file = File.join(MODULE_DIR, 'outputs.tf')
-        return unless File.exist?(outputs_file)
-
-        content = File.read(outputs_file)
-        new_output_block = render_table_names_output(models)
-
-        # Replace existing dynamodb_table_names output block, or append if missing
-        if content.match?(/^output\s+"dynamodb_table_names"\s+\{/)
-          updated = content.sub(
-            /^output\s+"dynamodb_table_names"\s+\{[^}]*\}\s*\n?/m,
-            new_output_block
-          )
+        if @quiet
+          verb = existing_content ? 'update' : 'create'
+          puts "  #{verb}  #{dest}"
         else
-          updated = content.chomp + "\n\n" + new_output_block
+          puts "  create  #{dest}"
+          puts "\n✓ Generated DynamoDB tables for #{models.size} model(s):"
+          models.each { |m| puts "    • #{Belt::Inflector.pluralize(m[:name])}" }
+          puts "\nRun `belt deploy` to create them."
         end
-
-        return if updated == content
-
-        File.write(outputs_file, updated)
-        puts(@quiet ? "  update  #{outputs_file}" : "  ✓ Updated dynamodb_table_names output")
-      end
-
-      def render_table_names_output(models)
-        resource_refs = models.map do |m|
-          "    aws_dynamodb_table.#{Belt::Inflector.pluralize(m[:name])}.name,"
-        end
-
-        <<~HCL
-          output "dynamodb_table_names" {
-            description = "List of all DynamoDB table names"
-            value = [
-          #{resource_refs.join("\n")}
-            ]
-          }
-        HCL
       end
 
       def render_dynamodb(models)
