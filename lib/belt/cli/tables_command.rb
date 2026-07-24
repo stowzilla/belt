@@ -61,9 +61,9 @@ module Belt
 
       def parse_models
         model_files = Dir.glob(File.join(MODELS_DIR, '*.rb'))
-                        .reject { |f| File.basename(f) == 'application_record.rb' }
-                        .reject { |f| File.basename(f).start_with?('concerns') }
-                        .sort
+                         .reject { |f| File.basename(f) == 'application_record.rb' }
+                         .reject { |f| File.basename(f).start_with?('concerns') }
+                         .sort
 
         model_files.filter_map { |f| parse_model_file(f) }
       end
