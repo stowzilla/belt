@@ -4,6 +4,7 @@ require 'shellwords'
 require 'open3'
 require_relative 'app_detection'
 require_relative 'env_resolver'
+require_relative 'environment_config'
 require_relative 'frontend_env_map'
 
 module Belt
@@ -36,6 +37,7 @@ module Belt
 
       def run
         validate!
+        apply_env_config!
         build_frontend
         sync_to_s3
         invalidate_cloudfront
@@ -45,6 +47,12 @@ module Belt
       end
 
       private
+
+      def apply_env_config!
+        env_config = EnvironmentConfig.load(@env, infra_dir: 'infrastructure')
+        env_config.apply!
+        puts "  🔑 Using AWS profile: #{env_config.aws_profile}" if env_config.aws_profile?
+      end
 
       def validate!
         unless Dir.exist?('frontend')
