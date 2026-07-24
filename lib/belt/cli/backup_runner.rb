@@ -14,7 +14,7 @@ module Belt
         @infra_dir = infra_dir
         @app_name = app_name
         @timestamp = Time.now.strftime('%Y%m%d-%H%M%S')
-        @backup_bucket = "#{@app_name}-backups-#{@env}"
+        @backup_bucket = sanitize_bucket_name("#{@app_name}-backups-#{@env}")
         @errors = []
         @summary = []
       end
@@ -41,6 +41,8 @@ module Belt
 
         puts "  📦 Creating backup bucket: #{@backup_bucket}"
 
+        errors_before = @errors.size
+
         run_aws('s3', 'mb', "s3://#{@backup_bucket}", '--region', detect_region)
 
         # Enable versioning
@@ -54,7 +56,11 @@ module Belt
                 '--public-access-block-configuration',
                 'BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true')
 
-        puts '  ✅ Backup bucket created and secured'
+        if @errors.size > errors_before
+          puts '  ⚠️  Backup bucket creation failed (see warnings below)'
+        else
+          puts '  ✅ Backup bucket created and secured'
+        end
       end
 
       # ─── DynamoDB ────────────────────────────────────────────────────
@@ -153,11 +159,11 @@ module Belt
 
       def export_cognito_users(pool_id)
         all_users = []
-        pagination_token = nil
+        next_token = nil
 
         loop do
-          args = ['aws', 'cognito-idp', 'list-users', '--user-pool-id', pool_id, '--max-results', '60']
-          args += ['--pagination-token', pagination_token] if pagination_token
+          args = ['aws', 'cognito-idp', 'list-users', '--user-pool-id', pool_id, '--max-items', '60']
+          args += ['--starting-token', next_token] if next_token
 
           output, status = Open3.capture2(*args)
           break unless status.success?
@@ -165,8 +171,8 @@ module Belt
           data = JSON.parse(output)
           all_users.concat(data['Users'] || [])
 
-          pagination_token = data['PaginationToken']
-          break if pagination_token.nil? || pagination_token.empty?
+          next_token = data['NextToken']
+          break if next_token.nil? || next_token.empty?
 
           puts '    Fetching next page of users...'
         end
@@ -389,7 +395,7 @@ module Belt
         return nil unless Dir.exist?(env_dir)
 
         Dir.chdir(env_dir) do
-          output, status = Open3.capture2('terraform', 'output', '-json', 'user_pool_id')
+          output, status = Open3.capture2('terraform', 'output', '-json', 'user_pool_id', err: File::NULL)
           if status.success?
             val = begin
               JSON.parse(output)
@@ -400,7 +406,7 @@ module Belt
           end
 
           # Fallback: search all outputs
-          output, status = Open3.capture2('terraform', 'output', '-json')
+          output, status = Open3.capture2('terraform', 'output', '-json', err: File::NULL)
           if status.success?
             all_outputs = begin
               JSON.parse(output)
@@ -476,6 +482,11 @@ module Belt
       end
 
       # ─── Helpers ─────────────────────────────────────────────────────
+
+      def sanitize_bucket_name(name)
+        # S3 bucket names must be DNS-compliant: lowercase, hyphens, no underscores
+        name.tr('_', '-').downcase.gsub(/[^a-z0-9\-.]/, '-').gsub(/-{2,}/, '-')
+      end
 
       def short_table_name(table_name)
         table_name.sub(/\A#{Regexp.escape(@app_name)}-#{Regexp.escape(@env)}-/, '')
