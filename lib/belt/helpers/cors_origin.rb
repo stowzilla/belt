@@ -6,9 +6,24 @@ module Belt
       def self.resolve_origin(request_origin)
         allowed = allowed_origins
         return nil if allowed.empty?
-        return request_origin if request_origin && allowed.include?(request_origin)
+        return request_origin if request_origin && matches_allowed?(request_origin, allowed)
 
-        allowed.first
+        # Don't return a wildcard pattern as a literal origin — use '*' instead
+        first = allowed.first
+        first.include?('*') ? '*' : first
+      end
+
+      def self.matches_allowed?(origin, allowed)
+        return false unless origin
+
+        allowed.any? do |pattern|
+          if pattern.include?('*')
+            regex = Regexp.new('\A' + Regexp.escape(pattern).gsub('\*', '[^.]+') + '\z')
+            regex.match?(origin)
+          else
+            pattern == origin
+          end
+        end
       end
 
       def self.origin_from_event(event)
