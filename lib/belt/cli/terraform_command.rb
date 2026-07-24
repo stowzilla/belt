@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'env_resolver'
+require_relative 'environment_config'
 
 module Belt
   module CLI
@@ -53,6 +54,7 @@ module Belt
 
       def run
         validate!
+        apply_env_config!
         env_dir = File.join(@infra_dir, @env)
         args = ['terraform', @action, *@extra_args]
         puts "belt → #{args.join(' ')}  (in #{env_dir}/)"
@@ -60,6 +62,12 @@ module Belt
       end
 
       private
+
+      def apply_env_config!
+        env_config = EnvironmentConfig.load(@env, infra_dir: @infra_dir)
+        env_config.apply!
+        puts "  🔑 Using AWS profile: #{env_config.aws_profile}" if env_config.aws_profile?
+      end
 
       def validate!
         unless @infra_dir

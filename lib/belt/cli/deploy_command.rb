@@ -8,6 +8,7 @@ require_relative 'env_resolver'
 require_relative 'terraform_command'
 require_relative 'backup_config'
 require_relative 'backup_runner'
+require_relative 'environment_config'
 
 module Belt
   module CLI
@@ -144,6 +145,8 @@ module Belt
         validate!
         env_dir = File.join(@infra_dir, @env)
 
+        load_and_apply_env_config!
+
         puts "belt → deploying #{@env} (in #{env_dir}/)\n\n"
 
         ensure_lockfile_consistent!
@@ -168,6 +171,7 @@ module Belt
 
       def run_backup_only
         validate!
+        load_and_apply_env_config!
 
         puts "belt → running backups for #{@env}\n\n"
 
@@ -190,6 +194,7 @@ module Belt
 
       def run_rebuild
         validate!
+        load_and_apply_env_config!
         validate_aws!
 
         puts "belt → rebuilding Lambda for #{@env}\n\n"
@@ -206,6 +211,23 @@ module Belt
       end
 
       private
+
+      def load_and_apply_env_config!
+        @env_config = EnvironmentConfig.load(@env, infra_dir: @infra_dir)
+        @env_config.apply!
+        print_env_config_info
+      end
+
+      def print_env_config_info
+        if @env_config.aws_profile?
+          puts "  🔑 Using AWS profile: #{@env_config.aws_profile}"
+        end
+        return unless @env_config.env_vars?
+
+        @env_config.env_vars.each do |key, _value|
+          puts "  📌 Setting #{key}"
+        end
+      end
 
       def find_project_root
         # Walk up from infra dir to find project root (where Gemfile lives)
@@ -264,7 +286,7 @@ module Belt
       end
 
       def load_backup_config
-        BackupConfig.load(@env, infra_dir: @infra_dir)
+        @env_config.backups? ? @env_config.backup_config : nil
       end
 
       def run_backup_phase(backup_config)

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'optparse'
+require_relative 'environment_config'
 
 module Belt
   module CLI
@@ -25,6 +26,8 @@ module Belt
         @environment = @args.first || ENV['BELT_ENV'] || 'dev'
         ENV['ENVIRONMENT'] = @environment
 
+        apply_env_config!
+
         if @options[:run]
           exec_runner(@options[:run])
         else
@@ -43,6 +46,12 @@ module Belt
             exit
           end
         end.parse!(@args)
+      end
+
+      def apply_env_config!
+        env_config = EnvironmentConfig.load(@environment)
+        env_config.apply!
+        puts "  🔑 Using AWS profile: #{env_config.aws_profile}" if env_config.aws_profile?
       end
 
       def exec_console
