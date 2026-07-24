@@ -219,12 +219,10 @@ module Belt
       end
 
       def print_env_config_info
-        if @env_config.aws_profile?
-          puts "  🔑 Using AWS profile: #{@env_config.aws_profile}"
-        end
+        puts "  🔑 Using AWS profile: #{@env_config.aws_profile}" if @env_config.aws_profile?
         return unless @env_config.env_vars?
 
-        @env_config.env_vars.each do |key, _value|
+        @env_config.env_vars.each_key do |key|
           puts "  📌 Setting #{key}"
         end
       end

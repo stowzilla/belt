@@ -71,9 +71,9 @@ module Belt
           @config.instance_variable_set(:@aws_profile, profile.to_s)
         end
 
-        def env(&block)
+        def env(&)
           env_dsl = EnvDSL.new(@config)
-          env_dsl.instance_eval(&block)
+          env_dsl.instance_eval(&)
         end
 
         def backups(enabled = nil, &block)
