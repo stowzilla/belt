@@ -18,7 +18,7 @@ module Belt
 
         allowed.any? do |pattern|
           if pattern.include?('*')
-            regex = Regexp.new('\A' + Regexp.escape(pattern).gsub('\*', '[^.]+') + '\z')
+            regex = Regexp.new("\\A#{Regexp.escape(pattern).gsub('\*', '[^.]+')}\\z")
             regex.match?(origin)
           else
             pattern == origin
