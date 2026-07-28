@@ -7,6 +7,10 @@ require_relative '../http_status'
 module Belt
   module Helpers
     module Response
+      # Maximum request body size (10 MB). Bodies larger than this are rejected
+      # to prevent memory exhaustion attacks on Lambda functions.
+      MAX_REQUEST_BODY_SIZE = 10 * 1024 * 1024
+
       def cors_headers(event = nil)
         event = @event if event.nil? && instance_variable_defined?(:@event)
         origin = CorsOrigin.resolve_origin(CorsOrigin.origin_from_event(event))
@@ -15,7 +19,9 @@ module Belt
           'Access-Control-Allow-Headers' => allow_headers,
           'Access-Control-Allow-Methods' => 'GET,POST,PUT,DELETE,PATCH,OPTIONS',
           'Access-Control-Max-Age' => '300',
-          'Content-Type' => 'application/json'
+          'Content-Type' => 'application/json',
+          'X-Content-Type-Options' => 'nosniff',
+          'Vary' => 'Origin'
         }
         headers['Access-Control-Allow-Origin'] = origin if origin
         headers
@@ -38,7 +44,12 @@ module Belt
       def html_response(html, status_code = 200)
         event = @event if instance_variable_defined?(:@event)
         origin = CorsOrigin.resolve_origin(CorsOrigin.origin_from_event(event))
-        headers = { 'Content-Type' => 'text/html; charset=utf-8' }
+        headers = {
+          'Content-Type' => 'text/html; charset=utf-8',
+          'X-Content-Type-Options' => 'nosniff',
+          'X-Frame-Options' => 'DENY',
+          'Referrer-Policy' => 'strict-origin-when-cross-origin'
+        }
         headers['Access-Control-Allow-Origin'] = origin if origin
         { statusCode: resolve_status(status_code), headers: headers, body: html }
       end

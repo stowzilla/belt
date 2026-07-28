@@ -102,13 +102,33 @@ module Belt
     end
 
     def dispatch_to_controller(route_info, event, body)
-      controller_class = resolve_controller(route_info[:controller])
+      controller_name = route_info[:controller]
+
+      # Prevent path traversal — controller names must be simple identifiers or single-level nested
+      unless valid_controller_name?(controller_name)
+        Belt::Observability::Logger.instance&.warn('Invalid controller name', controller: controller_name)
+        return error_response('Not found', 404, event)
+      end
+
+      controller_class = resolve_controller(controller_name)
       controller = controller_class.new(event: event, body: body)
 
-      controller_name = controller_class.name.split('::').last.gsub('Controller', '')
-      Belt::Observability::Logger.instance&.info("Processing by #{controller_name}##{route_info[:action]}")
+      class_label = controller_class.name.split('::').last.gsub('Controller', '')
+      Belt::Observability::Logger.instance&.info("Processing by #{class_label}##{route_info[:action]}")
 
       controller.dispatch(route_info[:action].to_sym)
+    end
+
+    # Validate controller names to prevent path traversal.
+    # Allows: "posts", "admin/posts" (single nesting level, no dots or special chars)
+    def valid_controller_name?(name)
+      return false if name.nil? || name.empty?
+      return false if name.include?('..')
+      return false if name.start_with?('/') || name.end_with?('/')
+      return false if name.include?('\\')
+
+      # Allow only lowercase letters, digits, underscores, and a single forward slash for nesting
+      name.match?(%r{\A[a-z][a-z0-9_]*(/[a-z][a-z0-9_]*)?\z})
     end
 
     def resolve_controller(controller_name)
@@ -137,10 +157,14 @@ module Belt
     def resolve_from_paths(controller_name)
       if controller_name.include?('/')
       end
-      file_name = "#{controller_name}_controller.rb"
+      file_name = "#{controller_name.gsub('/', '_')}_controller.rb"
 
       Belt.all_controller_paths.each do |path|
         full_path = File.join(path, file_name)
+
+        # Ensure resolved path stays within the allowed controller directory
+        resolved = File.realpath(full_path) rescue next
+        next unless resolved.start_with?(File.realpath(path))
         next unless File.exist?(full_path)
 
         require full_path

@@ -76,10 +76,16 @@ module Belt
 
         return { statusCode: 200, headers: cors_headers(event), body: '{}' } if event['httpMethod'] == 'OPTIONS'
 
+        raw_body = event['body'] || '{}'
+
+        if raw_body.bytesize > Belt::Helpers::Response::MAX_REQUEST_BODY_SIZE
+          return error_response('Request body too large', 413)
+        end
+
         begin
-          body = JSON.parse(event['body'] || '{}')
+          body = JSON.parse(raw_body)
         rescue JSON::ParserError
-          return error_response('Invalid JSON in request body')
+          return error_response('Invalid JSON in request body', 400)
         end
 
         begin
