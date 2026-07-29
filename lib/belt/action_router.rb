@@ -165,7 +165,7 @@ module Belt
     def error_response(message, status_code, event = nil)
       origin = Belt::Helpers::CorsOrigin.resolve_origin(Belt::Helpers::CorsOrigin.origin_from_event(event))
       headers = {
-        'Access-Control-Allow-Headers' => 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+        'Access-Control-Allow-Headers' => 'Content-Type,Accept,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
         'Access-Control-Allow-Methods' => 'GET,POST,PUT,DELETE,PATCH,OPTIONS',
         'Content-Type' => 'application/json'
       }

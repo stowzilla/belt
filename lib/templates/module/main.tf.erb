@@ -26,11 +26,16 @@ resource "conveyor_belt" "main" {
   app_name          = var.app_name
   lambda_source_dir = "${path.module}/../../../lambda"
   lambda_shared_dirs = ["controllers", "helpers", "lib", "models", "views"]
-  # Include CloudFront origin when frontend.tf is present so SPA can call the API (CORS).
+<% if @frontend -%>
+  # CloudFront first so SPA→API CORS works out of the box (tutorial footgun fixed).
+  # localhost stays via env frontend_urls for local `belt server` dev.
   frontend_urls = concat(
-    var.frontend_urls<% if @frontend %>,
-    ["https://${aws_cloudfront_distribution.frontend.domain_name}"]<% end %>
+    ["https://${aws_cloudfront_distribution.frontend.domain_name}"],
+    var.frontend_urls
   )
+<% else -%>
+  frontend_urls = var.frontend_urls
+<% end -%>
   friendly_errors   = var.environment != "prod"
 
   custom_domain_name = local.dns_enabled ? local.api_domain : ""
