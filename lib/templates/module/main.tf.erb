@@ -21,7 +21,8 @@ terraform {
 resource "conveyor_belt" "main" {
   provider = conveyor-belt
 
-  source            = "${path.module}/../../config/routes.tf.rb"
+  # path.module is infrastructure/modules/app — climb three levels to project root
+  source            = "${path.module}/../../../config/routes.tf.rb"
   app_name          = var.app_name
   lambda_source_dir = "${path.module}/../../../lambda"
   lambda_shared_dirs = ["controllers", "helpers", "lib", "models", "views"]
@@ -31,7 +32,7 @@ resource "conveyor_belt" "main" {
   custom_domain_name = local.dns_enabled ? local.api_domain : ""
 
   # Per-lambda configuration from config/lambda/*.yml (database.yml style)
-  lambda_config_dir = "${path.module}/../../config/lambda"
+  lambda_config_dir = "${path.module}/../../../config/lambda"
 
   # Dynamic value references — YAML env_vars use ref(name) to pull these in
   lambda_env_refs = var.lambda_env_refs
