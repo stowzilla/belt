@@ -17,13 +17,14 @@ module Belt
     skip_before_action :authenticate!
 
     ASSETS_DIR = File.expand_path('../assets', __dir__)
-    MODEL_HINT_CMD = 'belt generate model Post title content:text'
+    # Scaffold gives model + controller + routes + schema (not model-only).
+    SCAFFOLD_HINT_CMD = 'belt generate scaffold Post title content:text'
 
     def show
       @title = ENV.fetch('WELCOME_TITLE', 'Welcome to Belt')
       @subtitle = ENV.fetch('WELCOME_SUBTITLE', 'API Gateway → Lambda → DynamoDB — all connected.')
       @dynamodb_connected = dynamodb_connected?
-      @model_hint_cmd = MODEL_HINT_CMD
+      @scaffold_hint_cmd = SCAFFOLD_HINT_CMD
 
       if wants_json?
         return success_response(welcome_payload)
@@ -47,10 +48,9 @@ module Belt
           lambda: true,
           dynamodb: @dynamodb_connected
         },
-        # Empty account / no tables is fine — not an error. SPA uses this for tip UI.
-        dynamodb_hint: @dynamodb_connected ? nil : "No tables yet — create one with: #{MODEL_HINT_CMD}",
+        # One tip only (was duplicated as dynamodb_hint + first next_step).
         next_steps: [
-          "Add a DynamoDB model: #{MODEL_HINT_CMD}",
+          "Scaffold a resource: #{SCAFFOLD_HINT_CMD}",
           'Deploy: belt deploy',
           'This page will be replaced once you define your own root route.'
         ]

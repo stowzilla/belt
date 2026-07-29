@@ -12,45 +12,39 @@
     <div class="overlay">
       <h1><%= h(@title) %></h1>
       <p class="subtitle"><%= h(@subtitle) %></p>
-    </div>
-  </div>
-  <div class="container">
-    <div class="stack-check">
-      <div class="check-item check-pass">
-        <span class="icon">✓</span>
-        <span>API Gateway</span>
+
+      <div class="stack-check">
+        <div class="check-item check-pass">
+          <span class="icon">✓</span>
+          <span>API Gateway</span>
+        </div>
+        <div class="arrow">→</div>
+        <div class="check-item check-pass">
+          <span class="icon">✓</span>
+          <span>Lambda</span>
+        </div>
+        <div class="arrow">→</div>
+        <%- if @dynamodb_connected -%>
+        <div class="check-item check-pass">
+          <span class="icon">✓</span>
+          <span>DynamoDB</span>
+        </div>
+        <%- else -%>
+        <div class="check-item check-neutral">
+          <span class="icon">○</span>
+          <span>DynamoDB</span>
+        </div>
+        <%- end -%>
       </div>
-      <div class="arrow">→</div>
-      <div class="check-item check-pass">
-        <span class="icon">✓</span>
-        <span>Lambda</span>
+
+      <div class="next-steps">
+        <h2>Next Steps</h2>
+        <ol>
+          <li>Scaffold a resource: <code><%= h(@scaffold_hint_cmd) %></code></li>
+          <li>Deploy: <code>belt deploy</code></li>
+          <li>This page will be replaced once you define your own root route.</li>
+        </ol>
       </div>
-      <div class="arrow">→</div>
-      <%- if @dynamodb_connected -%>
-      <div class="check-item check-pass">
-        <span class="icon">✓</span>
-        <span>DynamoDB</span>
-      </div>
-      <%- else -%>
-      <div class="check-item check-neutral">
-        <span class="icon">○</span>
-        <span>DynamoDB</span>
-      </div>
-      <%- end -%>
-    </div>
-    <%- unless @dynamodb_connected -%>
-    <p class="dynamodb-hint">
-      No tables yet — create one with:
-      <code><%= h(@model_hint_cmd) %></code>
-    </p>
-    <%- end -%>
-    <div class="next-steps">
-      <h2>Next Steps</h2>
-      <ol>
-        <li>Add a DynamoDB model: <code><%= h(@model_hint_cmd) %></code></li>
-        <li>Deploy: <code>belt deploy</code></li>
-        <li>This page will be replaced once you define your own root route.</li>
-      </ol>
     </div>
   </div>
 </body>
