@@ -70,6 +70,12 @@ body {
   border: 1px solid rgba(39, 174, 96, 0.3);
   color: #1e8449;
 }
+/* Optional / empty DynamoDB — not an error, just not in use yet */
+.check-neutral {
+  background: rgba(113, 128, 150, 0.08);
+  border: 1px solid rgba(113, 128, 150, 0.25);
+  color: #4a5568;
+}
 .check-warn {
   background: rgba(243, 156, 18, 0.1);
   border: 1px solid rgba(243, 156, 18, 0.3);
@@ -77,6 +83,21 @@ body {
 }
 .icon { font-size: 1.1rem; }
 .arrow { color: #718096; font-size: 1.2rem; }
+.dynamodb-hint {
+  text-align: center;
+  margin: -0.5rem 0 1.75rem;
+  color: #4a5568;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+.dynamodb-hint code {
+  background: rgba(99, 45, 145, 0.08);
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  color: #632d91;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
 .info {
   background: #ffffff;
   border: 1px solid #e2e8f0;

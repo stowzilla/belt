@@ -10,15 +10,20 @@ module Belt
   # Dual format:
   #   - Browser / no Accept preference → HTML hero + stack check
   #   - Accept: application/json (SPA / apiClient) → JSON payload for the React shell
+  #
+  # The hero image (lib/belt/assets/belt-default.jpg) is the single source of truth —
+  # HTML embeds it, and JSON returns the same bytes as a data URI so the SPA matches.
   class WelcomeController < BeltController::Base
     skip_before_action :authenticate!
 
     ASSETS_DIR = File.expand_path('../assets', __dir__)
+    MODEL_HINT_CMD = 'belt generate model Post title content:text'
 
     def show
       @title = ENV.fetch('WELCOME_TITLE', 'Welcome to Belt')
       @subtitle = ENV.fetch('WELCOME_SUBTITLE', 'API Gateway → Lambda → DynamoDB — all connected.')
       @dynamodb_connected = dynamodb_connected?
+      @model_hint_cmd = MODEL_HINT_CMD
 
       if wants_json?
         return success_response(welcome_payload)
@@ -35,13 +40,17 @@ module Belt
       {
         title: @title,
         subtitle: @subtitle,
+        # Same gem asset as the HTML welcome page — edit belt-default.jpg once.
+        background_image: "data:image/jpeg;base64,#{background_image_base64}",
         stack: {
           api_gateway: true,
           lambda: true,
           dynamodb: @dynamodb_connected
         },
+        # Empty account / no tables is fine — not an error. SPA uses this for tip UI.
+        dynamodb_hint: @dynamodb_connected ? nil : "No tables yet — create one with: #{MODEL_HINT_CMD}",
         next_steps: [
-          'Generate a resource: belt g resource post title:string body:text',
+          "Add a DynamoDB model: #{MODEL_HINT_CMD}",
           'Deploy: belt deploy',
           'This page will be replaced once you define your own root route.'
         ]

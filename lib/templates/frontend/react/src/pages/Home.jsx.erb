@@ -1,22 +1,163 @@
 import { useEffect, useState } from 'react'
 import { apiClient } from '../lib/apiClient'
 
+// Mirrors lib/belt/assets/welcome.css so SPA and Lambda HTML welcome match.
+const welcomeStyles = `
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  .belt-welcome {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f8f9fa;
+    color: #2d3748;
+    min-height: 100vh;
+  }
+  .belt-welcome .hero {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+  }
+  .belt-welcome .hero-bg {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+  .belt-welcome .overlay {
+    position: absolute;
+    top: 35%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    padding: 2rem 3rem;
+    background: rgba(255, 255, 255, 0.50);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border-radius: 12px;
+    text-align: center;
+    max-width: 600px;
+    width: 90%;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  }
+  .belt-welcome .overlay h1 {
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: #2d3748;
+    margin-bottom: 0.4rem;
+  }
+  .belt-welcome .overlay .subtitle {
+    font-size: 1.1rem;
+    color: #4a5568;
+  }
+  .belt-welcome .container {
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 2rem;
+  }
+  .belt-welcome .stack-check {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+  }
+  .belt-welcome .check-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-weight: 500;
+  }
+  .belt-welcome .check-pass {
+    background: rgba(39, 174, 96, 0.1);
+    border: 1px solid rgba(39, 174, 96, 0.3);
+    color: #1e8449;
+  }
+  .belt-welcome .check-neutral {
+    background: rgba(113, 128, 150, 0.08);
+    border: 1px solid rgba(113, 128, 150, 0.25);
+    color: #4a5568;
+  }
+  .belt-welcome .icon { font-size: 1.1rem; }
+  .belt-welcome .arrow { color: #718096; font-size: 1.2rem; }
+  .belt-welcome .dynamodb-hint {
+    text-align: center;
+    margin: -0.5rem 0 1.75rem;
+    color: #4a5568;
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+  .belt-welcome .dynamodb-hint code,
+  .belt-welcome .next-steps code {
+    background: rgba(99, 45, 145, 0.08);
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    color: #632d91;
+    font-size: 0.85rem;
+  }
+  .belt-welcome .next-steps {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 1.5rem;
+  }
+  .belt-welcome .next-steps h2 {
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+    color: #2d3748;
+  }
+  .belt-welcome .next-steps ol { padding-left: 1.5rem; }
+  .belt-welcome .next-steps li {
+    margin-bottom: 0.6rem;
+    color: #4a5568;
+    line-height: 1.5;
+  }
+  .belt-welcome .status-main {
+    padding: 3rem 2rem;
+    text-align: center;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: #4a5568;
+  }
+  .belt-welcome .status-main h1 {
+    font-size: 1.75rem;
+    color: #2d3748;
+    margin-bottom: 0.75rem;
+  }
+  .belt-welcome .error { color: #b91c1c; margin-top: 0.75rem; }
+  .belt-welcome .muted { color: #6b7280; margin-top: 0.5rem; font-size: 0.95rem; }
+  .belt-welcome .footer-note {
+    margin-top: 2rem;
+    font-size: 0.85rem;
+    color: #9ca3af;
+    text-align: center;
+  }
+  .belt-welcome .footer-note code {
+    background: #f3f4f6;
+    padding: 0.1rem 0.35rem;
+    border-radius: 4px;
+  }
+`
+
 function StackItem({ ok, label }) {
+  // DynamoDB false is expected (no tables yet) — neutral, not a warning.
+  const className = ok ? 'check-item check-pass' : 'check-item check-neutral'
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: '0.5rem',
-      padding: '0.5rem 0.75rem',
-      borderRadius: '6px',
-      background: ok ? '#ecfdf5' : '#fffbeb',
-      color: ok ? '#065f46' : '#92400e',
-      fontWeight: 500
-    }}>
-      <span aria-hidden="true">{ok ? '✓' : '⚠'}</span>
+    <div className={className}>
+      <span className="icon" aria-hidden="true">{ok ? '✓' : '○'}</span>
       <span>{label}</span>
     </div>
   )
+}
+
+// Turn "Label: belt some command" into mixed text + <code> when possible.
+function StepLine({ step }) {
+  const match = typeof step === 'string' ? step.match(/^(.*?):\s+(belt\s.+)$/) : null
+  if (match) {
+    return (
+      <>
+        {match[1]}: <code>{match[2]}</code>
+      </>
+    )
+  }
+  return step
 }
 
 function Home() {
@@ -46,79 +187,88 @@ function Home() {
 
   if (loading) {
     return (
-      <main style={styles.main}>
-        <p style={{ color: '#6b7280' }}>Connecting to API…</p>
-      </main>
+      <div className="belt-welcome">
+        <style>{welcomeStyles}</style>
+        <main className="status-main">
+          <p className="muted">Connecting to API…</p>
+        </main>
+      </div>
     )
   }
 
   if (error) {
     return (
-      <main style={styles.main}>
-        <h1><%= @module_name %></h1>
-        <p style={{ color: '#b91c1c', marginTop: '0.75rem' }}>
-          Could not load welcome data from the API.
-        </p>
-        <p style={{ color: '#6b7280', marginTop: '0.5rem', fontSize: '0.95rem' }}>
-          {error}
-        </p>
-        <p style={{ marginTop: '1rem', fontSize: '0.9rem' }}>
-          Check <code>VITE_API_URL</code> (run <code>belt frontend env dev</code>) and that CORS allows this origin.
-        </p>
-      </main>
+      <div className="belt-welcome">
+        <style>{welcomeStyles}</style>
+        <main className="status-main">
+          <h1><%= @module_name %></h1>
+          <p className="error">Could not load welcome data from the API.</p>
+          <p className="muted">{error}</p>
+          <p className="muted" style={{ marginTop: '1rem' }}>
+            Check <code>VITE_API_URL</code> (run <code>belt frontend env dev</code>) and that CORS allows this origin.
+          </p>
+        </main>
+      </div>
     )
   }
 
   const stack = welcome.stack || {}
+  const dynamoOk = !!stack.dynamodb
+  const title = welcome.title || '<%= @module_name %>'
+  const subtitle = welcome.subtitle || 'Your Belt app is running.'
 
   return (
-    <main style={styles.main}>
-      <h1 style={{ fontSize: '1.75rem', marginBottom: '0.35rem' }}>
-        {welcome.title || '<%= @module_name %>'}
-      </h1>
-      <p style={{ color: '#4b5563', marginBottom: '1.5rem' }}>
-        {welcome.subtitle || 'Your Belt app is running.'}
-      </p>
+    <div className="belt-welcome">
+      <style>{welcomeStyles}</style>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center', marginBottom: '2rem' }}>
-        <StackItem ok={!!stack.api_gateway} label="API Gateway" />
-        <span style={{ color: '#9ca3af' }}>→</span>
-        <StackItem ok={!!stack.lambda} label="Lambda" />
-        <span style={{ color: '#9ca3af' }}>→</span>
-        <StackItem ok={!!stack.dynamodb} label="DynamoDB" />
+      <div className="hero">
+        {welcome.background_image ? (
+          <img
+            src={welcome.background_image}
+            alt="Belt"
+            className="hero-bg"
+          />
+        ) : (
+          <div className="hero-bg" style={{ minHeight: '280px', background: '#1a202c' }} />
+        )}
+        <div className="overlay">
+          <h1>{title}</h1>
+          <p className="subtitle">{subtitle}</p>
+        </div>
       </div>
 
-      {Array.isArray(welcome.next_steps) && welcome.next_steps.length > 0 && (
-        <section>
-          <h2 style={{ fontSize: '1.1rem', marginBottom: '0.75rem' }}>Next Steps</h2>
-          <ol style={{ paddingLeft: '1.25rem', color: '#374151', lineHeight: 1.7 }}>
-            {welcome.next_steps.map((step, i) => (
-              <li key={i}>{step}</li>
-            ))}
-          </ol>
-        </section>
-      )}
+      <div className="container">
+        <div className="stack-check">
+          <StackItem ok={!!stack.api_gateway} label="API Gateway" />
+          <span className="arrow">→</span>
+          <StackItem ok={!!stack.lambda} label="Lambda" />
+          <span className="arrow">→</span>
+          <StackItem ok={dynamoOk} label="DynamoDB" />
+        </div>
 
-      <p style={{ marginTop: '2rem', fontSize: '0.85rem', color: '#9ca3af' }}>
-        Edit <code>src/pages/Home.jsx</code> to replace this page.
-      </p>
-    </main>
+        {!dynamoOk && welcome.dynamodb_hint && (
+          <p className="dynamodb-hint">
+            <StepLine step={welcome.dynamodb_hint} />
+          </p>
+        )}
+
+        {Array.isArray(welcome.next_steps) && welcome.next_steps.length > 0 && (
+          <div className="next-steps">
+            <h2>Next Steps</h2>
+            <ol>
+              {welcome.next_steps.map((step, i) => (
+                <li key={i}><StepLine step={step} /></li>
+              ))}
+            </ol>
+          </div>
+        )}
+
+        <p className="footer-note">
+          Edit <code>src/pages/Home.jsx</code> to replace this page.
+        </p>
+      </div>
+    </div>
   )
-}
-
-const styles = {
-  main: {
-    padding: '2rem',
-    maxWidth: '720px',
-    margin: '0 auto',
-    fontFamily: 'system-ui, -apple-system, sans-serif'
-  },
-  code: {
-    fontSize: '0.9em',
-    background: '#f3f4f6',
-    padding: '0.1rem 0.35rem',
-    borderRadius: '4px'
-  }
 }
 
 export default Home

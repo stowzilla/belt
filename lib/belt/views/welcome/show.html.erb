@@ -32,16 +32,22 @@
         <span>DynamoDB</span>
       </div>
       <%- else -%>
-      <div class="check-item check-warn">
-        <span class="icon">⚠</span>
+      <div class="check-item check-neutral">
+        <span class="icon">○</span>
         <span>DynamoDB</span>
       </div>
       <%- end -%>
     </div>
+    <%- unless @dynamodb_connected -%>
+    <p class="dynamodb-hint">
+      No tables yet — create one with:
+      <code><%= h(@model_hint_cmd) %></code>
+    </p>
+    <%- end -%>
     <div class="next-steps">
       <h2>Next Steps</h2>
       <ol>
-        <li>Generate a resource: <code>belt g resource post title:string body:text</code></li>
+        <li>Add a DynamoDB model: <code><%= h(@model_hint_cmd) %></code></li>
         <li>Deploy: <code>belt deploy</code></li>
         <li>This page will be replaced once you define your own root route.</li>
       </ol>
