@@ -28,6 +28,7 @@ module Belt
       def run
         validate!
         generate_frontend_tf
+        ensure_cloudfront_cors
         return if @quiet
 
         puts "\n✓ Frontend infrastructure generated in #{MODULE_DIR}!"
@@ -50,6 +51,33 @@ module Belt
         content = ERB.new(File.read(template_path), trim_mode: '-').result(binding)
         File.write(dest, content)
         puts "  create  #{dest}" unless @quiet
+      end
+
+      # Wire CloudFront origin into conveyor_belt frontend_urls so SPA→API CORS works.
+      def ensure_cloudfront_cors
+        main_tf = File.join(MODULE_DIR, 'main.tf')
+        return unless File.exist?(main_tf)
+
+        content = File.read(main_tf)
+        return if content.include?('aws_cloudfront_distribution.frontend.domain_name')
+
+        simple = /^(\s*)frontend_urls\s*=\s*var\.frontend_urls\s*$/
+        unless content.match?(simple)
+          puts "  skip    #{main_tf} (add CloudFront to frontend_urls manually for CORS)" unless @quiet
+          return
+        end
+
+        content = content.sub(simple) do
+          indent = Regexp.last_match(1)
+          <<~TF.chomp
+            #{indent}frontend_urls = concat(
+            #{indent}  var.frontend_urls,
+            #{indent}  ["https://${aws_cloudfront_distribution.frontend.domain_name}"]
+            #{indent})
+          TF
+        end
+        File.write(main_tf, content)
+        puts "  update  #{main_tf} (CloudFront CORS)" unless @quiet
       end
     end
   end
