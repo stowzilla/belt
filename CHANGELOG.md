@@ -19,7 +19,7 @@ belt-terraform-state-<account_id>
 - `belt setup state` rewrites `backend.tf` with the resolved name
 - Existing installs that already own `belt-terraform-state` can keep using `--bucket belt-terraform-state`
 
-### Implicit JSON responses (Rails-style assigns)
+### Implicit responses (Rails-style assigns)
 
 Controllers can set instance variables and skip the explicit `success_response` call:
 
@@ -40,9 +40,43 @@ during the action. Serialization:
 - `ActiveItem::Relation` / Enumerable → map each record via `to_h`
 - Nested hashes/arrays recurse
 
-Explicit `success_response` / `error_response` / `html_response` / `render` still win
-when returned. Rescue handlers still use `error_response`. Status defaults to 200;
-use an explicit `success_response(..., 201)` when you need a non-200.
+Explicit `success_response` / `error_response` / `html_response` / `render` / `head` still win
+when returned. Rescue handlers still use `error_response`.
+
+### Default format (`:json` / `:html`)
+
+```ruby
+# App-wide (lambda/config/environment.rb)
+Belt.configure do |c|
+  c.default_format = :json   # default — API first
+end
+
+# Per-controller override (inherits down the chain)
+class PagesController < ApplicationController
+  self.default_format = :html
+end
+```
+
+| `default_format` | Implicit response (no explicit helper) |
+|---|---|
+| `:json` (default) | `success_response` from assigns |
+| `:html` | `render` template `views/<controller>/<action>.html.erb` (missing → `TemplateNotFound`) |
+
+### Symbol status codes, `head`, `response_status`
+
+```ruby
+success_response({ post: post.to_h }, :created)   # 201
+error_response("Nope", :unprocessable_entity)     # 422
+head :no_content                                  # 204 empty body
+head :created                                     # 201 empty body
+
+def create
+  @post = Post.create!(...)
+  response_status :created   # 201 + implicit assigns body
+end
+```
+
+Bare integers still work. Symbols match the Rack/Rails names (`:created`, `:not_found`, …).
 
 ## 0.3.0
 

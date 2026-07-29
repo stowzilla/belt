@@ -18,7 +18,7 @@ module BeltController
     # Never auto-serialize these into the JSON body (framework internals).
     FRAMEWORK_IVARS = %i[
       @event @raw_body @params @current_action @current_user_id @user_groups
-      @logger @__assigns_before
+      @logger @__assigns_before @__response_status
     ].freeze
 
     class << self
@@ -52,6 +52,25 @@ module BeltController
 
       def skip_before_action(method_name, only: nil, except: nil)
         skipped_before_actions << { method: method_name, only: only&.map(&:to_sym), except: except&.map(&:to_sym) }
+      end
+
+      # Implicit response format when the action does not call success_response /
+      # error_response / html_response / render / head.
+      # Inherits up the controller chain; falls back to Belt.configuration.default_format.
+      def default_format
+        return @default_format if defined?(@default_format)
+        return superclass.default_format if superclass.respond_to?(:default_format)
+
+        Belt.configuration.default_format
+      end
+
+      def default_format=(value)
+        format = value.to_sym
+        unless Belt::Configuration::VALID_FORMATS.include?(format)
+          raise ArgumentError, "default_format must be :json or :html (got #{value.inspect})"
+        end
+
+        @default_format = format
       end
 
       def all_before_actions
@@ -161,25 +180,44 @@ module BeltController
 
     # Turn the action return value (or instance-variable assigns) into an API Gateway response.
     #
-    # Rails-like behavior for API-first controllers:
+    # Rails-like behavior for API-first controllers (default_format :json):
     #   def index
     #     @posts = Post.all   # → success_response({ posts: [...] })
     #   end
     #
+    # HTML controllers (default_format :html):
+    #   def show
+    #     @post = Post.find(...)  # → render template views/<ctrl>/show.html.erb
+    #   end
+    #
     # Explicit responses still win:
-    #   success_response(...), error_response(...), html_response(...), render
+    #   success_response(...), error_response(...), html_response(...), render, head
+    #
+    # Non-200 with implicit body:
+    #   def create
+    #     @post = Post.create!(...)
+    #     response_status :created
+    #   end
     #
     def finalize_response(result)
       return result if lambda_response?(result)
 
+      status = @__response_status || 200
+
+      if self.class.default_format == :html
+        return render(status: status)
+      end
+
       # Prefer assigns when present. Ruby assignment returns the RHS, so
       # `@posts = Post.all` would otherwise look like an explicit return value.
+      # (Rails ignores the action return value entirely; we keep a thin fallback
+      # for explicit non-assign returns.)
       assigns = collect_assigns
-      return success_response(assigns) if assigns.any?
+      return success_response(assigns, status) if assigns.any?
 
-      return success_response({}) if result.nil?
+      return success_response({}, status) if result.nil?
 
-      success_response(serialize_for_response(result))
+      success_response(serialize_for_response(result), status)
     end
 
     def lambda_response?(result)

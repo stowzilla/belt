@@ -81,11 +81,16 @@ class PostsController < BeltController::Base
     @post = Post.find(params["id"])
   end
 
-  # Explicit response still works (and is required for non-200 status)
+  # Implicit body + non-200 status
   def create
     attrs = params.require(:post).permit(:title, :body).to_h
-    post = Post.create!(attrs.merge(user_id: current_user_id))
-    success_response({ post: post.to_h }, 201)
+    @post = Post.create!(attrs.merge(user_id: current_user_id))
+    response_status :created
+  end
+
+  def destroy
+    Post.find(params["id"]).destroy
+    head :no_content
   end
 end
 ```
@@ -201,9 +206,42 @@ end
 
 ```ruby
 success_response({ id: "123", name: "Example" })       # 200 JSON with CORS
-success_response({ id: "123" }, 201)                    # 201 Created
-error_response("Not found", 404)                        # 404 JSON error
+success_response({ id: "123" }, :created)               # 201 Created (symbol or int)
+error_response("Not found", :not_found)                 # 404 JSON error
+error_response("Nope", :unprocessable_entity)           # 422
 html_response("<h1>Hello</h1>")                         # 200 HTML with CORS
+head :no_content                                        # 204 empty body
+head :created                                           # 201 empty body
+```
+
+### Default format (API vs HTML)
+
+```ruby
+# App-wide — typically in lambda/config/environment.rb
+Belt.configure do |config|
+  config.default_format = :json   # default
+end
+
+# Per-controller override
+class PagesController < ApplicationController
+  self.default_format = :html
+end
+```
+
+- **`:json`** (default): action assigns → `success_response({ posts: [...] })`
+- **`:html`**: action assigns stay on the controller; Belt implicitly `render`s
+  `views/<controller>/<action>.html.erb`. Missing template raises `Belt::TemplateNotFound`
+  (no silent JSON fallback).
+- Explicit helpers always win: `success_response`, `error_response`, `html_response`,
+  `render`, `head`.
+
+### Non-200 with implicit assigns
+
+```ruby
+def create
+  @post = Post.create!(...)
+  response_status :created   # → 201 + { post: {...} }
+end
 ```
 
 ## Controller Discovery
