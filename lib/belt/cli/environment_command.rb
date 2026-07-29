@@ -26,11 +26,12 @@ module Belt
         new(env_name).generate
       end
 
-      def initialize(env_name, quiet: false, domain: nil)
+      def initialize(env_name, quiet: false, domain: nil, announce: true)
         @env_name = env_name.downcase.gsub(/[^a-z0-9_-]/, '')
         @app_name = detect_app_name
         @domain = domain
         @quiet = quiet
+        @announce = announce
       end
 
       def generate
@@ -50,7 +51,7 @@ module Belt
           puts "  create  #{dest_path}" unless @quiet
         end
 
-        return if @quiet
+        return if @quiet || !@announce
 
         puts "\n✓ Environment '#{@env_name}' created!"
         puts "\nNext steps:"

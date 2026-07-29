@@ -29,9 +29,10 @@ module Belt
         new(framework).generate
       end
 
-      def initialize(framework, quiet: false)
+      def initialize(framework, quiet: false, announce: true)
         @framework = framework
         @quiet = quiet
+        @announce = announce
         @app_name = detect_app_name
         @module_name = @app_name.split(/[-_]/).map(&:capitalize).join
       end
@@ -59,7 +60,7 @@ module Belt
         @npm_ok = install_dependencies(dest_dir)
         setup_frontend_infra_for_existing_environments
 
-        return if @quiet
+        return if @quiet || !@announce
 
         puts "\nNext steps:"
         puts '  belt server                   # Start local dev server'

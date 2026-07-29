@@ -18,6 +18,7 @@ module Belt
         bucket = nil
         environments = nil
         domain = nil
+        verbose = false
 
         i = 0
         while i < args.length
@@ -49,6 +50,8 @@ module Belt
             domain = args[i]
           when /^--domain=/
             domain = arg.split('=', 2).last
+          when '-v', '--verbose'
+            verbose = true
           else
             app_name ||= arg unless arg.start_with?('-')
           end
@@ -65,19 +68,28 @@ module Belt
           puts '  --state-bucket BUCKET_NAME     Alias for --bucket'
           puts '  --environments dev,prod        Comma-separated environments (default: dev,prod)'
           puts '                                 Use "none" to skip environment setup'
+          puts '  -v, --verbose                  List every created file (Rails-style)'
           exit 1
         end
 
-        new(app_name, frontend: frontend, bucket: bucket, environments: environments, domain: domain).generate
+        new(
+          app_name,
+          frontend: frontend,
+          bucket: bucket,
+          environments: environments,
+          domain: domain,
+          verbose: verbose
+        ).generate
       end
 
-      def initialize(app_name, frontend: nil, bucket: nil, environments: nil, domain: nil)
+      def initialize(app_name, frontend: nil, bucket: nil, environments: nil, domain: nil, verbose: false)
         @app_name = app_name.gsub(/[^a-z0-9_-]/i, '_').downcase
         @module_name = @app_name.split(/[-_]/).map(&:capitalize).join
         @frontend = frontend
         @bucket = bucket
         @domain = domain
         @environments = parse_environments(environments)
+        @verbose = verbose
         @resolved_bucket = nil
         @state_setup_succeeded = false
       end
@@ -91,7 +103,7 @@ module Belt
         puts "Creating new Belt application: #{@app_name}"
         create_structure
         generate_module
-        puts "  create  app skeleton"
+        puts '  create  app skeleton' unless @verbose
         generate_environments
         generate_frontend if @frontend
         init_git
@@ -163,6 +175,7 @@ module Belt
           template_path = File.join(module_template_dir, template_name)
           content = ERB.new(File.read(template_path), trim_mode: '-').result(binding)
           File.write(dest_path, content)
+          puts "  create  #{dest_path}" if @verbose
         end
       end
 
@@ -171,10 +184,15 @@ module Belt
 
         Dir.chdir(@app_name) do
           @environments.each do |env_name|
-            Belt::CLI::EnvironmentCommand.new(env_name, quiet: true, domain: @domain).generate
+            Belt::CLI::EnvironmentCommand.new(
+              env_name,
+              quiet: !@verbose,
+              announce: false,
+              domain: @domain
+            ).generate
           end
         end
-        puts "  create  environments (#{@environments.join(', ')})"
+        puts "  create  environments (#{@environments.join(', ')})" unless @verbose
       end
 
       def setup_state
@@ -233,23 +251,31 @@ module Belt
 
       def create_dir(dir)
         FileUtils.mkdir_p(dir)
+        puts "  create  #{dir}/" if @verbose
       end
 
       def create_file(template_name, dest_path)
         template_path = File.join(TEMPLATE_DIR, template_name)
         content = ERB.new(File.read(template_path), trim_mode: '-').result(binding)
         File.write(dest_path, content)
+        puts "  create  #{dest_path}" if @verbose
       end
 
       def init_git
         Dir.chdir(@app_name) do
           system('git', 'init', '--quiet')
         end
-        puts '  init    git'
+        if @verbose
+          puts "  init    #{@app_name}/.git/"
+        else
+          puts '  init    git'
+        end
       end
 
       def run_bundle_install
         Dir.chdir(@app_name) do
+          puts "\n  Running bundle install..." if @verbose
+          # Always --quiet: bundle's own progress is noise either way
           success = system('bundle', 'install', '--quiet')
           if success
             puts '  ✓      bundle install'
@@ -262,14 +288,20 @@ module Belt
       def generate_frontend
         frontend_cmd = nil
         Dir.chdir(@app_name) do
-          frontend_cmd = Belt::CLI::FrontendCommand.new(@frontend, quiet: true)
+          frontend_cmd = Belt::CLI::FrontendCommand.new(
+            @frontend,
+            quiet: !@verbose,
+            announce: false
+          )
           frontend_cmd.generate
         end
-        puts "  create  frontend (#{@frontend})"
-        if frontend_cmd.npm_ok?
-          puts '  ✓      npm dependencies'
-        else
-          puts '  ⚠      npm install failed — run `cd frontend && npm install`'
+        unless @verbose
+          puts "  create  frontend (#{@frontend})"
+          if frontend_cmd.npm_ok?
+            puts '  ✓      npm dependencies'
+          else
+            puts '  ⚠      npm install failed — run `cd frontend && npm install`'
+          end
         end
       end
 

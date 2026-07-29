@@ -2,6 +2,15 @@
 
 ## 0.2.10
 
+### Quiet `belt new` (with optional verbose)
+
+`belt new` prints a short phase summary by default (skeleton, environments, frontend,
+bundle, state bucket) instead of every path plus AWS/npm noise.
+
+Use `-v` / `--verbose` for Rails-style per-file `create` lines when you want the
+inventory. Nested generators skip their own next-steps banners; the final success
+block still owns next steps. State-bucket setup stays non-interactive either way.
+
 ### State bucket naming (global uniqueness)
 
 S3 bucket names are a **global** namespace across all AWS accounts. The previous default
