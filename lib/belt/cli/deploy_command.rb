@@ -457,7 +457,27 @@ module Belt
         FileUtils.cp(gemfile, build_dir) if File.exist?(gemfile)
         FileUtils.cp(lockfile, build_dir) if File.exist?(lockfile)
 
+        copy_vendor_cache(build_dir)
+
         puts '    📁 Copied handlers, controllers, models, lib, config'
+      end
+
+      # Stage prebuilt .gem files so Docker `bundle install` can install unreleased
+      # gems as normal package installs (with specifications/), not path/git layouts.
+      # Prefer project-root vendor/cache (next to Gemfile — Bundler's natural path);
+      # fall back to lambda/vendor/cache for older layouts.
+      def copy_vendor_cache(build_dir)
+        cache_dir = [
+          File.join(@project_root, 'vendor', 'cache'),
+          File.join(@project_root, 'lambda', 'vendor', 'cache')
+        ].find { |dir| Dir.exist?(dir) && !Dir.empty?(dir) }
+        return unless cache_dir
+
+        dest = File.join(build_dir, 'vendor', 'cache')
+        FileUtils.mkdir_p(dest)
+        FileUtils.cp_r(Dir.glob(File.join(cache_dir, '*')), dest)
+        gem_count = Dir.glob(File.join(dest, '*.gem')).size
+        puts "    📦 Copied vendor/cache (#{gem_count} local gem(s))"
       end
 
       def build_gems(build_dir)
