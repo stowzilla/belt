@@ -9,6 +9,7 @@ require_relative 'terraform_command'
 require_relative 'backup_config'
 require_relative 'backup_runner'
 require_relative 'environment_config'
+require_relative 'path_gem_materializer'
 
 module Belt
   module CLI
@@ -150,6 +151,7 @@ module Belt
         puts "belt → deploying #{@env} (in #{env_dir}/)\n\n"
 
         ensure_lockfile_consistent!
+        warn_active_path_gems!
         generate_routes_if_needed
         run_backups unless @skip_backup
 
@@ -458,6 +460,7 @@ module Belt
         FileUtils.cp(lockfile, build_dir) if File.exist?(lockfile)
 
         copy_vendor_cache(build_dir)
+        materialize_path_gems!(build_dir)
 
         puts '    📁 Copied handlers, controllers, models, lib, config'
       end
@@ -478,6 +481,30 @@ module Belt
         FileUtils.cp_r(Dir.glob(File.join(cache_dir, '*')), dest)
         gem_count = Dir.glob(File.join(dest, '*.gem')).size
         puts "    📦 Copied vendor/cache (#{gem_count} local gem(s))"
+      end
+
+      # path: gems install under bundler/gems/ with no specifications/ — Lambda's
+      # bare `require 'belt'` can't see them. Build real .gem files into the
+      # package's vendor/cache and pin versions in the *build* Gemfile/lock only.
+      def materialize_path_gems!(build_dir)
+        gems = PathGemMaterializer.materialize!(build_dir, project_root: @project_root)
+        return if gems.empty?
+
+        puts "    🔧 Materialized path gem(s) → vendor/cache: #{gems.join(', ')}"
+      end
+
+      # Full terraform apply packages via conveyor, which does not yet auto-build
+      # path: gems. --rebuild does. Surface that before someone ships a dead API.
+      def warn_active_path_gems!
+        lockfile = File.join(@project_root, 'Gemfile.lock')
+        return unless File.exist?(lockfile)
+        return unless File.read(lockfile).match?(/^PATH\n/)
+
+        puts '  ⚠ Gemfile.lock has PATH gems (path: in Gemfile).'
+        puts '    Full terraform deploy does not auto-materialize them yet.'
+        puts "    Prefer:  belt deploy #{@env} --rebuild"
+        puts '    Or pin a version + drop a built .gem in vendor/cache/'
+        puts ''
       end
 
       def build_gems(build_dir)
