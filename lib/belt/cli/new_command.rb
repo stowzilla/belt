@@ -88,6 +88,8 @@ module Belt
           exit 1
         end
 
+        preflight_check
+
         puts "Creating new Belt application: #{@app_name}"
         create_structure
         generate_module
@@ -108,6 +110,19 @@ module Belt
         return [] if env_string.downcase == 'none'
 
         env_string.split(',').map(&:strip).reject(&:empty?)
+      end
+
+      def preflight_check
+        missing = []
+        { 'aws' => 'AWS CLI', 'terraform' => 'Terraform' }.each do |cmd, label|
+          _, status = Open3.capture2e(cmd, '--version')
+          missing << label unless status.success?
+        end
+
+        return if missing.empty?
+
+        puts "⚠ Missing: #{missing.join(', ')}"
+        puts "  Belt requires these tools to deploy. Install them, then run `belt doctor` to verify.\n\n"
       end
 
       def create_structure
@@ -202,7 +217,7 @@ module Belt
             else
               puts '  ⚠ AWS credentials not detected — skipping state bucket creation.'
             end
-            puts '  Run `belt setup state` after configuring credentials (aws sso login / AWS_PROFILE).'
+            puts '  Run `belt doctor` to diagnose, then `belt setup state` to create the bucket.'
             @state_setup_succeeded = false
           end
         end
@@ -264,7 +279,7 @@ module Belt
       def print_next_steps
         puts "\nNext steps:"
         unless @state_setup_succeeded
-          puts '  # Configure AWS credentials (aws sso login / AWS_PROFILE)'
+          puts '  belt doctor                   # Verify AWS CLI, Terraform & credentials'
           puts '  belt setup state              # Create the S3 state bucket'
         end
         puts '  belt deploy                   # Deploy to AWS'

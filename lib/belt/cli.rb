@@ -21,6 +21,7 @@ require_relative 'cli/routes_command'
 require_relative 'cli/lambda_config_command'
 require_relative 'cli/tasks_command'
 require_relative 'cli/console_command'
+require_relative 'cli/doctor_command'
 
 module Belt
   module CLI
@@ -33,6 +34,7 @@ module Belt
       %w[console c] => Belt::CLI::ConsoleCommand,
       %w[tasks --tasks -T] => Belt::CLI::TasksCommand,
       'setup' => Belt::CLI::SetupCommand,
+      'doctor' => Belt::CLI::DoctorCommand,
       'deploy' => Belt::CLI::DeployCommand,
       'frontend' => Belt::CLI::FrontendEnvCommand,
       %w[server s] => Belt::CLI::ServerCommand,
@@ -114,6 +116,7 @@ module Belt
           setup state                                 Create/select S3 state bucket
           setup tables <env>                          Generate DynamoDB tables from schema
           setup frontend <env>                        Generate S3 + CloudFront infrastructure
+          doctor                                      Check system dependencies and AWS config
           init [environment] <env>                    terraform init for environment
           plan [environment] <env>                    terraform plan for environment
           apply [environment] <env>                   terraform apply for environment
