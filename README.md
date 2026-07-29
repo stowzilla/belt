@@ -71,23 +71,25 @@ require "belt"
 class PostsController < BeltController::Base
   before_action :authenticate!
 
+  # Implicit response: assigns become the JSON body
+  # → { "posts": [ { "id": "...", "title": "..." }, ... ] }
   def index
-    posts = Post.where(user_id: current_user_id, index: "UserIndex")
-    success_response(posts.map(&:attributes))
+    @posts = Post.where(user_id: current_user_id, index: "UserIndex")
   end
 
   def show
-    post = Post.find(params["id"])
-    success_response(post.attributes)
+    @post = Post.find(params["id"])
   end
 
+  # Explicit response still works (and is required for non-200 status)
   def create
     attrs = params.require(:post).permit(:title, :body).to_h
     post = Post.create!(attrs.merge(user_id: current_user_id))
-    success_response(post.attributes, 201)
+    success_response({ post: post.to_h }, 201)
   end
 end
 ```
+
 
 ### 4. Lambda entry point
 

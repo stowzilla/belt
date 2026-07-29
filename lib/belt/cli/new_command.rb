@@ -180,8 +180,15 @@ module Belt
         return if @environments.empty?
 
         Dir.chdir(@app_name) do
-          # Shared bucket: one per AWS account, all belt apps share it
-          @resolved_bucket = @bucket || 'belt-terraform-state'
+          # Shared bucket: one per AWS account, all belt apps share it.
+          # Account ID suffix makes the name globally unique (S3 is a global namespace).
+          if @bucket
+            @resolved_bucket = @bucket
+          elsif aws_configured?
+            @resolved_bucket = "belt-terraform-state-#{@aws_account_id}"
+          else
+            @resolved_bucket = 'belt-terraform-state'
+          end
 
           # Attempt to actually create the bucket if credentials are available
           if aws_configured?
@@ -194,7 +201,7 @@ module Belt
               @state_setup_succeeded = false
             end
           else
-            puts "\n  State bucket: #{@resolved_bucket}"
+            puts "\n  State bucket: belt-terraform-state-<account-id> (resolved at setup)"
             puts "  State keys:   #{s3_safe_name(@app_name)}/<env>/terraform.tfstate"
             if @aws_error&.include?('ForbiddenException') || @aws_error&.include?('AccessDenied')
               puts '  ⚠ AWS credentials found but access denied — check your profile/role configuration.'

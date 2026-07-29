@@ -138,8 +138,15 @@ module Belt
         end
       end
 
+      # One shared state bucket per AWS account (all belt apps use it).
+      # Account ID keeps the name globally unique — S3 names are a global namespace.
+      # Pattern: belt-terraform-state-<account_id>
       def resolve_bucket_name
-        @custom_bucket || 'belt-terraform-state'
+        return @custom_bucket if @custom_bucket
+        return "belt-terraform-state-#{@aws_account_id}" if @aws_account_id
+
+        # Placeholder until credentials are available (belt setup state re-resolves)
+        'belt-terraform-state'
       end
 
       # --- Interactive selection ---

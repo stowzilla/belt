@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.2.10
+
+### State bucket naming (global uniqueness)
+
+S3 bucket names are a **global** namespace across all AWS accounts. The previous default
+`belt-terraform-state` only works for the first account that creates it — everyone else
+hits "owned by a different AWS account".
+
+**Fix:** shared bucket is still one-per-account (all apps share it), but the name is now:
+
+```
+belt-terraform-state-<account_id>
+```
+
+- Still one bucket for all belt apps in an account (state key: `<app>/<env>/terraform.tfstate`)
+- `--bucket` still overrides when you want a custom name
+- `belt setup state` rewrites `backend.tf` with the resolved name
+- Existing installs that already own `belt-terraform-state` can keep using `--bucket belt-terraform-state`
+
+### Implicit JSON responses (Rails-style assigns)
+
+Controllers can set instance variables and skip the explicit `success_response` call:
+
+```ruby
+def index
+  @posts = Post.all
+end
+
+def show
+  @post = Post.find(params[:id])
+end
+```
+
+Belt auto-builds `success_response({ posts: [...] })` / `{ post: {...} }` from assigns set
+during the action. Serialization:
+
+- Models → `to_h` (ActiveItem already defines this)
+- `ActiveItem::Relation` / Enumerable → map each record via `to_h`
+- Nested hashes/arrays recurse
+
+Explicit `success_response` / `error_response` / `html_response` / `render` still win
+when returned. Rescue handlers still use `error_response`. Status defaults to 200;
+use an explicit `success_response(..., 201)` when you need a non-200.
+
 ## 0.3.0
 
 ### Pre-Deploy Backups
