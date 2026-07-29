@@ -135,15 +135,17 @@ module Belt
     end
 
     def resolve_from_paths(controller_name)
-      if controller_name.include?('/')
-      end
+      raise Belt::ActionNotFound, "Invalid controller name: #{controller_name}" if controller_name.include?('..')
+
       file_name = "#{controller_name}_controller.rb"
 
       Belt.all_controller_paths.each do |path|
         full_path = File.join(path, file_name)
-        next unless File.exist?(full_path)
+        resolved = File.expand_path(full_path)
+        next unless resolved.start_with?(File.expand_path(path))
+        next unless File.exist?(resolved)
 
-        require full_path
+        require resolved
         # After requiring, try to find the constant
         class_name = "#{controller_name.split(%r{[_/]}).map(&:capitalize).join}Controller"
         return Object.const_get(class_name) if Object.const_defined?(class_name)
