@@ -7,8 +7,10 @@ module Belt
   module CLI
     class DoctorCommand
       REQUIRED_TOOLS = [
-        { name: 'aws', check: %w[aws --version], install_url: 'https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html' },
-        { name: 'terraform', check: %w[terraform --version], install_url: 'https://developer.hashicorp.com/terraform/install' },
+        { name: 'aws', check: %w[aws --version],
+          install_url: 'https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html' },
+        { name: 'terraform', check: %w[terraform --version],
+          install_url: 'https://developer.hashicorp.com/terraform/install' },
         { name: 'ruby', check: %w[ruby --version], min_version: '3.3' },
         { name: 'bundler', check: %w[bundle --version], install_hint: 'gem install bundler' }
       ].freeze
@@ -73,7 +75,7 @@ module Belt
             print_warn(tool[:name], "found #{version}, need >= #{tool[:min_version]}")
             @warnings << "#{tool[:name]} version #{version} is below minimum #{tool[:min_version]}"
           else
-            print_ok(tool[:name], version ? "#{version}" : output.strip.lines.first&.strip)
+            print_ok(tool[:name], version ? version.to_s : output.strip.lines.first&.strip)
           end
         else
           print_fail(tool[:name], 'not found')
@@ -87,13 +89,13 @@ module Belt
         puts '── AWS Configuration ──'
 
         # Check for credential sources
-        has_profile = ENV['AWS_PROFILE'] && !ENV['AWS_PROFILE'].empty?
-        has_env_keys = ENV['AWS_ACCESS_KEY_ID'] && !ENV['AWS_ACCESS_KEY_ID'].empty?
+        has_profile = ENV.fetch('AWS_PROFILE', nil) && !ENV['AWS_PROFILE'].empty?
+        has_env_keys = ENV.fetch('AWS_ACCESS_KEY_ID', nil) && !ENV['AWS_ACCESS_KEY_ID'].empty?
         has_config_file = File.exist?(File.expand_path('~/.aws/config'))
         has_credentials_file = File.exist?(File.expand_path('~/.aws/credentials'))
 
         if has_profile
-          print_ok('AWS_PROFILE', ENV['AWS_PROFILE'])
+          print_ok('AWS_PROFILE', ENV.fetch('AWS_PROFILE', nil))
         elsif has_env_keys
           print_ok('AWS_ACCESS_KEY_ID', 'set (environment variable)')
         elsif has_credentials_file
@@ -110,10 +112,10 @@ module Belt
         end
 
         # Check config file for profiles
-        if has_config_file && @verbose
-          profiles = parse_aws_config_profiles
-          puts "         Profiles: #{profiles.join(', ')}" if profiles.any?
-        end
+        return unless has_config_file && @verbose
+
+        profiles = parse_aws_config_profiles
+        puts "         Profiles: #{profiles.join(', ')}" if profiles.any?
       end
 
       def check_aws_identity
@@ -188,7 +190,7 @@ module Belt
       def extract_version(output)
         # Match common version patterns:
         #   "aws-cli/2.15.0" "Terraform v1.7.0" "Bundler version 2.5.0" "ruby 3.3.0"
-        match = output.match(%r{(?:version\s+|v|/|^ruby\s+)([\d]+\.[\d]+(?:\.[\d]+)?)}i)
+        match = output.match(%r{(?:version\s+|v|/|^ruby\s+)(\d+\.\d+(?:\.\d+)?)}i)
         match ? match[1] : nil
       end
 
