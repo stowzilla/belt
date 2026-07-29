@@ -493,16 +493,17 @@ module Belt
         puts "    🔧 Materialized path gem(s) → vendor/cache: #{gems.join(', ')}"
       end
 
-      # Full terraform apply packages via conveyor, which does not yet auto-build
-      # path: gems. --rebuild does. Surface that before someone ships a dead API.
+      # path: gems need host-side materialize before Docker install. --rebuild
+      # always does it. Full terraform apply needs a conveyor-belt build that
+      # includes path-gem materialize (discord-vendor-cache-gemfile-parent+).
       def warn_active_path_gems!
         lockfile = File.join(@project_root, 'Gemfile.lock')
         return unless File.exist?(lockfile)
         return unless File.read(lockfile).match?(/^PATH\n/)
 
         puts '  ⚠ Gemfile.lock has PATH gems (path: in Gemfile).'
-        puts '    Full terraform deploy does not auto-materialize them yet.'
-        puts "    Prefer:  belt deploy #{@env} --rebuild"
+        puts "    Safe now: belt deploy #{@env} --rebuild (always materializes)."
+        puts '    Full terraform apply needs conveyor-belt with path-gem materialize.'
         puts '    Or pin a version + drop a built .gem in vendor/cache/'
         puts ''
       end
