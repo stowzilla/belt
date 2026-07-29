@@ -71,20 +71,26 @@ module Belt
       def harden_bucket(bucket, audit)
         unless audit[:versioning]
           enable_versioning(bucket)
-          puts '  enable  versioning'
+          say_security '  enable  versioning'
         end
         unless audit[:encryption]
           enable_encryption(bucket)
-          puts '  enable  AES-256 encryption'
+          say_security '  enable  AES-256 encryption'
         end
         unless audit[:public_access_block]
           block_public_access(bucket)
-          puts '  enable  public access block'
+          say_security '  enable  public access block'
         end
         return if audit[:tls_policy]
 
         apply_tls_policy(bucket)
-        puts '  enable  TLS-only bucket policy'
+        say_security '  enable  TLS-only bucket policy'
+      end
+
+      def say_security(message)
+        return if respond_to?(:say, true) && @quiet
+
+        puts message
       end
 
       private

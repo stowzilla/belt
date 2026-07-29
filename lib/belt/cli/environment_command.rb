@@ -41,19 +41,18 @@ module Belt
           exit 1
         end
 
-        puts "Creating environment: #{@env_name}"
+        puts "Creating environment: #{@env_name}" unless @quiet
         FileUtils.mkdir_p(dest_dir)
 
         templates.each do |template_name, dest_file|
           dest_path = File.join(dest_dir, dest_file)
           write_template(template_name, dest_path)
-          puts "  create  #{dest_path}"
+          puts "  create  #{dest_path}" unless @quiet
         end
-
-        puts "\n✓ Environment '#{@env_name}' created!"
 
         return if @quiet
 
+        puts "\n✓ Environment '#{@env_name}' created!"
         puts "\nNext steps:"
         puts "  cd #{dest_dir}"
         puts '  terraform init'

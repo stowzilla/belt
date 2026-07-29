@@ -91,6 +91,7 @@ module Belt
         puts "Creating new Belt application: #{@app_name}"
         create_structure
         generate_module
+        puts "  create  app skeleton"
         generate_environments
         generate_frontend if @frontend
         init_git
@@ -162,7 +163,6 @@ module Belt
           template_path = File.join(module_template_dir, template_name)
           content = ERB.new(File.read(template_path), trim_mode: '-').result(binding)
           File.write(dest_path, content)
-          puts "  create  #{dest_path}"
         end
       end
 
@@ -174,6 +174,7 @@ module Belt
             Belt::CLI::EnvironmentCommand.new(env_name, quiet: true, domain: @domain).generate
           end
         end
+        puts "  create  environments (#{@environments.join(', ')})"
       end
 
       def setup_state
@@ -192,24 +193,23 @@ module Belt
 
           # Attempt to actually create the bucket if credentials are available
           if aws_configured?
-            puts "\n  Setting up Terraform state bucket..."
             begin
-              Belt::CLI::SetupCommand.new(['--bucket', @resolved_bucket]).run_state_setup
+              setup = Belt::CLI::SetupCommand.new(['--bucket', @resolved_bucket], quiet: true)
+              setup.run_state_setup
+              @resolved_bucket = setup.bucket_name
               @state_setup_succeeded = true
+              puts "  ✓      state bucket #{@resolved_bucket}"
             rescue SystemExit
-              puts '  ⚠ State bucket setup encountered an issue — run `belt setup state` to retry.'
+              puts '  ⚠      state bucket setup failed — run `belt setup state` to retry'
               @state_setup_succeeded = false
             end
           else
-            puts "\n  State bucket: belt-terraform-state-<account-id> (resolved at setup)"
-            puts "  State keys:   #{s3_safe_name(@app_name)}/<env>/terraform.tfstate"
             if @aws_error&.include?('ForbiddenException') || @aws_error&.include?('AccessDenied')
-              puts '  ⚠ AWS credentials found but access denied — check your profile/role configuration.'
-              puts "    #{@aws_error}" if @aws_error
+              puts '  ⚠      AWS credentials found but access denied — check profile/role'
             else
-              puts '  ⚠ AWS credentials not detected — skipping state bucket creation.'
+              puts '  ⚠      AWS credentials not detected — skipped state bucket'
             end
-            puts '  Run `belt setup state` after configuring credentials (aws sso login / AWS_PROFILE).'
+            puts '         run `belt setup state` after aws sso login / AWS_PROFILE'
             @state_setup_succeeded = false
           end
         end
@@ -233,38 +233,43 @@ module Belt
 
       def create_dir(dir)
         FileUtils.mkdir_p(dir)
-        puts "  create  #{dir}/"
       end
 
       def create_file(template_name, dest_path)
         template_path = File.join(TEMPLATE_DIR, template_name)
         content = ERB.new(File.read(template_path), trim_mode: '-').result(binding)
         File.write(dest_path, content)
-        puts "  create  #{dest_path}"
       end
 
       def init_git
         Dir.chdir(@app_name) do
           system('git', 'init', '--quiet')
         end
-        puts "  init    #{@app_name}/.git/"
+        puts '  init    git'
       end
 
       def run_bundle_install
         Dir.chdir(@app_name) do
-          puts "\n  Running bundle install..."
           success = system('bundle', 'install', '--quiet')
           if success
-            puts '  ✓ Bundle installed'
+            puts '  ✓      bundle install'
           else
-            puts '  ⚠ bundle install failed — run it manually after resolving issues.'
+            puts '  ⚠      bundle install failed — run it manually after resolving issues'
           end
         end
       end
 
       def generate_frontend
+        frontend_cmd = nil
         Dir.chdir(@app_name) do
-          Belt::CLI::FrontendCommand.new(@frontend).generate
+          frontend_cmd = Belt::CLI::FrontendCommand.new(@frontend, quiet: true)
+          frontend_cmd.generate
+        end
+        puts "  create  frontend (#{@frontend})"
+        if frontend_cmd.npm_ok?
+          puts '  ✓      npm dependencies'
+        else
+          puts '  ⚠      npm install failed — run `cd frontend && npm install`'
         end
       end
 

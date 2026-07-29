@@ -38,11 +38,12 @@ module Belt
         end
       end
 
-      def initialize(args = [])
+      def initialize(args = [], quiet: false)
         @app_name = detect_app_name
         @env_name = nil
         @custom_bucket = nil
         @select_mode = false
+        @quiet = quiet
 
         parse_args(args)
 
@@ -67,7 +68,7 @@ module Belt
         @bucket_name = interactive_bucket_selection if @select_mode
         setup_or_verify_bucket
         apply_lifecycle(@bucket_name)
-        puts '  ensure  lifecycle rules (90-day noncurrent expiration)'
+        say '  ensure  lifecycle rules (90-day noncurrent expiration)'
         update_backend_config
         print_success_message
       end
@@ -81,12 +82,12 @@ module Belt
       end
 
       def verify_existing_bucket
-        puts "Found existing bucket: #{@bucket_name}"
+        say "Found existing bucket: #{@bucket_name}"
         audit = audit_bucket_security(@bucket_name)
-        print_security_audit(audit)
+        print_security_audit(audit) unless @quiet
 
         if audit.values.all?
-          puts "\n✓ Bucket '#{@bucket_name}' passes all security checks"
+          say "\n✓ Bucket '#{@bucket_name}' passes all security checks"
         else
           prompt_and_harden(audit)
         end
@@ -94,6 +95,12 @@ module Belt
 
       def prompt_and_harden(audit)
         puts "\n⚠ Bucket '#{@bucket_name}' has security issues."
+        # Auto-harden during belt new (quiet); interactive otherwise
+        if @quiet
+          harden_bucket(@bucket_name, audit)
+          return
+        end
+
         print "\nApply security hardening? [Y/n] "
         response = $stdin.gets&.strip&.downcase
         if response.nil? || response.empty? || response == 'y'
@@ -105,13 +112,15 @@ module Belt
       end
 
       def create_new_bucket
-        puts "Creating state bucket: #{@bucket_name} (#{@region})"
+        say "Creating state bucket: #{@bucket_name} (#{@region})"
         create_bucket(@bucket_name)
-        puts "  create  s3://#{@bucket_name}"
+        say "  create  s3://#{@bucket_name}"
         harden_bucket(@bucket_name, {})
       end
 
       def print_success_message
+        return if @quiet
+
         puts "\n✓ State bucket '#{@bucket_name}' is ready!"
         if @env_name
           puts "\n  cd infrastructure/#{@env_name} && terraform init"
@@ -119,6 +128,9 @@ module Belt
           puts "\n  cd infrastructure/<env> && terraform init"
         end
       end
+
+      # Expose for quiet callers (e.g. belt new) that print their own summary
+      attr_reader :bucket_name
 
       private
 
@@ -245,15 +257,21 @@ module Belt
       end
 
       def run!(*args)
-        return if system(*args)
+        output, status = Open3.capture2e(*args)
+        return if status.success?
 
         puts "\n✗ Command failed: #{args.shelljoin}"
+        puts output.strip unless output.strip.empty?
         exit 1
       end
 
       def safe_capture(*)
         output, status = Open3.capture2(*, err: File::NULL)
         status.success? ? output : nil
+      end
+
+      def say(message)
+        puts message unless @quiet
       end
 
       # --- Backend config ---
@@ -275,7 +293,7 @@ module Belt
           updated = content.gsub(/bucket\s*=\s*"[^"]+"/, "bucket  = \"#{@bucket_name}\"")
           if updated != content
             File.write(backend_file, updated)
-            puts "  update  #{backend_file} → bucket = \"#{@bucket_name}\""
+            say "  update  #{backend_file} → bucket = \"#{@bucket_name}\""
           end
         end
       end
