@@ -21,6 +21,8 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  /* Pin the logo / sky — crop hills at the bottom if the viewport is short */
+  object-position: top center;
   display: block;
 }
 .overlay {
