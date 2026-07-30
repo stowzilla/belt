@@ -1,5 +1,6 @@
 terraform {
   backend "s3" {
+    # Resolved to belt-terraform-state-<account-id> by `belt setup state` / `belt new`
     bucket  = "belt-terraform-state"
     key     = "<%= s3_safe_name(@app_name) %>/<%= @env_name %>/terraform.tfstate"
     region  = "us-east-1"

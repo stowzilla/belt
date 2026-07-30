@@ -2,6 +2,7 @@
 
 require_relative 'error_logging'
 require_relative 'cors_origin'
+require_relative '../http_status'
 
 module Belt
   module Helpers
@@ -9,8 +10,9 @@ module Belt
       def cors_headers(event = nil)
         event = @event if event.nil? && instance_variable_defined?(:@event)
         origin = CorsOrigin.resolve_origin(CorsOrigin.origin_from_event(event))
+        allow_headers = 'Content-Type,Accept,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'
         headers = {
-          'Access-Control-Allow-Headers' => 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+          'Access-Control-Allow-Headers' => allow_headers,
           'Access-Control-Allow-Methods' => 'GET,POST,PUT,DELETE,PATCH,OPTIONS',
           'Access-Control-Max-Age' => '300',
           'Content-Type' => 'application/json'
@@ -19,16 +21,18 @@ module Belt
         headers
       end
 
+      # JSON success. Status accepts Integer or Symbol (:created, :ok, …).
       def success_response(body, status_code = 200)
-        { statusCode: status_code, headers: cors_headers, body: JSON.generate(body) }
+        { statusCode: resolve_status(status_code), headers: cors_headers, body: JSON.generate(body) }
       end
 
+      # JSON error. Status accepts Integer or Symbol (:unprocessable_entity, :not_found, …).
       def error_response(message, status_code = 400, error_details = nil)
         body = { error: message }
         if error_details
           body[:details] = error_details.is_a?(Hash) ? error_details : { message: error_details.to_s }
         end
-        { statusCode: status_code, headers: cors_headers, body: JSON.generate(body) }
+        { statusCode: resolve_status(status_code), headers: cors_headers, body: JSON.generate(body) }
       end
 
       def html_response(html, status_code = 200)
@@ -36,7 +40,30 @@ module Belt
         origin = CorsOrigin.resolve_origin(CorsOrigin.origin_from_event(event))
         headers = { 'Content-Type' => 'text/html; charset=utf-8' }
         headers['Access-Control-Allow-Origin'] = origin if origin
-        { statusCode: status_code, headers: headers, body: html }
+        { statusCode: resolve_status(status_code), headers: headers, body: html }
+      end
+
+      # Empty-body response (Rails-style). Useful for destroy / create-without-body.
+      #
+      #   head :created      # 201, empty body
+      #   head :no_content   # 204
+      #   head 201
+      #
+      def head(status = :no_content)
+        { statusCode: resolve_status(status), headers: cors_headers, body: '' }
+      end
+
+      # Set the status used by implicit assigns / HTML render (when you don't
+      # call success_response / render yourself).
+      #
+      #   def create
+      #     @post = Post.create!(...)
+      #     response_status :created
+      #   end
+      #   # → 201 + { post: {...} }
+      #
+      def response_status(status)
+        @__response_status = resolve_status(status)
       end
 
       def handle_error_and_respond(error, message, context = {}, status_code = 500)
@@ -55,6 +82,10 @@ module Belt
       end
 
       private
+
+      def resolve_status(status)
+        Belt::HttpStatus.resolve(status)
+      end
 
       def verbose_errors_enabled?
         env = ENV['ENVIRONMENT']&.downcase || ''

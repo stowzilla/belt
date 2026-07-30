@@ -3,6 +3,7 @@
 require 'fileutils'
 require 'erb'
 require 'json'
+require 'open3'
 require_relative 'app_detection'
 
 module Belt
@@ -28,8 +29,10 @@ module Belt
         new(framework).generate
       end
 
-      def initialize(framework)
+      def initialize(framework, quiet: false, announce: true)
         @framework = framework
+        @quiet = quiet
+        @announce = announce
         @app_name = detect_app_name
         @module_name = @app_name.split(/[-_]/).map(&:capitalize).join
       end
@@ -42,7 +45,7 @@ module Belt
           exit 1
         end
 
-        puts "Creating #{@framework} frontend application..."
+        puts "Creating #{@framework} frontend application..." unless @quiet
         framework_dir = File.join(TEMPLATE_DIR, @framework)
 
         unless Dir.exist?(framework_dir)
@@ -52,25 +55,35 @@ module Belt
 
         copy_template(framework_dir, dest_dir)
 
-        puts "\n✓ Frontend (#{@framework}) created in frontend/"
+        puts "\n✓ Frontend (#{@framework}) created in frontend/" unless @quiet
 
         install_dependencies(dest_dir)
         setup_frontend_infra_for_existing_environments
+
+        return if @quiet || !@announce
 
         puts "\nNext steps:"
         puts '  belt server                   # Start local dev server'
         puts '  belt deploy                   # Deploy everything to AWS'
       end
 
+      def npm_ok?
+        @npm_ok != false
+      end
+
       private
 
       def install_dependencies(dest_dir)
-        puts "\n  Installing npm dependencies..."
-        success = system('npm', 'install', '--prefix', dest_dir, '--loglevel', 'error')
-        if success
-          puts '  ✓ Dependencies installed'
+        puts "\n  Installing npm dependencies..." unless @quiet
+        _output, status = Open3.capture2e(
+          'npm', 'install', '--prefix', dest_dir, '--no-fund', '--no-audit'
+        )
+        if status.success?
+          puts '  ✓ npm dependencies installed' unless @quiet
+          @npm_ok = true
         else
-          puts "  ⚠ npm install failed — run `cd #{dest_dir} && npm install` manually"
+          puts "  ⚠ npm install failed — run `cd #{dest_dir} && npm install` manually" unless @quiet
+          @npm_ok = false
         end
       end
 
@@ -79,16 +92,16 @@ module Belt
         frontend_tf = File.join(module_dir, 'frontend.tf')
 
         if File.exist?(frontend_tf)
-          puts "  skip    #{frontend_tf} (already exists)"
+          puts "  skip    #{frontend_tf} (already exists)" unless @quiet
           return
         end
 
         return unless Dir.exist?(module_dir)
 
-        puts "\n  Setting up frontend infrastructure..."
+        puts "\n  Setting up frontend infrastructure..." unless @quiet
         require_relative 'frontend_setup_command'
         FrontendSetupCommand.new(nil, quiet: true).run
-        puts "  create  #{frontend_tf}"
+        puts "  create  #{frontend_tf}" unless @quiet
       end
 
       def copy_template(src_dir, dest_dir)
@@ -107,7 +120,7 @@ module Belt
           else
             FileUtils.cp(src, dest_path)
           end
-          puts "  create  #{dest_path}"
+          puts "  create  #{dest_path}" unless @quiet
         end
       end
     end

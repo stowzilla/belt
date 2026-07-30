@@ -26,11 +26,12 @@ module Belt
         new(env_name).generate
       end
 
-      def initialize(env_name, quiet: false, domain: nil)
+      def initialize(env_name, quiet: false, domain: nil, announce: true)
         @env_name = env_name.downcase.gsub(/[^a-z0-9_-]/, '')
         @app_name = detect_app_name
         @domain = domain
         @quiet = quiet
+        @announce = announce
       end
 
       def generate
@@ -41,19 +42,18 @@ module Belt
           exit 1
         end
 
-        puts "Creating environment: #{@env_name}"
+        puts "Creating environment: #{@env_name}" unless @quiet
         FileUtils.mkdir_p(dest_dir)
 
         templates.each do |template_name, dest_file|
           dest_path = File.join(dest_dir, dest_file)
           write_template(template_name, dest_path)
-          puts "  create  #{dest_path}"
+          puts "  create  #{dest_path}" unless @quiet
         end
 
+        return if @quiet || !@announce
+
         puts "\n✓ Environment '#{@env_name}' created!"
-
-        return if @quiet
-
         puts "\nNext steps:"
         puts "  cd #{dest_dir}"
         puts '  terraform init'

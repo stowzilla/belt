@@ -18,6 +18,7 @@ module Belt
         bucket = nil
         environments = nil
         domain = nil
+        verbose = false
 
         i = 0
         while i < args.length
@@ -49,6 +50,8 @@ module Belt
             domain = args[i]
           when /^--domain=/
             domain = arg.split('=', 2).last
+          when '-v', '--verbose'
+            verbose = true
           else
             app_name ||= arg unless arg.start_with?('-')
           end
@@ -65,22 +68,33 @@ module Belt
           puts '  --state-bucket BUCKET_NAME     Alias for --bucket'
           puts '  --environments dev,prod        Comma-separated environments (default: dev,prod)'
           puts '                                 Use "none" to skip environment setup'
+          puts '  -v, --verbose                  List every created file (Rails-style)'
           exit 1
         end
 
-        new(app_name, frontend: frontend, bucket: bucket, environments: environments, domain: domain).generate
+        new(
+          app_name,
+          frontend: frontend,
+          bucket: bucket,
+          environments: environments,
+          domain: domain,
+          verbose: verbose
+        ).generate
       end
 
-      def initialize(app_name, frontend: nil, bucket: nil, environments: nil, domain: nil)
+      # rubocop:disable Metrics/ParameterLists -- keyword options for generator flags
+      def initialize(app_name, frontend: nil, bucket: nil, environments: nil, domain: nil, verbose: false)
         @app_name = app_name.gsub(/[^a-z0-9_-]/i, '_').downcase
         @module_name = @app_name.split(/[-_]/).map(&:capitalize).join
         @frontend = frontend
         @bucket = bucket
         @domain = domain
         @environments = parse_environments(environments)
+        @verbose = verbose
         @resolved_bucket = nil
         @state_setup_succeeded = false
       end
+      # rubocop:enable Metrics/ParameterLists
 
       def generate
         if Dir.exist?(@app_name)
@@ -93,6 +107,7 @@ module Belt
         puts "Creating new Belt application: #{@app_name}"
         create_structure
         generate_module
+        puts '  create  app skeleton' unless @verbose
         generate_environments
         generate_frontend if @frontend
         init_git
@@ -177,7 +192,7 @@ module Belt
           template_path = File.join(module_template_dir, template_name)
           content = ERB.new(File.read(template_path), trim_mode: '-').result(binding)
           File.write(dest_path, content)
-          puts "  create  #{dest_path}"
+          puts "  create  #{dest_path}" if @verbose
         end
       end
 
@@ -186,41 +201,60 @@ module Belt
 
         Dir.chdir(@app_name) do
           @environments.each do |env_name|
-            Belt::CLI::EnvironmentCommand.new(env_name, quiet: true, domain: @domain).generate
+            Belt::CLI::EnvironmentCommand.new(
+              env_name,
+              quiet: !@verbose,
+              announce: false,
+              domain: @domain
+            ).generate
           end
         end
+        puts "  create  environments (#{@environments.join(', ')})" unless @verbose
       end
 
       def setup_state
         return if @environments.empty?
 
-        Dir.chdir(@app_name) do
-          # Shared bucket: one per AWS account, all belt apps share it
-          @resolved_bucket = @bucket || 'belt-terraform-state'
+        Dir.chdir(@app_name) { create_or_skip_state_bucket }
+      end
 
-          # Attempt to actually create the bucket if credentials are available
-          if aws_configured?
-            puts "\n  Setting up Terraform state bucket..."
-            begin
-              Belt::CLI::SetupCommand.new(['--bucket', @resolved_bucket]).run_state_setup
-              @state_setup_succeeded = true
-            rescue SystemExit
-              puts '  ⚠ State bucket setup encountered an issue — run `belt setup state` to retry.'
-              @state_setup_succeeded = false
-            end
-          else
-            puts "\n  State bucket: #{@resolved_bucket}"
-            puts "  State keys:   #{s3_safe_name(@app_name)}/<env>/terraform.tfstate"
-            if @aws_error&.include?('ForbiddenException') || @aws_error&.include?('AccessDenied')
-              puts '  ⚠ AWS credentials found but access denied — check your profile/role configuration.'
-              puts "    #{@aws_error}" if @aws_error
-            else
-              puts '  ⚠ AWS credentials not detected — skipping state bucket creation.'
-            end
-            puts '  Run `belt doctor` to diagnose, then `belt setup state` to create the bucket.'
-            @state_setup_succeeded = false
-          end
+      def create_or_skip_state_bucket
+        # Shared bucket: one per AWS account, all belt apps share it.
+        # Account ID suffix makes the name globally unique (S3 is a global namespace).
+        @resolved_bucket = if @bucket
+                             @bucket
+                           elsif aws_configured?
+                             "belt-terraform-state-#{@aws_account_id}"
+                           else
+                             'belt-terraform-state'
+                           end
+
+        if aws_configured?
+          create_state_bucket!
+        else
+          warn_missing_aws_for_state
+          @state_setup_succeeded = false
         end
+      end
+
+      def create_state_bucket!
+        setup = Belt::CLI::SetupCommand.new(['--bucket', @resolved_bucket], quiet: true)
+        setup.run_state_setup
+        @resolved_bucket = setup.bucket_name
+        @state_setup_succeeded = true
+        puts "  ✓      state bucket #{@resolved_bucket}"
+      rescue SystemExit
+        puts '  ⚠      state bucket setup failed — run `belt setup state` to retry'
+        @state_setup_succeeded = false
+      end
+
+      def warn_missing_aws_for_state
+        if @aws_error&.include?('ForbiddenException') || @aws_error&.include?('AccessDenied')
+          puts '  ⚠      AWS credentials found but access denied — check profile/role'
+        else
+          puts '  ⚠      AWS credentials not detected — skipped state bucket'
+        end
+        puts '         run `belt doctor`, then `belt setup state`'
       end
 
       def aws_configured?
@@ -241,38 +275,57 @@ module Belt
 
       def create_dir(dir)
         FileUtils.mkdir_p(dir)
-        puts "  create  #{dir}/"
+        puts "  create  #{dir}/" if @verbose
       end
 
       def create_file(template_name, dest_path)
         template_path = File.join(TEMPLATE_DIR, template_name)
         content = ERB.new(File.read(template_path), trim_mode: '-').result(binding)
         File.write(dest_path, content)
-        puts "  create  #{dest_path}"
+        puts "  create  #{dest_path}" if @verbose
       end
 
       def init_git
         Dir.chdir(@app_name) do
           system('git', 'init', '--quiet')
         end
-        puts "  init    #{@app_name}/.git/"
+        if @verbose
+          puts "  init    #{@app_name}/.git/"
+        else
+          puts '  init    git'
+        end
       end
 
       def run_bundle_install
         Dir.chdir(@app_name) do
-          puts "\n  Running bundle install..."
+          puts "\n  Running bundle install..." if @verbose
+          # Always --quiet: bundle's own progress is noise either way
           success = system('bundle', 'install', '--quiet')
           if success
-            puts '  ✓ Bundle installed'
+            puts '  ✓      bundle install'
           else
-            puts '  ⚠ bundle install failed — run it manually after resolving issues.'
+            puts '  ⚠      bundle install failed — run it manually after resolving issues'
           end
         end
       end
 
       def generate_frontend
+        frontend_cmd = nil
         Dir.chdir(@app_name) do
-          Belt::CLI::FrontendCommand.new(@frontend).generate
+          frontend_cmd = Belt::CLI::FrontendCommand.new(
+            @frontend,
+            quiet: !@verbose,
+            announce: false
+          )
+          frontend_cmd.generate
+        end
+        return if @verbose
+
+        puts "  create  frontend (#{@frontend})"
+        if frontend_cmd.npm_ok?
+          puts '  ✓      npm dependencies'
+        else
+          puts '  ⚠      npm install failed — run `cd frontend && npm install`'
         end
       end
 

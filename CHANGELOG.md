@@ -1,5 +1,92 @@
 # Changelog
 
+## 0.2.10
+
+### Quiet `belt new` (with optional verbose)
+
+`belt new` prints a short phase summary by default (skeleton, environments, frontend,
+bundle, state bucket) instead of every path plus AWS/npm noise.
+
+Use `-v` / `--verbose` for Rails-style per-file `create` lines when you want the
+inventory. Nested generators skip their own next-steps banners; the final success
+block still owns next steps. State-bucket setup stays non-interactive either way.
+
+### State bucket naming (global uniqueness)
+
+S3 bucket names are a **global** namespace across all AWS accounts. The previous default
+`belt-terraform-state` only works for the first account that creates it — everyone else
+hits "owned by a different AWS account".
+
+**Fix:** shared bucket is still one-per-account (all apps share it), but the name is now:
+
+```
+belt-terraform-state-<account_id>
+```
+
+- Still one bucket for all belt apps in an account (state key: `<app>/<env>/terraform.tfstate`)
+- `--bucket` still overrides when you want a custom name
+- `belt setup state` rewrites `backend.tf` with the resolved name
+- Existing installs that already own `belt-terraform-state` can keep using `--bucket belt-terraform-state`
+
+### Implicit responses (Rails-style assigns)
+
+Controllers can set instance variables and skip the explicit `success_response` call:
+
+```ruby
+def index
+  @posts = Post.all
+end
+
+def show
+  @post = Post.find(params[:id])
+end
+```
+
+Belt auto-builds `success_response({ posts: [...] })` / `{ post: {...} }` from assigns set
+during the action. Serialization:
+
+- Models → `to_h` (ActiveItem already defines this)
+- `ActiveItem::Relation` / Enumerable → map each record via `to_h`
+- Nested hashes/arrays recurse
+
+Explicit `success_response` / `error_response` / `html_response` / `render` / `head` still win
+when returned. Rescue handlers still use `error_response`.
+
+### Default format (`:json` / `:html`)
+
+```ruby
+# App-wide (lambda/config/environment.rb)
+Belt.configure do |c|
+  c.default_format = :json   # default — API first
+end
+
+# Per-controller override (inherits down the chain)
+class PagesController < ApplicationController
+  self.default_format = :html
+end
+```
+
+| `default_format` | Implicit response (no explicit helper) |
+|---|---|
+| `:json` (default) | `success_response` from assigns |
+| `:html` | `render` template `views/<controller>/<action>.html.erb` (missing → `TemplateNotFound`) |
+
+### Symbol status codes, `head`, `response_status`
+
+```ruby
+success_response({ post: post.to_h }, :created)   # 201
+error_response("Nope", :unprocessable_entity)     # 422
+head :no_content                                  # 204 empty body
+head :created                                     # 201 empty body
+
+def create
+  @post = Post.create!(...)
+  response_status :created   # 201 + implicit assigns body
+end
+```
+
+Bare integers still work. Symbols match the Rack/Rails names (`:created`, `:not_found`, …).
+
 ## 0.3.0
 
 ### Pre-Deploy Backups

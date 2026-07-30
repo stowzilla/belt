@@ -136,6 +136,7 @@ module Belt
 
         Examples:
           belt new blog --frontend react
+          belt new blog --frontend react -v   # list every created file
           belt generate scaffold post title:string content:text status:string
           belt destroy scaffold post
           belt generate frontend react

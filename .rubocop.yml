@@ -33,6 +33,7 @@ Metrics/ClassLength:
 Metrics/ModuleLength:
   Exclude:
     - 'lib/belt/cli.rb'
+    - 'lib/belt/cli/**/*'
 
 Metrics/BlockLength:
   Exclude:
