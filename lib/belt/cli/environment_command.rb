@@ -32,6 +32,7 @@ module Belt
         @domain = domain
         @quiet = quiet
         @announce = announce
+        @state_bucket = resolve_state_bucket
       end
 
       def generate
@@ -79,6 +80,37 @@ module Belt
         template_path = File.join(TEMPLATE_DIR, template_name)
         content = ERB.new(File.read(template_path), trim_mode: '-').result(binding)
         File.write(dest_path, content)
+      end
+
+      # Resolve the state bucket name to use in backend.tf.
+      # Priority: existing sibling backend.tf → AWS account ID → bare placeholder.
+      def resolve_state_bucket
+        bucket_from_sibling || bucket_from_aws || 'belt-terraform-state'
+      end
+
+      def bucket_from_sibling
+        Dir.glob('infrastructure/*/backend.tf').each do |f|
+          match = File.read(f).match(/bucket\s*=\s*"([^"]+)"/)
+          next unless match
+          # Skip the bare placeholder — it means state wasn't set up yet
+          return match[1] unless match[1] == 'belt-terraform-state'
+        end
+        nil
+      end
+
+      def bucket_from_aws
+        require 'open3'
+        output, status = Open3.capture2e('aws', 'sts', 'get-caller-identity')
+        return nil unless status.success?
+
+        data = begin
+          JSON.parse(output)
+        rescue StandardError
+          nil
+        end
+        return nil unless data&.dig('Account')
+
+        "belt-terraform-state-#{data['Account']}"
       end
     end
   end

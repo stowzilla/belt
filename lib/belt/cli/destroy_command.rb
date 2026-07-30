@@ -44,10 +44,11 @@ module Belt
         when 'environment'
           name = args.shift
           if name.nil? || name.empty?
-            puts 'Usage: belt destroy environment <name>'
+            puts 'Usage: belt destroy environment <name> [--force] [--skip-terraform]'
             exit 1
           end
-          new(generator, name, []).destroy
+          flags = parse_environment_flags(args)
+          new(generator, name, [], **flags).destroy
         when 'frontend'
           new(generator, nil, []).destroy
         when 'views'
@@ -67,6 +68,19 @@ module Belt
         end
       end
 
+      def self.parse_environment_flags(args)
+        flags = { force: false, skip_terraform: false }
+        args.each do |arg|
+          case arg
+          when '--force', '-f'
+            flags[:force] = true
+          when '--skip-terraform'
+            flags[:skip_terraform] = true
+          end
+        end
+        flags
+      end
+
       def self.parse_field(arg)
         name, type = arg.split(':', 2)
         { name: name, type: type || 'string' }
@@ -84,26 +98,37 @@ module Belt
             resource      Alias for scaffold
             model         Remove an ActiveItem model
             controller    Remove a controller
-            environment   Remove a deployment environment directory
+            environment   Remove a deployment environment and tear down infrastructure
             frontend      Remove the frontend/ directory
             views         Remove React pages for a resource
+
+          Environment options:
+            --force, -f          Skip all prompts (CI mode)
+            --skip-terraform     Delete local files without running terraform destroy
 
           Examples:
             belt d scaffold post title:string body:text status:string
             belt d model user
             belt d controller comments
             belt d environment staging
+            belt d environment dev --skip-terraform
+            belt d environment dev --force
             belt d frontend
             belt d views post
 
           ⚠ This is destructive. Files will be permanently deleted.
+
+          For environments: if terraform state is detected, you'll be prompted to run
+          `terraform destroy` first to tear down cloud resources before removing files.
         HELP
       end
 
-      def initialize(generator, name, fields)
+      def initialize(generator, name, fields, force: false, skip_terraform: false)
         @generator = generator
         @name = name&.downcase&.gsub(/[^a-z0-9_]/, '_')
         @fields = fields
+        @force = force
+        @skip_terraform = skip_terraform
         @app_name = detect_namespace
         @singular_name = @name ? Belt::Inflector.singularize(@name) : nil
         @resource_name = @singular_name ? Belt::Inflector.pluralize(@singular_name) : nil
@@ -149,15 +174,99 @@ module Belt
 
       def destroy_environment
         dir = "infrastructure/#{@name}"
-        if Dir.exist?(dir)
-          FileUtils.rm_rf(dir)
-          @removed << dir
-          puts "  remove  #{dir}/"
-          puts "\n✓ Environment '#{@name}' destroyed!"
-        else
+
+        unless Dir.exist?(dir)
           puts "✗ Environment '#{@name}' not found at #{dir}/"
           exit 1
         end
+
+        # Check if terraform state exists (infra may still be live)
+        if !@skip_terraform && terraform_state_exists?(dir)
+          puts "⚠  Environment '#{@name}' appears to have active infrastructure."
+          puts "   Terraform state was found — resources may still be running.\n\n"
+
+          if @force
+            puts '   --force passed, skipping terraform destroy.'
+          else
+            puts '   Options:'
+            puts '     1) Run `terraform destroy` to tear down infrastructure first (recommended)'
+            puts '     2) Skip terraform and just delete the local files (--skip-terraform)'
+            puts "     3) Cancel\n\n"
+
+            print "   Run terraform destroy for '#{@name}'? [y/N/skip] "
+            response = $stdin.gets&.strip&.downcase
+
+            case response
+            when 'y', 'yes'
+              run_terraform_destroy(dir)
+            when 'skip', 's'
+              puts '   Skipping terraform destroy.'
+            else
+              puts 'Cancelled.'
+              exit 0
+            end
+          end
+        end
+
+        # Final confirmation before deleting files
+        unless @force
+          print "\nPermanently delete #{dir}/? [y/N] "
+          response = $stdin.gets&.strip&.downcase
+          unless response&.start_with?('y')
+            puts 'Cancelled.'
+            exit 0
+          end
+        end
+
+        FileUtils.rm_rf(dir)
+        @removed << dir
+        puts "  remove  #{dir}/"
+        puts "\n✓ Environment '#{@name}' destroyed!"
+      end
+
+      def terraform_state_exists?(dir)
+        # Check for local .terraform directory (initialized state)
+        return true if Dir.exist?(File.join(dir, '.terraform'))
+
+        # Check if backend.tf exists (remote state configured)
+        backend_file = File.join(dir, 'backend.tf')
+        return false unless File.exist?(backend_file)
+
+        # Try to query remote state — if terraform is initialized and state exists,
+        # the environment likely has live resources
+        Dir.chdir(dir) do
+          # Quick check: does `terraform show` return anything?
+          output = `terraform show -no-color 2>&1`
+          Process.last_status.success? && !output.strip.empty? && !output.include?('No state')
+        end
+      rescue StandardError
+        # If we can't determine state, assume it might exist and warn
+        true
+      end
+
+      def run_terraform_destroy(dir)
+        puts "\n━━━ terraform destroy (#{@name}) ━━━"
+
+        Dir.chdir(dir) do
+          # Initialize if needed
+          unless Dir.exist?('.terraform')
+            puts '  Initializing terraform...'
+            unless system('terraform', 'init', '-input=false')
+              puts "\n✗ terraform init failed. You may need to destroy manually:"
+              puts "  cd #{dir} && terraform init && terraform destroy"
+              exit 1
+            end
+          end
+
+          # Run destroy with auto-approve (user already confirmed)
+          unless system('terraform', 'destroy', '-auto-approve')
+            puts "\n✗ terraform destroy failed."
+            puts '  Infrastructure may still be running. Fix and retry, or use --skip-terraform.'
+            exit 1
+          end
+        end
+
+        puts '  ✓ Infrastructure destroyed.'
       end
 
       def destroy_frontend
