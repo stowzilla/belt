@@ -26,9 +26,7 @@ module Belt
       @dynamodb_connected = dynamodb_connected?
       @scaffold_hint_cmd = SCAFFOLD_HINT_CMD
 
-      if wants_json?
-        return success_response(welcome_payload)
-      end
+      return success_response(welcome_payload) if wants_json?
 
       @css = welcome_css
       @background_image = background_image_base64

@@ -57,7 +57,7 @@ module Belt
 
         puts "\n✓ Frontend (#{@framework}) created in frontend/" unless @quiet
 
-        @npm_ok = install_dependencies(dest_dir)
+        install_dependencies(dest_dir)
         setup_frontend_infra_for_existing_environments
 
         return if @quiet || !@announce
@@ -80,12 +80,10 @@ module Belt
         )
         if status.success?
           puts '  ✓ npm dependencies installed' unless @quiet
-          true
+          @npm_ok = true
         else
-          unless @quiet
-            puts "  ⚠ npm install failed — run `cd #{dest_dir} && npm install` manually"
-          end
-          false
+          puts "  ⚠ npm install failed — run `cd #{dest_dir} && npm install` manually" unless @quiet
+          @npm_ok = false
         end
       end
 

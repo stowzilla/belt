@@ -40,9 +40,7 @@ module Belt
         materialized = []
         sources.each do |source|
           source_path = resolve_remote(source.remote)
-          unless Dir.exist?(source_path)
-            abort "✗ path gem source missing: #{source.remote} (resolved #{source_path})"
-          end
+          abort "✗ path gem source missing: #{source.remote} (resolved #{source_path})" unless Dir.exist?(source_path)
 
           source.gems.each do |gem|
             gem_file = build_gem(source_path, gem)
@@ -112,9 +110,7 @@ module Belt
       def rewrite_gemfile_path_to_version!(name, version)
         content = File.read(@gemfile)
         new_content = content.lines.map { |line| convert_path_line(line, name, version) }.join
-        if new_content == content
-          abort "✗ Could not rewrite path: for gem #{name.inspect} in build Gemfile"
-        end
+        abort "✗ Could not rewrite path: for gem #{name.inspect} in build Gemfile" if new_content == content
         File.write(@gemfile, new_content)
       end
 
@@ -127,7 +123,7 @@ module Belt
         quote = line[/gem\s+(['"])/, 1] || "'"
         cleaned = line.sub(/,?\s*path:\s*['"][^'"]+['"]/, '')
         cleaned.sub(/gem\s+(['"])#{Regexp.escape(name)}\1/) do
-          "gem #{$1}#{name}#{$1}, #{$1}#{version}#{$1}"
+          "gem #{quote}#{name}#{quote}, #{quote}#{version}#{quote}"
         end
       end
 

@@ -10,8 +10,9 @@ module Belt
       def cors_headers(event = nil)
         event = @event if event.nil? && instance_variable_defined?(:@event)
         origin = CorsOrigin.resolve_origin(CorsOrigin.origin_from_event(event))
+        allow_headers = 'Content-Type,Accept,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'
         headers = {
-          'Access-Control-Allow-Headers' => 'Content-Type,Accept,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+          'Access-Control-Allow-Headers' => allow_headers,
           'Access-Control-Allow-Methods' => 'GET,POST,PUT,DELETE,PATCH,OPTIONS',
           'Access-Control-Max-Age' => '300',
           'Content-Type' => 'application/json'

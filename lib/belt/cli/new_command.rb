@@ -82,6 +82,7 @@ module Belt
         ).generate
       end
 
+      # rubocop:disable Metrics/ParameterLists -- keyword options for generator flags
       def initialize(app_name, frontend: nil, bucket: nil, environments: nil, domain: nil, verbose: false)
         @app_name = app_name.gsub(/[^a-z0-9_-]/i, '_').downcase
         @module_name = @app_name.split(/[-_]/).map(&:capitalize).join
@@ -93,12 +94,15 @@ module Belt
         @resolved_bucket = nil
         @state_setup_succeeded = false
       end
+      # rubocop:enable Metrics/ParameterLists
 
       def generate
         if Dir.exist?(@app_name)
           puts "Directory '#{@app_name}' already exists."
           exit 1
         end
+
+        preflight_check
 
         puts "Creating new Belt application: #{@app_name}"
         create_structure
@@ -121,6 +125,19 @@ module Belt
         return [] if env_string.downcase == 'none'
 
         env_string.split(',').map(&:strip).reject(&:empty?)
+      end
+
+      def preflight_check
+        missing = []
+        { 'aws' => 'AWS CLI', 'terraform' => 'Terraform' }.each do |cmd, label|
+          _, status = Open3.capture2e(cmd, '--version')
+          missing << label unless status.success?
+        end
+
+        return if missing.empty?
+
+        puts "⚠ Missing: #{missing.join(', ')}"
+        puts "  Belt requires these tools to deploy. Install them, then run `belt doctor` to verify.\n\n"
       end
 
       def create_structure
@@ -198,39 +215,46 @@ module Belt
       def setup_state
         return if @environments.empty?
 
-        Dir.chdir(@app_name) do
-          # Shared bucket: one per AWS account, all belt apps share it.
-          # Account ID suffix makes the name globally unique (S3 is a global namespace).
-          if @bucket
-            @resolved_bucket = @bucket
-          elsif aws_configured?
-            @resolved_bucket = "belt-terraform-state-#{@aws_account_id}"
-          else
-            @resolved_bucket = 'belt-terraform-state'
-          end
+        Dir.chdir(@app_name) { create_or_skip_state_bucket }
+      end
 
-          # Attempt to actually create the bucket if credentials are available
-          if aws_configured?
-            begin
-              setup = Belt::CLI::SetupCommand.new(['--bucket', @resolved_bucket], quiet: true)
-              setup.run_state_setup
-              @resolved_bucket = setup.bucket_name
-              @state_setup_succeeded = true
-              puts "  ✓      state bucket #{@resolved_bucket}"
-            rescue SystemExit
-              puts '  ⚠      state bucket setup failed — run `belt setup state` to retry'
-              @state_setup_succeeded = false
-            end
-          else
-            if @aws_error&.include?('ForbiddenException') || @aws_error&.include?('AccessDenied')
-              puts '  ⚠      AWS credentials found but access denied — check profile/role'
-            else
-              puts '  ⚠      AWS credentials not detected — skipped state bucket'
-            end
-            puts '         run `belt setup state` after aws sso login / AWS_PROFILE'
-            @state_setup_succeeded = false
-          end
+      def create_or_skip_state_bucket
+        # Shared bucket: one per AWS account, all belt apps share it.
+        # Account ID suffix makes the name globally unique (S3 is a global namespace).
+        @resolved_bucket = if @bucket
+                             @bucket
+                           elsif aws_configured?
+                             "belt-terraform-state-#{@aws_account_id}"
+                           else
+                             'belt-terraform-state'
+                           end
+
+        if aws_configured?
+          create_state_bucket!
+        else
+          warn_missing_aws_for_state
+          @state_setup_succeeded = false
         end
+      end
+
+      def create_state_bucket!
+        setup = Belt::CLI::SetupCommand.new(['--bucket', @resolved_bucket], quiet: true)
+        setup.run_state_setup
+        @resolved_bucket = setup.bucket_name
+        @state_setup_succeeded = true
+        puts "  ✓      state bucket #{@resolved_bucket}"
+      rescue SystemExit
+        puts '  ⚠      state bucket setup failed — run `belt setup state` to retry'
+        @state_setup_succeeded = false
+      end
+
+      def warn_missing_aws_for_state
+        if @aws_error&.include?('ForbiddenException') || @aws_error&.include?('AccessDenied')
+          puts '  ⚠      AWS credentials found but access denied — check profile/role'
+        else
+          puts '  ⚠      AWS credentials not detected — skipped state bucket'
+        end
+        puts '         run `belt doctor`, then `belt setup state`'
       end
 
       def aws_configured?
@@ -295,20 +319,20 @@ module Belt
           )
           frontend_cmd.generate
         end
-        unless @verbose
-          puts "  create  frontend (#{@frontend})"
-          if frontend_cmd.npm_ok?
-            puts '  ✓      npm dependencies'
-          else
-            puts '  ⚠      npm install failed — run `cd frontend && npm install`'
-          end
+        return if @verbose
+
+        puts "  create  frontend (#{@frontend})"
+        if frontend_cmd.npm_ok?
+          puts '  ✓      npm dependencies'
+        else
+          puts '  ⚠      npm install failed — run `cd frontend && npm install`'
         end
       end
 
       def print_next_steps
         puts "\nNext steps:"
         unless @state_setup_succeeded
-          puts '  # Configure AWS credentials (aws sso login / AWS_PROFILE)'
+          puts '  belt doctor                   # Verify AWS CLI, Terraform & credentials'
           puts '  belt setup state              # Create the S3 state bucket'
         end
         puts '  belt deploy                   # Deploy to AWS'
