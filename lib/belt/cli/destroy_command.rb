@@ -186,11 +186,11 @@ module Belt
           puts "   Terraform state was found — resources may still be running.\n\n"
 
           if @force
-            puts "   --force passed, skipping terraform destroy."
+            puts '   --force passed, skipping terraform destroy.'
           else
-            puts "   Options:"
-            puts "     1) Run `terraform destroy` to tear down infrastructure first (recommended)"
-            puts "     2) Skip terraform and just delete the local files (--skip-terraform)"
+            puts '   Options:'
+            puts '     1) Run `terraform destroy` to tear down infrastructure first (recommended)'
+            puts '     2) Skip terraform and just delete the local files (--skip-terraform)'
             puts "     3) Cancel\n\n"
 
             print "   Run terraform destroy for '#{@name}'? [y/N/skip] "
@@ -200,9 +200,9 @@ module Belt
             when 'y', 'yes'
               run_terraform_destroy(dir)
             when 'skip', 's'
-              puts "   Skipping terraform destroy."
+              puts '   Skipping terraform destroy.'
             else
-              puts "Cancelled."
+              puts 'Cancelled.'
               exit 0
             end
           end
@@ -237,7 +237,7 @@ module Belt
         Dir.chdir(dir) do
           # Quick check: does `terraform show` return anything?
           output = `terraform show -no-color 2>&1`
-          $?.success? && !output.strip.empty? && !output.include?('No state')
+          Process.last_status.success? && !output.strip.empty? && !output.include?('No state')
         end
       rescue StandardError
         # If we can't determine state, assume it might exist and warn
@@ -250,7 +250,7 @@ module Belt
         Dir.chdir(dir) do
           # Initialize if needed
           unless Dir.exist?('.terraform')
-            puts "  Initializing terraform..."
+            puts '  Initializing terraform...'
             unless system('terraform', 'init', '-input=false')
               puts "\n✗ terraform init failed. You may need to destroy manually:"
               puts "  cd #{dir} && terraform init && terraform destroy"
@@ -261,12 +261,12 @@ module Belt
           # Run destroy with auto-approve (user already confirmed)
           unless system('terraform', 'destroy', '-auto-approve')
             puts "\n✗ terraform destroy failed."
-            puts "  Infrastructure may still be running. Fix and retry, or use --skip-terraform."
+            puts '  Infrastructure may still be running. Fix and retry, or use --skip-terraform.'
             exit 1
           end
         end
 
-        puts "  ✓ Infrastructure destroyed."
+        puts '  ✓ Infrastructure destroyed.'
       end
 
       def destroy_frontend

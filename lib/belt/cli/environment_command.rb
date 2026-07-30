@@ -103,7 +103,11 @@ module Belt
         output, status = Open3.capture2e('aws', 'sts', 'get-caller-identity')
         return nil unless status.success?
 
-        data = JSON.parse(output) rescue nil
+        data = begin
+          JSON.parse(output)
+        rescue StandardError
+          nil
+        end
         return nil unless data&.dig('Account')
 
         "belt-terraform-state-#{data['Account']}"
