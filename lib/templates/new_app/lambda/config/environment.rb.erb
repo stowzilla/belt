@@ -7,11 +7,6 @@ require 'belt'
 ENV['APP_NAME'] ||= '<%= @app_name %>'
 ENV['AWS_REGION'] ||= 'us-east-1'
 
-ActiveItem.configure do |config|
-  config.table_prefix = ENV['APP_NAME']
-  config.environment = ENV['ENVIRONMENT']
-end
-
 # Load lib and models
 Dir[File.join(__dir__, '..', 'lib', '**', '*.rb')].sort.each { |f| require f }
 

@@ -4,11 +4,6 @@ require 'belt'
 
 include Belt::LambdaHandler
 
-ActiveItem.configure do |config|
-  config.table_prefix = ENV['APP_NAME']
-  config.environment = ENV['ENVIRONMENT']
-end
-
 require_relative 'lib/routes/api_routes'
 <% @resources&.each do |r| -%>
 require_relative 'controllers/<%= @app_name %>/<%= r %>_controller'
