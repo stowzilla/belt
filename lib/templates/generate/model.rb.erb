@@ -1,18 +1,5 @@
 # frozen_string_literal: true
 
 class <%= @class_name %> < ApplicationRecord
-<% @fields.each do |field| -%>
-  attr_accessor :<%= field[:name] %>
-<% end -%>
-
-  def to_h
-    {
-      id: id,
-<% @fields.each do |field| -%>
-      <%= field[:name] %>: <%= field[:name] %>,
-<% end -%>
-      created_at: created_at,
-      updated_at: updated_at
-    }
-  end
+  attr_accessor <%= @fields.map { |f| ":#{f[:name]}" }.join(', ') %>
 end
