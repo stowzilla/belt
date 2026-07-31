@@ -27,10 +27,13 @@ module Belt
           schema_file = @options[:schema_file]
           unless schema_file
             routes_dir = File.dirname(File.expand_path(routes_file))
-            schema_file = File.join(routes_dir, 'schema.tf.rb')
+            # Try contracts.tf.rb first, then fall back to legacy schema.tf.rb
+            schema_file = File.join(routes_dir, 'contracts.tf.rb')
+            schema_file = File.join(routes_dir, 'schema.tf.rb') unless File.exist?(schema_file)
             # Fall back to infrastructure/ if not found in same directory as routes
             unless File.exist?(schema_file)
-              alt = 'infrastructure/schema.tf.rb'
+              alt = 'infrastructure/contracts.tf.rb'
+              alt = 'infrastructure/schema.tf.rb' unless File.exist?(alt)
               schema_file = alt if File.exist?(alt)
             end
           end

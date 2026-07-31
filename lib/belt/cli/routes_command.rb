@@ -71,7 +71,7 @@ module Belt
             @options[:output_dir] = dir
           end
 
-          opts.on('--schema FILE', 'Path to schema.tf.rb for model definitions') do |file|
+          opts.on('--schema FILE', 'Path to contracts.tf.rb for model definitions') do |file|
             @options[:schema_file] = file
           end
 

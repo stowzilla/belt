@@ -24,7 +24,7 @@ This file explains the project structure, tooling, and conventions for AI agents
 │   └── Gemfile                         # Lambda-specific dependencies
 ├── config/
 │   ├── routes.tf.rb                    # API routes (Conveyor Belt DSL)
-│   ├── schema.tf.rb                    # Model schema definitions
+│   ├── contracts.tf.rb                 # API contract definitions (request/response models)
 │   └── lambda/                         # Per-lambda config (like database.yml)
 │       └── api.yml                     # Lambda timeout, memory, env vars
 ├── infrastructure/

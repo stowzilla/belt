@@ -25,14 +25,15 @@ module Belt
           { name: n, type: t || 'string' }
         end
 
-        # If no fields provided, try to read from schema.tf.rb
+        # If no fields provided, try to read from contracts.tf.rb (or legacy schema.tf.rb)
         fields = read_schema_fields(name) if fields.empty?
 
         new(name, fields).generate
       end
 
       def self.read_schema_fields(name)
-        schema_file = ['config/schema.tf.rb', 'infrastructure/schema.tf.rb'].find { |f| File.exist?(f) }
+        schema_file = ['config/contracts.tf.rb', 'config/schema.tf.rb', 'infrastructure/contracts.tf.rb',
+                       'infrastructure/schema.tf.rb'].find { |f| File.exist?(f) }
         return [] unless schema_file
 
         content = File.read(schema_file)

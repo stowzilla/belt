@@ -32,7 +32,7 @@ bundle install
 my-app/
 ├── infrastructure/
 │   ├── routes.tf.rb        # Belt provider route definitions
-│   └── schema.tf.rb        # DynamoDB table schemas
+│   └── contracts.tf.rb     # API contract definitions (request/response models)
 ├── lambda/
 │   ├── config/
 │   │   └── environment.rb  # App boot file (used by console + Lambda)
@@ -146,7 +146,7 @@ Belt.application.routes.draw do
 end
 ```
 
-Define tables in `infrastructure/schema.tf.rb`:
+Define contracts in `infrastructure/contracts.tf.rb`:
 
 ```ruby
 Belt.application.schema.define do
@@ -327,7 +327,7 @@ POST    /posts            ops      ops     posts#create
 | `-f, --format FORMAT` | Output format: `concise` (default) or `json` |
 | `--namespace NAMESPACE` | Generate Ruby route files for NAMESPACE (or "all") |
 | `--output-dir DIR` | Output directory for generated Ruby files (default: `lambda/lib/routes/`) |
-| `--schema FILE` | Path to `schema.tf.rb` for model definitions (default: same directory as routes file) |
+| `--schema FILE` | Path to `contracts.tf.rb` for model definitions (default: same directory as routes file) |
 | `--tables-file FILE` | Path to Terraform file with `aws_dynamodb_table` resources for table inference |
 | `-h, --help` | Show help |
 
@@ -347,7 +347,7 @@ belt routes --namespace api
 belt routes --namespace api --output-dir lib/routes
 
 # Include schema models in JSON output
-belt routes -f json --schema infrastructure/schema.tf.rb
+belt routes -f json --schema infrastructure/contracts.tf.rb
 
 # Infer DynamoDB table access from Terraform
 belt routes -f json --tables-file infrastructure/main.tf
@@ -679,7 +679,7 @@ A solid plugin generator typically:
 1. **Terraform module** → `infrastructure/modules/<name>/` (`main.tf`, `variables.tf`, `outputs.tf`)
 2. **Lambda config** → `config/lambda/<name>.yml` (timeout, memory, env, triggers)
 3. **Lambda entrypoint** → `lambda/<name>.rb` using `Belt::LambdaHandler`
-4. **Routes / schema** → inject into `config/routes.tf.rb` or `infrastructure/schema.tf.rb` when needed
+4. **Routes / schema** → inject into `config/routes.tf.rb` or `infrastructure/contracts.tf.rb` when needed
 5. **Optional overrides** → `--controllers` flag for app-local subclasses
 6. **Destroy path** → `belt destroy <name>` removes what generate created
 7. **Help text** → `.description` + `--help` explaining what was installed and next steps

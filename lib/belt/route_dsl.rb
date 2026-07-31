@@ -518,7 +518,7 @@ module Belt
     end
   end
 
-  # SchemaBuilder captures request and response model definitions from schema.tf.rb
+  # SchemaBuilder captures request and response model definitions from contracts.tf.rb (or legacy schema.tf.rb)
   class SchemaBuilder
     SUPPORTED_TYPES = %i[string number integer boolean array object map list].freeze
 

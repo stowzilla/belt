@@ -46,9 +46,10 @@ module Belt
         candidates.find { |f| File.exist?(f) }
       end
 
-      # Finds schema.tf.rb checking config/ first, then infrastructure/ (legacy).
+      # Finds contracts.tf.rb (or legacy schema.tf.rb) checking config/ first, then infrastructure/.
       def find_schema_file_path
-        candidates = ['config/schema.tf.rb', 'infrastructure/schema.tf.rb']
+        candidates = ['config/contracts.tf.rb', 'config/schema.tf.rb', 'infrastructure/contracts.tf.rb',
+                      'infrastructure/schema.tf.rb']
         candidates.find { |f| File.exist?(f) }
       end
     end

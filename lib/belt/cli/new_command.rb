@@ -168,7 +168,7 @@ module Belt
             "#{@app_name}/lambda/controllers/api/application_controller.rb",
           'lambda/lib/routes/routes.rb.erb' => "#{@app_name}/lambda/lib/routes/api_routes.rb",
           'config/routes.tf.rb.erb' => "#{@app_name}/config/routes.tf.rb",
-          'config/schema.tf.rb.erb' => "#{@app_name}/config/schema.tf.rb",
+          'config/contracts.tf.rb.erb' => "#{@app_name}/config/contracts.tf.rb",
           'config/lambda/api.yml.erb' => "#{@app_name}/config/lambda/api.yml",
           'README.md.erb' => "#{@app_name}/README.md",
           'AGENTS.md.erb' => "#{@app_name}/AGENTS.md",

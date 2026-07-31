@@ -42,7 +42,7 @@ Typical plugin generators create some combination of:
 - **Terraform module** — `infrastructure/modules/<%= plugin_name %>/`
 - **Lambda entry point** — `lambda/<%= plugin_name %>.rb`
 - **Lambda config** — `config/lambda/<%= plugin_name %>.yml`
-- **Route / schema injection** — updates to `routes.tf.rb` / `schema.tf.rb`
+- **Route / contract injection** — updates to `routes.tf.rb` / `contracts.tf.rb`
 - **Optional controller overrides** — `belt g <%= plugin_name %> --controllers`
 
 ## Development

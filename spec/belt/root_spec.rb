@@ -107,12 +107,23 @@ RSpec.describe 'Belt.root' do
   end
 
   describe '.schema_file' do
-    it 'prefers config/ over infrastructure/' do
+    it 'prefers config/contracts.tf.rb over legacy schema.tf.rb' do
       Dir.mktmpdir do |dir|
         FileUtils.mkdir_p(File.join(dir, 'config'))
         FileUtils.mkdir_p(File.join(dir, 'infrastructure'))
+        FileUtils.touch(File.join(dir, 'config/contracts.tf.rb'))
         FileUtils.touch(File.join(dir, 'config/schema.tf.rb'))
         FileUtils.touch(File.join(dir, 'infrastructure/schema.tf.rb'))
+        Dir.chdir(dir)
+
+        expect(Belt.schema_file).to eq(File.join(dir, 'config/contracts.tf.rb'))
+      end
+    end
+
+    it 'falls back to config/schema.tf.rb for existing apps' do
+      Dir.mktmpdir do |dir|
+        FileUtils.mkdir_p(File.join(dir, 'config'))
+        FileUtils.touch(File.join(dir, 'config/schema.tf.rb'))
         Dir.chdir(dir)
 
         expect(Belt.schema_file).to eq(File.join(dir, 'config/schema.tf.rb'))
