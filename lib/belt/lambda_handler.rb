@@ -76,17 +76,8 @@ module Belt
 
         return { statusCode: 200, headers: cors_headers(event), body: '{}' } if event['httpMethod'] == 'OPTIONS'
 
-        raw_body = event['body'] || '{}'
-
-        if raw_body.bytesize > Belt::Helpers::Response::MAX_REQUEST_BODY_SIZE
-          return error_response('Request body too large', 413)
-        end
-
-        begin
-          body = JSON.parse(raw_body)
-        rescue JSON::ParserError
-          return error_response('Invalid JSON in request body', 400)
-        end
+        body = parse_request_body(event)
+        return body if body.is_a?(Hash) && body[:statusCode]
 
         begin
           result = execute(path: event['path'], body: body, event: event)
@@ -112,6 +103,18 @@ module Belt
     end
 
     private
+
+    def parse_request_body(event)
+      raw_body = event['body'] || '{}'
+
+      if raw_body.bytesize > Belt::Helpers::Response::MAX_REQUEST_BODY_SIZE
+        return error_response('Request body too large', 413)
+      end
+
+      JSON.parse(raw_body)
+    rescue JSON::ParserError
+      error_response('Invalid JSON in request body', 400)
+    end
 
     def init_observability(context:)
       service_name = ENV['ACTION'] || context.function_name.split('-').last

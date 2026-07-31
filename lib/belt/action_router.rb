@@ -163,7 +163,11 @@ module Belt
         full_path = File.join(path, file_name)
 
         # Ensure resolved path stays within the allowed controller directory
-        resolved = File.realpath(full_path) rescue next
+        begin
+          resolved = File.realpath(full_path)
+        rescue Errno::ENOENT, Errno::EACCES
+          next
+        end
         next unless resolved.start_with?(File.realpath(path))
         next unless File.exist?(full_path)
 
