@@ -575,6 +575,171 @@ These are set via Terraform variables in each environment's `terraform.tfvars`. 
 
 The backup phase reads table names from Terraform outputs. On a brand-new environment that has never been deployed, there are no outputs yet — Belt will warn and skip the backup phase gracefully. After the first successful deploy, backups run normally on subsequent deploys.
 
+## Plugins
+
+Belt is designed to stay lean. Optional capabilities ship as **separate gems** that plug into the CLI and runtime the same way Rails engines and generators do.
+
+### Official / example plugins
+
+| Gem | Purpose | Status |
+|-----|---------|--------|
+| [`belt-messaging`](https://github.com/stowzilla/belt-messaging) | Two-way SMS via AWS End User Messaging (Pinpoint) | Early (not production-hardened) |
+| [`belt-pay`](https://github.com/stowzilla/belt-pay) | Stripe payments & subscriptions | Early (not production-hardened) |
+
+Install a plugin in a Belt app:
+
+```ruby
+# Gemfile
+gem "belt-messaging"
+# gem "belt-pay"
+```
+
+```bash
+bundle install
+belt generate messaging   # or: belt g pay
+belt generate --help      # lists built-ins + gem generators
+```
+
+### How plugins register
+
+No central registry file, no initializer hook. Belt discovers generators by scanning loaded gems:
+
+1. Gem is in the app `Gemfile` and bundled
+2. Gem ships a file at `lib/belt/generators/<name>_generator.rb`
+3. Class lives in `Belt::Generators`, named `<Name>Generator`
+4. Implements `.run(args)` (required), `.destroy(args)` and `.description` (optional)
+
+That is the whole contract. After `bundle install`, `belt generate <name>` and `belt destroy <name>` just work.
+
+See `Belt::CLI::GeneratorRegistry` and the CHANGELOG entry for **0.1.13 Generator Extension API**.
+
+### Plugin layout (canonical)
+
+```
+belt-messaging/
+├── belt-messaging.gemspec
+├── lib/
+│   ├── belt-messaging.rb              # require entrypoint
+│   └── belt/
+│       ├── messaging.rb               # Belt::Messaging API
+│       ├── messaging/
+│       │   ├── configuration.rb
+│       │   ├── version.rb
+│       │   ├── controllers/           # default controllers (optional)
+│       │   └── templates/             # ERB templates for the generator
+│       │       ├── terraform/
+│       │       ├── lambda/
+│       │       ├── config/
+│       │       └── controllers/
+│       └── generators/
+│           └── messaging_generator.rb # ← auto-discovered
+└── spec/
+```
+
+**Runtime code stays in the gem.** Generators copy only what the host app must own (Terraform modules, Lambda entrypoints, optional controller overrides). Prefer gem defaults + `belt g <plugin> --controllers` over dumping everything into the app (same idea as `rails g devise:views`).
+
+### Creating a new plugin
+
+Scaffold a ready-to-fill gem (Rails-style `plugin new`):
+
+```bash
+belt plugin new notifications
+# → ./belt-notifications/
+
+belt plugin new pay --path ~/Code --summary "Stripe payments for Belt"
+# → ~/Code/belt-pay/
+```
+
+Then:
+
+```bash
+cd belt-notifications
+bundle install
+# implement lib/belt/notifications/* and the generator
+```
+
+Point a Belt app at it while developing:
+
+```ruby
+# In the app Gemfile
+gem "belt-notifications", path: "../belt-notifications"
+```
+
+```bash
+bundle install
+belt generate notifications
+```
+
+When packaging Lambdas, `belt deploy` vendors path gems into `vendor/cache` so conveyor-belt can package them.
+
+### Generator checklist (for humans and agents)
+
+A solid plugin generator typically:
+
+1. **Terraform module** → `infrastructure/modules/<name>/` (`main.tf`, `variables.tf`, `outputs.tf`)
+2. **Lambda config** → `config/lambda/<name>.yml` (timeout, memory, env, triggers)
+3. **Lambda entrypoint** → `lambda/<name>.rb` using `Belt::LambdaHandler`
+4. **Routes / schema** → inject into `config/routes.tf.rb` or `infrastructure/schema.tf.rb` when needed
+5. **Optional overrides** → `--controllers` flag for app-local subclasses
+6. **Destroy path** → `belt destroy <name>` removes what generate created
+7. **Help text** → `.description` + `--help` explaining what was installed and next steps
+
+Copy from `belt-messaging` or `belt-pay` rather than inventing a new structure.
+
+## Contributing
+
+Bug reports and pull requests are welcome on [GitHub](https://github.com/stowzilla/belt).
+
+### Development setup
+
+```bash
+git clone https://github.com/stowzilla/belt.git
+cd belt
+bundle install
+bundle exec rspec
+```
+
+### Guidelines
+
+1. **Branch from `master`** — open a PR against `master`
+2. **Keep changes focused** — one concern per PR when practical
+3. **Follow existing patterns** — look at neighboring files and `lib/belt/cli/` before inventing new ones
+4. **Tests** — add or update specs under `spec/` for behavior changes (CI runs them)
+5. **Changelog** — note user-facing changes in `CHANGELOG.md` under the next version / Unreleased
+6. **No secrets** — never commit AWS keys, tokens, or real account IDs
+
+### Project layout (for contributors)
+
+| Path | What lives there |
+|------|------------------|
+| `lib/belt.rb` | Public require entry |
+| `lib/belt/` | Framework core (controller, router, handler, observability) |
+| `lib/belt/cli/` | CLI commands (`new`, `generate`, `deploy`, `plugin`, …) |
+| `lib/belt_controller/` | `BeltController::Base` |
+| `lib/templates/` | ERB templates for `belt new`, generators, plugin scaffold |
+| `exe/belt` | CLI executable |
+| `spec/` | RSpec suite |
+
+### Local gem development against an app
+
+```ruby
+# In a Belt app's Gemfile
+gem "belt", path: "../belt"
+```
+
+`belt deploy` detects `path:` gems and materializes them into `vendor/cache` for Lambda packaging so you can iterate without publishing a gem for every try.
+
+### Contributing a plugin
+
+Plugins are separate repositories (not vendored into this repo). To add a new first-class capability:
+
+1. `belt plugin new <name>` (or copy `belt-messaging` / `belt-pay`)
+2. Implement the runtime API + generator contract above
+3. Document install steps in the plugin README (`gem …` → `belt generate …`)
+4. Open a PR on the plugin repo; optionally link it from this README's plugin table
+
+Questions about plugin design or core changes: open a GitHub issue or discuss in the project Discord.
+
 ## License
 
 MIT

@@ -22,6 +22,7 @@ require_relative 'cli/lambda_config_command'
 require_relative 'cli/tasks_command'
 require_relative 'cli/console_command'
 require_relative 'cli/doctor_command'
+require_relative 'cli/plugin_command'
 
 module Belt
   module CLI
@@ -35,6 +36,7 @@ module Belt
       %w[tasks --tasks -T] => Belt::CLI::TasksCommand,
       'setup' => Belt::CLI::SetupCommand,
       'doctor' => Belt::CLI::DoctorCommand,
+      'plugin' => Belt::CLI::PluginCommand,
       'deploy' => Belt::CLI::DeployCommand,
       'frontend' => Belt::CLI::FrontendEnvCommand,
       %w[server s] => Belt::CLI::ServerCommand,
@@ -117,6 +119,7 @@ module Belt
           setup tables <env>                          Generate DynamoDB tables from schema
           setup frontend <env>                        Generate S3 + CloudFront infrastructure
           doctor                                      Check system dependencies and AWS config
+          plugin new <name>                           Scaffold a new Belt plugin gem
           init [environment] <env>                    terraform init for environment
           plan [environment] <env>                    terraform plan for environment
           apply [environment] <env>                   terraform apply for environment
@@ -149,6 +152,7 @@ module Belt
           belt apply wups
           belt tasks                    # list all rake tasks
           belt lambda:build_layer       # run a rake task directly
+          belt plugin new messaging     # scaffold a belt-messaging style plugin gem
       USAGE
     end
   end

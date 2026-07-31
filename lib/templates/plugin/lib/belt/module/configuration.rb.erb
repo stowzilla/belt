@@ -1,0 +1,15 @@
+# frozen_string_literal: true
+
+module Belt
+  module <%= module_name %>
+    class Configuration
+      # Add plugin-specific settings here.
+      # attr_accessor :api_key, :logger
+      attr_accessor :logger
+
+      def initialize
+        @logger = nil # Falls back to Belt::Observability::Logger if available
+      end
+    end
+  end
+end

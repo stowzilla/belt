@@ -1,0 +1,17 @@
+# frozen_string_literal: true
+
+require 'spec_helper'
+
+RSpec.describe <%= constant_path %>::Configuration do
+  it 'has a default configuration' do
+    expect(<%= constant_path %>.configuration).to be_a(described_class)
+  end
+
+  it 'accepts configure block' do
+    <%= constant_path %>.configure do |config|
+      config.logger = :test_logger
+    end
+
+    expect(<%= constant_path %>.configuration.logger).to eq(:test_logger)
+  end
+end

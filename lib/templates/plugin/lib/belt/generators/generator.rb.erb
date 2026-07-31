@@ -1,0 +1,122 @@
+# frozen_string_literal: true
+
+require 'fileutils'
+require 'erb'
+
+module Belt
+  module Generators
+    # Generator registered automatically by Belt::CLI::GeneratorRegistry.
+    # File must live at: lib/belt/generators/<%= underscored %>_generator.rb
+    #
+    # Available as:
+    #   belt generate <%= plugin_name %>
+    #   belt destroy <%= plugin_name %>
+    class <%= generator_class %>
+      TEMPLATE_DIR = File.expand_path('../<%= underscored %>/templates', __dir__)
+
+      def self.description
+        'Install <%= summary %>'
+      end
+
+      def self.run(args)
+        if args.include?('--help') || args.include?('-h')
+          print_help
+          return
+        end
+
+        new(args).generate
+      end
+
+      def self.destroy(args)
+        new(args).destroy
+      end
+
+      def self.print_help
+        puts <<~HELP
+          Install <%= gem_name %> into a Belt application.
+
+          Usage: belt generate <%= plugin_name %> [options]
+
+          Options:
+            --force               Overwrite existing files
+            -h, --help            Show this help
+
+          What gets created (customize this generator):
+            infrastructure/modules/<%= plugin_name %>/   Terraform module (optional)
+            config/lambda/<%= plugin_name %>.yml         Lambda configuration (optional)
+            lambda/<%= plugin_name %>.rb                 Lambda entry point (optional)
+
+          What stays in the gem (no generation needed):
+            <%= constant_path %>                         Runtime library API
+
+          After generation:
+            1. Wire any Terraform module into your environment main.tf
+            2. Configure environment variables / secrets
+            3. Deploy: belt deploy <env>
+
+          Examples:
+            belt g <%= plugin_name %>
+            belt d <%= plugin_name %>
+        HELP
+      end
+
+      def initialize(args)
+        @force = args.include?('--force')
+      end
+
+      def generate
+        # TODO: copy templates into the host app.
+        # Pattern used by belt-messaging / belt-pay:
+        #
+        #   generate_terraform_module
+        #   generate_lambda_config
+        #   generate_lambda_entry_point
+        #   inject_routes
+        #
+        # Templates live under TEMPLATE_DIR. Use ERB + FileUtils.
+        puts "  # TODO: implement <%= generator_class %>#generate"
+        puts "  # Templates directory: #{TEMPLATE_DIR}"
+        print_success
+      end
+
+      def destroy
+        # TODO: remove files created by #generate
+        puts "  # TODO: implement <%= generator_class %>#destroy"
+        puts "\n✓ <%= module_name %> removed!"
+        puts '  Don\'t forget to remove any module references from environment main.tf files.'
+      end
+
+      private
+
+      def print_success
+        puts ''
+        puts "✓ <%= module_name %> installed (scaffold — implement the generator next)!"
+        puts ''
+        puts 'Next steps:'
+        puts "  1. Add ERB templates under lib/belt/<%= underscored %>/templates/"
+        puts "  2. Implement generate/destroy in lib/belt/generators/<%= underscored %>_generator.rb"
+        puts '  3. See belt-messaging or belt-pay for full working examples'
+      end
+
+      # ---- helpers (copy patterns from belt-messaging / belt-pay) ----
+
+      def write_template(relative_template, destination, binding_context = binding)
+        source = File.join(TEMPLATE_DIR, relative_template)
+        unless File.exist?(source)
+          puts "  skip    missing template #{relative_template}"
+          return
+        end
+
+        if File.exist?(destination) && !@force
+          puts "  skip    #{destination} (already exists, use --force to overwrite)"
+          return
+        end
+
+        FileUtils.mkdir_p(File.dirname(destination))
+        content = ERB.new(File.read(source), trim_mode: '-').result(binding_context)
+        File.write(destination, content)
+        puts "  create  #{destination}"
+      end
+    end
+  end
+end
