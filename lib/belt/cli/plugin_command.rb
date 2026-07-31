@@ -141,10 +141,10 @@ module Belt
           exit 1
         end
 
-        @plugin_name = name                          # messaging
-        @gem_name = "belt-#{name}"                   # belt-messaging
+        @plugin_name = name # messaging
+        @gem_name = "belt-#{name}" # belt-messaging
         @module_name = name.split('-').map(&:capitalize).join # Messaging
-        @constant_path = "Belt::#{@module_name}"     # Belt::Messaging
+        @constant_path = "Belt::#{@module_name}" # Belt::Messaging
         @generator_class = "#{@module_name}Generator"
         @summary ||= "#{@module_name} plugin for Belt applications"
         @gem_dir = File.expand_path(File.join(@path, @gem_name))
@@ -160,6 +160,7 @@ module Belt
       end
 
       def files
+        gen = "lib/belt/generators/#{@plugin_name.tr('-', '_')}_generator.rb"
         {
           "#{@gem_name}.gemspec" => render('gemspec.erb'),
           'Gemfile' => render('Gemfile.erb'),
@@ -174,7 +175,7 @@ module Belt
           "lib/belt/#{@plugin_name.tr('-', '_')}.rb" => render('lib/belt/module.rb.erb'),
           "lib/belt/#{@plugin_name.tr('-', '_')}/version.rb" => render('lib/belt/module/version.rb.erb'),
           "lib/belt/#{@plugin_name.tr('-', '_')}/configuration.rb" => render('lib/belt/module/configuration.rb.erb'),
-          "lib/belt/generators/#{@plugin_name.tr('-', '_')}_generator.rb" => render('lib/belt/generators/generator.rb.erb'),
+          gen => render('lib/belt/generators/generator.rb.erb'),
           "lib/belt/#{@plugin_name.tr('-', '_')}/templates/.gitkeep" => '',
           'spec/spec_helper.rb' => render('spec/spec_helper.rb.erb'),
           "spec/belt/#{@plugin_name.tr('-', '_')}/configuration_spec.rb" => render('spec/configuration_spec.rb.erb')
@@ -183,9 +184,7 @@ module Belt
 
       def render(template_name)
         path = File.join(TEMPLATE_DIR, template_name)
-        unless File.exist?(path)
-          raise "Missing plugin template: #{path}"
-        end
+        raise "Missing plugin template: #{path}" unless File.exist?(path)
 
         erb = ERB.new(File.read(path), trim_mode: '-')
         # Expose locals used in templates

@@ -55,8 +55,10 @@ belt/
 ```bash
 bundle install
 bundle exec rspec
-bundle exec rubocop   # if configured in your env; pre-commit may run it
+bundle exec rubocop   # required — CI blocks merge on offenses
 ```
+
+Before opening or updating a PR, both `rspec` and `rubocop` must pass locally. GitHub branch protection requires the CI `lint`, `test`, and `security` jobs.
 
 Run the local CLI without installing the gem globally:
 

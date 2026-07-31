@@ -697,6 +697,7 @@ git clone https://github.com/stowzilla/belt.git
 cd belt
 bundle install
 bundle exec rspec
+bundle exec rubocop
 ```
 
 ### Guidelines
@@ -704,7 +705,7 @@ bundle exec rspec
 1. **Branch from `master`** — open a PR against `master`
 2. **Keep changes focused** — one concern per PR when practical
 3. **Follow existing patterns** — look at neighboring files and `lib/belt/cli/` before inventing new ones
-4. **Tests** — add or update specs under `spec/` for behavior changes (CI runs them)
+4. **Tests + lint** — run `bundle exec rspec` and `bundle exec rubocop` before opening (or updating) a PR. CI requires both (plus `bundler-audit`); failing checks block merge on `master`
 5. **Changelog** — note user-facing changes in `CHANGELOG.md` under the next version / Unreleased
 6. **No secrets** — never commit AWS keys, tokens, or real account IDs
 
