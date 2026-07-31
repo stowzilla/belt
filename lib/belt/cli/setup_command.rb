@@ -32,7 +32,7 @@ module Belt
           puts 'Usage: belt setup <state|tables|frontend> [options]'
           puts "\nSubcommands:"
           puts '  state     Set up S3 bucket for Terraform state'
-          puts '  tables    Generate DynamoDB table definitions from schema.tf.rb'
+          puts '  tables    Generate DynamoDB table definitions from contracts.rb'
           puts '  frontend  Generate S3 + CloudFront infrastructure for frontend hosting'
           exit 1
         end

@@ -5,7 +5,7 @@ require_relative 'inflector'
 module Belt
   # DSL for defining API Gateway routes.
   # Ported from terraform-provider-conveyor-belt/scripts/lib/route_dsl.rb
-  # so that `belt routes` can parse routes.tf.rb without external dependencies.
+  # so that `belt routes` can parse routes.rb without external dependencies.
 
   class Route
     attr_reader :method, :path, :auth, :lambda, :cors, :tables, :route_type,
@@ -518,7 +518,7 @@ module Belt
     end
   end
 
-  # SchemaBuilder captures request and response model definitions from schema.tf.rb
+  # SchemaBuilder captures request and response model definitions from contracts.rb
   class SchemaBuilder
     SUPPORTED_TYPES = %i[string number integer boolean array object map list].freeze
 
