@@ -2,13 +2,35 @@
 
 ## Unreleased
 
+## 0.2.11
+
+### Security hardening
+
+- **CORS origin validation**: format validation (scheme required, no paths/queries/fragments), length limit (253 chars) to prevent ReDoS, restrict wildcard matching to valid subdomain chars `[a-z0-9-]`.
+- **Security headers** on all responses: `X-Content-Type-Options: nosniff`, `Vary: Origin`; HTML responses also get `X-Frame-Options: DENY` and `Referrer-Policy: strict-origin-when-cross-origin`.
+- **Path traversal protection** in `ActionRouter`: strict regex for controller names, reject `..` sequences / absolute paths / backslashes, `realpath` validation in `resolve_from_paths`.
+- **Request body size limit** (10 MB): returns 413 for oversized bodies; proper 400 for invalid JSON.
+
+### Safe `belt destroy environment`
+
+Previously `belt destroy environment <name>` immediately deleted the infrastructure directory with no checks — leaving orphaned AWS resources.
+
+Now the command:
+1. Checks if Terraform state exists (local `.terraform` dir or remote state)
+2. If state found, prompts user to run `terraform destroy` first
+3. Requires explicit confirmation before deleting files
+4. Supports `--force` (skip prompts) and `--skip-terraform` flags
+
+### Environment generator state bucket fix
+
+The environment generator was writing `belt-terraform-state` as the backend bucket name, missing the account-ID suffix. Now resolves via sibling `backend.tf`, STS `get-caller-identity`, or placeholder (for later `belt setup state` patch).
+
 ### Contributing & plugins
 
 - README: **Plugins** and **Contributing** sections — how to contribute to belt, how plugins register via `GeneratorRegistry`, layout used by `belt-messaging` / `belt-pay`, generator checklist for humans and agents.
 - **`belt plugin new <name>`** — scaffold a new plugin gem (gemspec, `Belt::<Name>` module, generator stub, RSpec, README, AGENTS.md), similar to `rails plugin new`.
 - **`AGENTS.md`** at the belt gem root — agent-oriented map of core layout, CLI, and the plugin/GeneratorRegistry contract (complements README).
 - Plugin scaffold includes **`AGENTS.md`** so new plugins match the agent guidance pattern already used by `belt new` apps.
-
 
 ## 0.2.10
 
