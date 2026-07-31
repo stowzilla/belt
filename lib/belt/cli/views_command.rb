@@ -55,8 +55,10 @@ module Belt
           # Support both formats:
           #   field :name, type: :string   (legacy)
           #   string :name                 (current schema DSL)
+          dsl_types = %w[string text integer number boolean float date datetime]
+          dsl_pattern = /(?:#{dsl_types.join('|')}) :(\w+)/
           fields = block_content.scan(/field :(\w+), type: :(\w+)/)
-          fields += block_content.scan(/(?:string|integer|number|boolean|float|text) :(\w+)/).map do |match|
+          fields += block_content.scan(dsl_pattern).map do |match|
             field_name = match[0]
             # Extract type from the DSL method name on that line
             type_match = block_content.match(/(\w+) :#{Regexp.escape(field_name)}/)

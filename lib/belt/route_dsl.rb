@@ -520,7 +520,7 @@ module Belt
 
   # SchemaBuilder captures request and response model definitions from contracts.rb
   class SchemaBuilder
-    SUPPORTED_TYPES = %i[string number integer boolean array object map list].freeze
+    SUPPORTED_TYPES = %i[string text number integer boolean date datetime array object map list].freeze
 
     attr_reader :request_models, :response_models
 
@@ -557,7 +557,7 @@ module Belt
   end
 
   class RequestModelBuilder
-    SUPPORTED_TYPES = %i[string number integer boolean array object map list].freeze
+    SUPPORTED_TYPES = %i[string text number integer boolean date datetime array object map list].freeze
 
     attr_reader :name, :fields
 
@@ -590,6 +590,7 @@ module Belt
 
     def map_type(dsl_type)
       case dsl_type
+      when :text, :date, :datetime then 'string'
       when :map then 'object'
       when :list then 'array'
       else dsl_type.to_s
@@ -598,7 +599,7 @@ module Belt
   end
 
   class ResponseModelBuilder
-    SUPPORTED_TYPES = %i[string number integer boolean array object map list].freeze
+    SUPPORTED_TYPES = %i[string text number integer boolean date datetime array object map list].freeze
 
     attr_reader :name, :contexts, :fields
 
@@ -636,6 +637,7 @@ module Belt
 
     def map_type(dsl_type)
       case dsl_type
+      when :text, :date, :datetime then 'string'
       when :map then 'object'
       when :list then 'array'
       else dsl_type.to_s
@@ -644,7 +646,7 @@ module Belt
   end
 
   class ContextBuilder
-    SUPPORTED_TYPES = %i[string number integer boolean array object map list].freeze
+    SUPPORTED_TYPES = %i[string text number integer boolean date datetime array object map list].freeze
 
     attr_reader :name, :fields
 
@@ -673,6 +675,7 @@ module Belt
 
     def map_type(dsl_type)
       case dsl_type
+      when :text, :date, :datetime then 'string'
       when :map then 'object'
       when :list then 'array'
       else dsl_type.to_s
