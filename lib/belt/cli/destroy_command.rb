@@ -258,6 +258,9 @@ module Belt
             end
           end
 
+          # Empty S3 buckets before destroy — terraform can't delete non-empty buckets
+          empty_s3_buckets_in_state
+
           # Run destroy with auto-approve (user already confirmed)
           unless system('terraform', 'destroy', '-auto-approve')
             puts "\n✗ terraform destroy failed."
@@ -267,6 +270,77 @@ module Belt
         end
 
         puts '  ✓ Infrastructure destroyed.'
+      end
+
+      def empty_s3_buckets_in_state
+        output = `terraform state list 2>/dev/null`
+        return unless Process.last_status.success?
+
+        bucket_resources = output.lines.map(&:strip).grep(/\Aaws_s3_bucket\./)
+        return if bucket_resources.empty?
+
+        bucket_resources.each do |resource|
+          bucket_name = resolve_bucket_name(resource)
+          next unless bucket_name
+
+          empty_s3_bucket(bucket_name)
+        end
+      end
+
+      def resolve_bucket_name(resource)
+        output = `terraform state show '#{resource}' 2>/dev/null`
+        return nil unless Process.last_status.success?
+
+        match = output.match(/^\s*bucket\s*=\s*"([^"]+)"/)
+        match&.[](1)
+      end
+
+      def empty_s3_bucket(bucket_name)
+        # Check if bucket exists
+        `aws s3api head-bucket --bucket '#{bucket_name}' 2>&1`
+        return unless Process.last_status.success?
+
+        puts "  Emptying S3 bucket: #{bucket_name}"
+
+        # Delete all object versions (handles versioned buckets)
+        `aws s3 rm 's3://#{bucket_name}' --recursive 2>/dev/null`
+
+        # Also delete versioned objects and delete markers
+        delete_all_versions(bucket_name)
+      end
+
+      def delete_all_versions(bucket_name)
+        loop do
+          output = `aws s3api list-object-versions --bucket '#{bucket_name}' --max-items 1000 2>/dev/null`
+          break unless Process.last_status.success?
+
+          begin
+            data = JSON.parse(output)
+          rescue JSON::ParserError
+            break
+          end
+
+          versions = (data['Versions'] || []) + (data['DeleteMarkers'] || [])
+          break if versions.empty?
+
+          # Build delete objects payload
+          objects = versions.map do |v|
+            { 'Key' => v['Key'], 'VersionId' => v['VersionId'] }
+          end
+
+          delete_payload = JSON.generate({ 'Objects' => objects, 'Quiet' => true })
+
+          # Use a temp file for the payload since it can be large
+          require 'tempfile'
+          Tempfile.create(['delete-objects', '.json']) do |f|
+            f.write(delete_payload)
+            f.flush
+            `aws s3api delete-objects --bucket '#{bucket_name}' --delete 'file://#{f.path}' 2>/dev/null`
+          end
+
+          # If there's no next token, we're done
+          break unless data['NextToken'] || data['IsTruncated']
+        end
       end
 
       def destroy_frontend
