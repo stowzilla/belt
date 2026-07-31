@@ -45,14 +45,24 @@ module Belt
 
         # Extract fields from model block
         if content =~ /model :#{singular} do\n(.*?)\n\s*end/m
+          block_content = ::Regexp.last_match(1)
           timestamp_fields = %w[created_at updated_at]
-          ::Regexp.last_match(1).scan(/field :(\w+), type: :(\w+)/)
-                  .filter_map do |n, t|
+
+          # Support both formats:
+          #   field :name, type: :string   (legacy)
+          #   string :name                 (current schema DSL)
+          fields = block_content.scan(/field :(\w+), type: :(\w+)/)
+          fields += block_content.scan(/(?:string|integer|number|boolean|float|text) :(\w+)/).map do |match|
+            field_name = match[0]
+            # Extract type from the DSL method name on that line
+            type_match = block_content.match(/(\w+) :#{Regexp.escape(field_name)}/)
+            [field_name, type_match ? type_match[1] : 'string']
+          end
+
+          fields.filter_map do |n, t|
             next if timestamp_fields.include?(n)
 
-            {
-              name: n, type: t
-            }
+            { name: n, type: t }
           end
         else
           []
