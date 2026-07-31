@@ -45,8 +45,11 @@ module Belt
 
         # Extract fields from model block
         if content =~ /model :#{singular} do\n(.*?)\n\s*end/m
-          ::Regexp.last_match(1).scan(/field :(\w+), type: :(\w+)/).except('created_at', 'updated_at')
-                  .map do |n, t|
+          timestamp_fields = %w[created_at updated_at]
+          ::Regexp.last_match(1).scan(/field :(\w+), type: :(\w+)/)
+                  .filter_map do |n, t|
+            next if timestamp_fields.include?(n)
+
             {
               name: n, type: t
             }
