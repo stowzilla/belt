@@ -59,6 +59,7 @@ module Belt
 
         install_dependencies(dest_dir)
         setup_frontend_infra_for_existing_environments
+        generate_views_for_existing_resources
 
         return if @quiet || !@announce
 
@@ -102,6 +103,28 @@ module Belt
         require_relative 'frontend_setup_command'
         FrontendSetupCommand.new(nil, quiet: true).run
         puts "  create  #{frontend_tf}" unless @quiet
+      end
+
+      def generate_views_for_existing_resources
+        routes_file = find_routes_file_path
+        return unless routes_file && File.exist?(routes_file)
+
+        resources = extract_resources_from_routes(routes_file)
+        return if resources.empty?
+
+        puts "\n  Detected existing resources: #{resources.join(', ')}" unless @quiet
+        puts '  Generating views...' unless @quiet
+
+        require_relative 'views_command'
+        resources.each do |resource_name|
+          fields = ViewsCommand.read_schema_fields(resource_name)
+          ViewsCommand.new(resource_name, fields).generate
+        end
+      end
+
+      def extract_resources_from_routes(routes_file)
+        content = File.read(routes_file)
+        content.scan(/resources\s+:(\w+)/).flatten.uniq
       end
 
       def copy_template(src_dir, dest_dir)
