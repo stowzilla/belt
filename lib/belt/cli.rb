@@ -22,6 +22,7 @@ require_relative 'cli/contracts_command'
 require_relative 'cli/lambda_config_command'
 require_relative 'cli/tasks_command'
 require_relative 'cli/console_command'
+require_relative 'cli/logs_command'
 require_relative 'cli/doctor_command'
 require_relative 'cli/plugin_command'
 
@@ -35,6 +36,7 @@ module Belt
       'contracts' => Belt::CLI::ContractsCommand,
       'lambda-config' => Belt::CLI::LambdaConfigCommand,
       %w[console c] => Belt::CLI::ConsoleCommand,
+      'logs' => Belt::CLI::LogsCommand,
       %w[tasks --tasks -T] => Belt::CLI::TasksCommand,
       'setup' => Belt::CLI::SetupCommand,
       'doctor' => Belt::CLI::DoctorCommand,
@@ -116,6 +118,7 @@ module Belt
 
           console                                     Start an interactive console (IRB)
           c                                           Alias for console
+          logs [lambda] [-f] [-s 5m] [-e env]         View Lambda function logs
           tasks [-g PATTERN] [-a]                     List available rake tasks
           -T [-g PATTERN] [-a]                        Alias for tasks
           setup state                                 Create/select S3 state bucket
