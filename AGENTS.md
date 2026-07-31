@@ -22,7 +22,7 @@ Optional capabilities live in **separate plugin gems** (not vendored here): `bel
 | **belt** (this gem) | CLI + Lambda runtime + generators for apps |
 | **activeitem** | DynamoDB ORM (dependency) |
 | **lambda_loadout** | Logging / metrics / cold-start helpers (dependency) |
-| **conveyor-belt** | Terraform provider; reads Ruby DSL (`routes.tf.rb`) — separate repo |
+| **conveyor-belt** | Terraform provider; reads Ruby DSL (`routes.rb`) — separate repo |
 | **belt-\*** plugins | Optional generators + runtime APIs discovered via `GeneratorRegistry` |
 
 ## Repo layout
@@ -87,6 +87,8 @@ Commands are registered in `Belt::CLI::COMMANDS_DEFINITION` (`lib/belt/cli.rb`).
 | `destroy` / `d` | `cli/destroy_command.rb` |
 | `plugin` | `cli/plugin_command.rb` (`plugin new`) |
 | `deploy` | `cli/deploy_command.rb` (+ path gem materializer) |
+| `routes` | `cli/routes_command.rb` |
+| `contracts` | `cli/contracts_command.rb` |
 | `doctor` | `cli/doctor_command.rb` |
 | `setup` | `cli/setup_command.rb` |
 | `console` / `c` | `cli/console_command.rb` |

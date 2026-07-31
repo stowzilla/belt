@@ -22,7 +22,7 @@ resource "conveyor_belt" "main" {
   provider = conveyor-belt
 
   # path.module is infrastructure/modules/app — climb three levels to project root
-  source            = "${path.module}/../../../config/routes.tf.rb"
+  source            = "${path.module}/../../../config/routes.rb"
   app_name          = var.app_name
   lambda_source_dir = "${path.module}/../../../lambda"
   lambda_shared_dirs = ["controllers", "helpers", "lib", "models", "views"]

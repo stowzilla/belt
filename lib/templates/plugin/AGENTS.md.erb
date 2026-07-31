@@ -67,7 +67,7 @@ When fleshing out the generator, typically install:
 1. **Terraform module** → `infrastructure/modules/<%= plugin_name %>/` (`main.tf`, `variables.tf`, `outputs.tf`)
 2. **Lambda config** → `config/lambda/<%= plugin_name %>.yml` (timeout, memory, env, triggers)
 3. **Lambda entrypoint** → `lambda/<%= plugin_name %>.rb` using `Belt::LambdaHandler`
-4. **Routes / schema** → inject into `config/routes.tf.rb` or schema files when needed
+4. **Routes / schema** → inject into `config/routes.rb` or `config/contracts.rb` when needed
 5. **Optional overrides** → `--controllers` (or similar) for app-local subclasses — keep defaults in the gem
 6. **Destroy path** → `belt destroy <%= plugin_name %>` removes generated artifacts
 7. **Help** → `.description` plus `--help` / `-h` explaining files and next steps

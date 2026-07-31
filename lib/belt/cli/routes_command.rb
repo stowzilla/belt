@@ -27,7 +27,7 @@ module Belt
         routes_file = find_routes_file
         unless routes_file
           abort 'Error: No routes file found. ' \
-                'Expected config/routes.tf.rb (or infrastructure/routes.tf.rb)'
+                'Expected config/routes.rb (or config/routes.tf.rb, infrastructure/routes.tf.rb)'
         end
 
         dsl = load_routes(routes_file)
@@ -71,7 +71,7 @@ module Belt
             @options[:output_dir] = dir
           end
 
-          opts.on('--schema FILE', 'Path to schema.tf.rb for model definitions') do |file|
+          opts.on('--schema FILE', 'Path to contracts.rb for model definitions') do |file|
             @options[:schema_file] = file
           end
 
@@ -87,7 +87,11 @@ module Belt
       end
 
       def find_routes_file
-        candidates = ['config/routes.tf.rb', 'infrastructure/routes.tf.rb']
+        candidates = [
+          'config/routes.rb',
+          'config/routes.tf.rb',
+          'infrastructure/routes.tf.rb'
+        ]
         candidates.find { |f| File.exist?(f) }
       end
 

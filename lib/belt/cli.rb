@@ -18,6 +18,7 @@ require_relative 'cli/backup_config'
 require_relative 'cli/backup_runner'
 require_relative 'cli/server_command'
 require_relative 'cli/routes_command'
+require_relative 'cli/contracts_command'
 require_relative 'cli/lambda_config_command'
 require_relative 'cli/tasks_command'
 require_relative 'cli/console_command'
@@ -31,6 +32,7 @@ module Belt
       %w[generate g] => Belt::CLI::GenerateCommand,
       %w[destroy d] => Belt::CLI::DestroyCommand,
       'routes' => Belt::CLI::RoutesCommand,
+      'contracts' => Belt::CLI::ContractsCommand,
       'lambda-config' => Belt::CLI::LambdaConfigCommand,
       %w[console c] => Belt::CLI::ConsoleCommand,
       %w[tasks --tasks -T] => Belt::CLI::TasksCommand,
@@ -109,6 +111,7 @@ module Belt
           deploy frontend <env>                       Build and deploy frontend to AWS
           frontend env <env>                          Write frontend/.env from terraform outputs
           routes [-g PATTERN] [-f json]               Show route definitions
+          contracts [-g PATTERN] [-f json]            Show API request/response contracts
           lambda-config [-e ENV] [-f json|terraform]  Show merged lambda configuration
 
           console                                     Start an interactive console (IRB)

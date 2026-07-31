@@ -38,8 +38,8 @@ module Belt
             Creates:
               lambda/models/<name>.rb                            Model with validations and fields
               lambda/controllers/<app>/<names>_controller.rb    RESTful controller (index, show, create, update, destroy)
-              config/routes.tf.rb                                Route entry added
-              config/schema.tf.rb                                API response contract added
+              config/routes.rb                                   Route entry added
+              config/contracts.rb                                API response contract added
               lambda/lib/routes/<app>_routes.rb                  Route manifest updated
               infrastructure/modules/app/dynamodb.tf             DynamoDB table generated
               frontend/src/pages/<names>/                        React pages (if frontend exists)
@@ -60,7 +60,7 @@ module Belt
           notes: <<~NOTES
             Creates:
               lambda/models/<name>.rb                            Model class inheriting from ApplicationRecord
-              config/schema.tf.rb                                API response contract added
+              config/contracts.rb                                API response contract added
               infrastructure/modules/app/dynamodb.tf             DynamoDB table generated
           NOTES
         },
@@ -333,8 +333,8 @@ module Belt
         puts "\nFiles created/updated:"
         puts "  lambda/models/#{@singular_name}.rb"
         puts "  lambda/controllers/#{@app_name}/#{@resource_name}_controller.rb"
-        puts "  #{find_routes_file_path || 'config/routes.tf.rb'} (updated)"
-        puts "  #{find_schema_file_path || 'config/schema.tf.rb'} (updated)"
+        puts "  #{find_routes_file_path || 'config/routes.rb'} (updated)"
+        puts "  #{find_contracts_file_path || 'config/contracts.rb'} (updated)"
         puts "  lambda/lib/routes/#{@app_name}_routes.rb (updated)"
         puts "  frontend/src/pages/#{@resource_name}/ (views)" if Dir.exist?('frontend/src')
       end

@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.2.12
+
+### Rename: `routes.tf.rb` → `routes.rb`, `schema.tf.rb` → `contracts.rb`
+
+The `.tf.rb` extension was a vestige of when these files produced HCL output — that hasn't been the case for a while. New apps now get clean, Rails-familiar names:
+
+- `config/routes.rb` — API route definitions
+- `config/contracts.rb` — API request/response contracts
+
+**Backward compatible:** All detection helpers (`Belt.root`, `Belt.routes_file`, `Belt.contracts_file`, `find_routes_file_path`, `find_contracts_file_path`) check new names first, then fall back to `*.tf.rb` and `infrastructure/` paths. Existing apps continue working without changes.
+
+### New command: `belt contracts`
+
+Dedicated CLI command for inspecting API contracts, separate from `belt routes`:
+
+```bash
+belt contracts                    # Human-readable table of request/response models
+belt contracts -f json            # JSON output (for tooling/CI)
+belt contracts -g post            # Filter by pattern
+belt contracts --file path.rb     # Explicit file override
+```
+
+Previously, contracts were only accessible as a side-effect of `belt routes -f json --schema <file>`. Now they have their own first-class command. `belt routes -f json` continues to include models for backward compatibility.
+
+### Other changes
+
+- `Belt.schema_file` is now an alias for `Belt.contracts_file`
+- `find_schema_file_path` is now an alias for `find_contracts_file_path`
+- Module template updated: `source` points to `config/routes.rb`
+- All scaffold/generator help text and templates reference new filenames
+
 ## Unreleased
 
 ## 0.2.11

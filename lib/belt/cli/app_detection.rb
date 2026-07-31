@@ -40,16 +40,30 @@ module Belt
         name.to_s.downcase.tr('_', '-')
       end
 
-      # Finds routes.tf.rb checking config/ first, then infrastructure/ (legacy).
+      # Finds routes file checking config/routes.rb first, then legacy paths.
       def find_routes_file_path
-        candidates = ['config/routes.tf.rb', 'infrastructure/routes.tf.rb']
+        candidates = [
+          'config/routes.rb',
+          'config/routes.tf.rb',
+          'infrastructure/routes.tf.rb'
+        ]
         candidates.find { |f| File.exist?(f) }
       end
 
-      # Finds schema.tf.rb checking config/ first, then infrastructure/ (legacy).
-      def find_schema_file_path
-        candidates = ['config/schema.tf.rb', 'infrastructure/schema.tf.rb']
+      # Finds contracts file checking config/contracts.rb first, then legacy paths.
+      def find_contracts_file_path
+        candidates = [
+          'config/contracts.rb',
+          'config/contracts.tf.rb',
+          'config/schema.tf.rb',
+          'infrastructure/schema.tf.rb'
+        ]
         candidates.find { |f| File.exist?(f) }
+      end
+
+      # Legacy alias for backward compatibility
+      def find_schema_file_path
+        find_contracts_file_path
       end
     end
   end
