@@ -118,7 +118,7 @@ module Belt
         require_relative 'views_command'
         resources.each do |resource_name|
           fields = ViewsCommand.read_schema_fields(resource_name)
-          ViewsCommand.new(resource_name, fields).generate
+          ViewsCommand.new(resource_name, fields, force: true).generate
         end
       end
 

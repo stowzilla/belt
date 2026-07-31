@@ -505,7 +505,7 @@ module Belt
         return unless Dir.exist?('frontend/src')
         return if @skip_views
 
-        Belt::CLI::ViewsCommand.new(@name, @fields).generate
+        Belt::CLI::ViewsCommand.new(@name, @fields, force: @force).generate
       end
     end
   end
