@@ -57,7 +57,7 @@ module Belt
             A standalone gem (belt-<name>) with:
               - Module under Belt::<Name>
               - Generator at lib/belt/generators/<name>_generator.rb
-              - Configuration stub, version, RSpec, README
+              - Configuration stub, version, RSpec, README, AGENTS.md
               - Hooked into `belt generate <name>` / `belt destroy <name>` once
                 the gem is in an app's Gemfile
 
@@ -65,7 +65,7 @@ module Belt
             belt-messaging  — SMS via AWS End User Messaging
             belt-pay        — Stripe payments and subscriptions
 
-          See the Contributing section in the Belt README for the full plugin guide.
+          See the Belt README (Plugins / Contributing) and AGENTS.md for the full guide.
         HELP
       end
 
@@ -165,6 +165,7 @@ module Belt
           'Gemfile' => render('Gemfile.erb'),
           'Rakefile' => render('Rakefile.erb'),
           'README.md' => render('README.md.erb'),
+          'AGENTS.md' => render('AGENTS.md.erb'),
           'CHANGELOG.md' => render('CHANGELOG.md.erb'),
           'LICENSE' => render('LICENSE.erb'),
           '.gitignore' => render('gitignore.erb'),

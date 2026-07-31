@@ -719,6 +719,9 @@ bundle exec rspec
 | `lib/templates/` | ERB templates for `belt new`, generators, plugin scaffold |
 | `exe/belt` | CLI executable |
 | `spec/` | RSpec suite |
+| `AGENTS.md` | Agent-oriented map of this gem (layout, CLI, plugin contract) |
+
+AI / coding agents: start with **[AGENTS.md](AGENTS.md)**. Belt apps and plugins scaffolded by the CLI get their own `AGENTS.md` as well (`belt new`, `belt plugin new`).
 
 ### Local gem development against an app
 
