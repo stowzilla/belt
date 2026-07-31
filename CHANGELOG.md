@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Contributing & plugins
+
+- README: **Plugins** and **Contributing** sections — how to contribute to belt, how plugins register via `GeneratorRegistry`, layout used by `belt-messaging` / `belt-pay`, generator checklist for humans and agents.
+- **`belt plugin new <name>`** — scaffold a new plugin gem (gemspec, `Belt::<Name>` module, generator stub, RSpec, README, AGENTS.md), similar to `rails plugin new`.
+- **`AGENTS.md`** at the belt gem root — agent-oriented map of core layout, CLI, and the plugin/GeneratorRegistry contract (complements README).
+- Plugin scaffold includes **`AGENTS.md`** so new plugins match the agent guidance pattern already used by `belt new` apps.
+
+
 ## 0.2.10
 
 ### Quiet `belt new` (with optional verbose)

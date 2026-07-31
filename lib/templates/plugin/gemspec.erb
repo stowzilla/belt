@@ -1,0 +1,26 @@
+# frozen_string_literal: true
+
+require_relative 'lib/belt/<%= underscored %>/version'
+
+Gem::Specification.new do |spec|
+  spec.name          = '<%= gem_name %>'
+  spec.version       = <%= constant_path %>::VERSION
+  spec.authors       = ['Your Name']
+  spec.email         = ['you@example.com']
+
+  spec.summary       = '<%= summary %>'
+  spec.description   = '<%= summary %>. A Belt plugin gem — add to a Belt app Gemfile, then run `belt generate <%= plugin_name %>`.'
+  spec.homepage      = 'https://github.com/example/<%= gem_name %>'
+  spec.license       = 'MIT'
+  spec.required_ruby_version = '>= 3.3'
+
+  spec.metadata['homepage_uri'] = spec.homepage
+  spec.metadata['source_code_uri'] = spec.homepage
+  spec.metadata['changelog_uri'] = "#{spec.homepage}/blob/main/CHANGELOG.md"
+  spec.metadata['rubygems_mfa_required'] = 'true'
+
+  spec.files = Dir['lib/**/*', 'LICENSE', 'README.md', 'CHANGELOG.md']
+  spec.require_paths = ['lib']
+
+  spec.add_dependency 'belt', '~> 0.2'
+end
