@@ -1,14 +1,8 @@
 # frozen_string_literal: true
 
 require 'belt'
-require 'activeitem'
 
 include Belt::LambdaHandler
-
-ActiveItem.configure do |config|
-  config.table_prefix = ENV['APP_NAME']
-  config.environment = ENV['ENVIRONMENT']
-end
 
 require_relative 'lib/routes/api_routes'
 <% @resources&.each do |r| -%>

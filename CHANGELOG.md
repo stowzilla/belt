@@ -31,7 +31,17 @@ Previously, contracts were only accessible as a side-effect of `belt routes -f j
 - Module template updated: `source` points to `config/routes.rb`
 - All scaffold/generator help text and templates reference new filenames
 
-## Unreleased
+## 0.2.13
+
+### Template cleanup
+
+- **Model template**: single-line `attr_accessor` instead of one per attribute; removed redundant `to_h` (ActiveItem::Base already provides it)
+- **Controller template**: uses implicit response pattern (instance variable assigns) instead of explicit `success_response` calls; `response_status :created` for create actions, `head :no_content` for destroy
+- **Gemfile template**: removed `activeitem` and `lambda_loadout` (already belt gem dependencies)
+- **gitignore template**: excludes `lambda/lib/routes/` (generated artifact from `belt routes`)
+- **Removed `require 'activeitem'`** from api.rb, environment.rb, and application_record.rb templates (belt requires it transitively)
+- **Removed `ActiveItem.configure` boilerplate** from api.rb and environment.rb templates (activeitem 0.0.13+ defaults `table_prefix` and `environment` from ENV vars)
+- Bumped activeitem dependency to `>= 0.0.13`
 
 ## 0.2.11
 

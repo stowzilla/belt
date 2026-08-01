@@ -24,7 +24,7 @@ Gem::Specification.new do |spec|
   spec.executables = ['belt']
   spec.require_paths = ['lib']
 
-  spec.add_dependency 'activeitem', '~> 0.0'
+  spec.add_dependency 'activeitem', '~> 0.0', '>= 0.0.13'
   spec.add_dependency 'activesupport', '>= 7.0'
   spec.add_dependency 'lambda_loadout', '~> 0.0'
 

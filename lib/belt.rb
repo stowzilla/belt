@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'activeitem'
 require_relative 'belt/version'
 require_relative 'belt/root'
 require_relative 'belt/configuration'

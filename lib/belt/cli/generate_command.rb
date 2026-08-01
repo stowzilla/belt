@@ -478,14 +478,16 @@ module Belt
         puts "  update  #{schema_file}"
       end
 
-      # Map generator field types to OpenAPI schema DSL types
+      # Map generator field types to schema DSL types.
+      # Preserves :text, :date, :datetime so views can render appropriate form inputs.
       def schema_type_for(field_type)
         case field_type.to_s
-        when 'text' then 'string'
+        when 'text' then 'text'
         when 'integer' then 'integer'
         when 'float' then 'number'
         when 'boolean' then 'boolean'
-        when 'date', 'datetime' then 'string'
+        when 'date' then 'date'
+        when 'datetime' then 'datetime'
         else 'string'
         end
       end
@@ -505,7 +507,7 @@ module Belt
         return unless Dir.exist?('frontend/src')
         return if @skip_views
 
-        Belt::CLI::ViewsCommand.new(@name, @fields).generate
+        Belt::CLI::ViewsCommand.new(@name, @fields, force: @force).generate
       end
     end
   end
