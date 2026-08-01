@@ -1,5 +1,24 @@
 # frozen_string_literal: true
 
 class <%= @class_name %> < ApplicationRecord
-  attr_accessor <%= @fields.map { |f| ":#{f[:name]}" }.join(', ') %>
+<% @references.each do |ref| -%>
+  belongs_to :<%= ref[:referenced_model] %>, foreign_key: '<%= ref[:referenced_model] %>_id', index: '<%= Belt::Inflector.classify(ref[:referenced_model]) %>Index'
+<% end -%>
+<% if @references.any? && (@regular_fields.any? || @references.any?) -%>
+
+<% end -%>
+<% @references.each do |ref| -%>
+  attr_accessor :<%= ref[:referenced_model] %>_id
+<% end -%>
+<% @regular_fields.each do |field| -%>
+  attr_accessor :<%= field[:name] %>
+<% end -%>
+<% if @references.any? -%>
+
+  indexes(
+<% @references.each_with_index do |ref, i| -%>
+    '<%= Belt::Inflector.classify(ref[:referenced_model]) %>Index' => { partition_key: '<%= ref[:referenced_model] %>_id' }<%= i < @references.length - 1 ? ',' : '' %>
+<% end -%>
+  )
+<% end -%>
 end
