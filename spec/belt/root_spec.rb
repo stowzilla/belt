@@ -89,11 +89,11 @@ RSpec.describe 'Belt.root' do
   end
 
   context 'when no routes file exists anywhere' do
-    it 'falls back to pwd' do
+    it 'returns nil' do
       Dir.mktmpdir do |dir|
         Dir.chdir(dir)
 
-        expect(Belt.root).to eq(dir)
+        expect(Belt.root).to be_nil
       end
     end
   end
@@ -143,6 +143,7 @@ RSpec.describe 'Belt.root' do
     it 'prefers config/contracts.rb over legacy paths' do
       Dir.mktmpdir do |dir|
         FileUtils.mkdir_p(File.join(dir, 'config'))
+        FileUtils.touch(File.join(dir, 'config/routes.rb'))
         FileUtils.touch(File.join(dir, 'config/contracts.rb'))
         FileUtils.touch(File.join(dir, 'config/schema.tf.rb'))
         Dir.chdir(dir)
@@ -154,6 +155,7 @@ RSpec.describe 'Belt.root' do
     it 'falls back to config/contracts.tf.rb' do
       Dir.mktmpdir do |dir|
         FileUtils.mkdir_p(File.join(dir, 'config'))
+        FileUtils.touch(File.join(dir, 'config/routes.rb'))
         FileUtils.touch(File.join(dir, 'config/contracts.tf.rb'))
         Dir.chdir(dir)
 
@@ -164,6 +166,7 @@ RSpec.describe 'Belt.root' do
     it 'falls back to config/schema.tf.rb' do
       Dir.mktmpdir do |dir|
         FileUtils.mkdir_p(File.join(dir, 'config'))
+        FileUtils.touch(File.join(dir, 'config/routes.rb'))
         FileUtils.touch(File.join(dir, 'config/schema.tf.rb'))
         Dir.chdir(dir)
 
@@ -173,6 +176,8 @@ RSpec.describe 'Belt.root' do
 
     it 'falls back to infrastructure/schema.tf.rb' do
       Dir.mktmpdir do |dir|
+        FileUtils.mkdir_p(File.join(dir, 'config'))
+        FileUtils.touch(File.join(dir, 'config/routes.rb'))
         FileUtils.mkdir_p(File.join(dir, 'infrastructure'))
         FileUtils.touch(File.join(dir, 'infrastructure/schema.tf.rb'))
         Dir.chdir(dir)
@@ -186,6 +191,7 @@ RSpec.describe 'Belt.root' do
     it 'is an alias for contracts_file' do
       Dir.mktmpdir do |dir|
         FileUtils.mkdir_p(File.join(dir, 'config'))
+        FileUtils.touch(File.join(dir, 'config/routes.rb'))
         FileUtils.touch(File.join(dir, 'config/contracts.rb'))
         Dir.chdir(dir)
 
