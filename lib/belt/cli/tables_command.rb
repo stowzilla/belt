@@ -31,7 +31,8 @@ module Belt
       end
 
       def run
-        validate!
+        return unless validate!
+
         models = parse_models
         if models.empty?
           puts "No models found in #{MODELS_DIR}/" unless @quiet
@@ -49,11 +50,11 @@ module Belt
             abort "Error: No models directory found at #{MODELS_DIR}/. " \
                   'Run `belt generate model` to create your first model.'
           end
-          return
+          return false
         end
-        return if Dir.exist?(MODULE_DIR)
+        return true if Dir.exist?(MODULE_DIR)
 
-        return if @quiet
+        return false if @quiet
 
         abort "Error: Module directory not found at #{MODULE_DIR}/.\n" \
               'Run `belt new` to create a project with the correct structure.'
