@@ -7,10 +7,8 @@ class <%= @class_name %> < ApplicationRecord
 <% if @references.any? && (@regular_fields.any? || @references.any?) -%>
 
 <% end -%>
-<% @references.each do |ref| -%>
-  attr_accessor :<%= ref[:referenced_model] %>_id
-<% end -%>
-<% @regular_fields.each do |field| -%>
-  attr_accessor :<%= field[:name] %>
+<% all_accessors = @references.map { |ref| ":#{ref[:referenced_model]}_id" } + @regular_fields.map { |f| ":#{f[:name]}" } -%>
+<% if all_accessors.any? -%>
+  attr_accessor <%= all_accessors.join(', ') %>
 <% end -%>
 end

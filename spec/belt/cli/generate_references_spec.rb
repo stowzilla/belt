@@ -135,7 +135,8 @@ RSpec.describe 'Generate command — references support' do
 
     it 'generates attr_accessor for regular fields' do
       content = File.read('lambda/models/comment.rb')
-      expect(content).to include('attr_accessor :body')
+      expect(content).to include(':body')
+      expect(content).to match(/attr_accessor.*:body/)
     end
 
     it 'does not generate belongs_to for regular fields' do
@@ -186,8 +187,7 @@ RSpec.describe 'Generate command — references support' do
 
     it 'generates both foreign key attrs' do
       content = File.read('lambda/models/authoring.rb')
-      expect(content).to include('attr_accessor :book_id')
-      expect(content).to include('attr_accessor :author_id')
+      expect(content).to match(/attr_accessor.*:book_id.*:author_id/)
     end
   end
 
