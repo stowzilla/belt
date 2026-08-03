@@ -9,8 +9,14 @@ module Belt
     @root = path
   end
 
+  def self.root?
+    !root.nil?
+  end
+
   # Resolves the path to routes.rb, checking config/ first then legacy paths.
   def self.routes_file
+    return nil unless root
+
     candidates = [
       File.join(root, 'config/routes.rb'),
       File.join(root, 'config/routes.tf.rb'),
@@ -21,6 +27,8 @@ module Belt
 
   # Resolves the path to contracts.rb, checking config/ first then legacy paths.
   def self.contracts_file
+    return nil unless root
+
     candidates = [
       File.join(root, 'config/contracts.rb'),
       File.join(root, 'config/contracts.tf.rb'),
@@ -37,6 +45,8 @@ module Belt
 
   # Resolves the lambda config directory.
   def self.lambda_config_dir
+    return nil unless root
+
     File.join(root, 'config/lambda')
   end
 
@@ -52,7 +62,7 @@ module Belt
 
       dir = parent
     end
-    Dir.pwd
+    nil
   end
 
   private_class_method :detect_root
