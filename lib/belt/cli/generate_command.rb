@@ -347,18 +347,6 @@ module Belt
         inject_parent_associations
         sync_tables
         generate_views_if_frontend
-        puts "\n✓ Scaffold '#{@singular_name}' generated!"
-        puts "\nFiles created/updated:"
-        puts "  lambda/models/#{@singular_name}.rb"
-        puts "  lambda/controllers/#{@app_name}/#{@resource_name}_controller.rb"
-        puts "  #{find_routes_file_path || 'config/routes.rb'} (updated)"
-        puts "  #{find_contracts_file_path || 'config/contracts.rb'} (updated)"
-        puts "  lambda/lib/routes/#{@app_name}_routes.rb (updated)"
-        puts "  frontend/src/pages/#{@resource_name}/ (views)" if Dir.exist?('frontend/src')
-        @references.each do |ref|
-          parent_model_path = "lambda/models/#{ref[:referenced_model]}.rb"
-          puts "  #{parent_model_path} (updated — added has_many)" if File.exist?(parent_model_path)
-        end
       end
 
       def generate_model_standalone
@@ -628,7 +616,7 @@ module Belt
         return unless Dir.exist?('frontend/src')
         return if @skip_views
 
-        Belt::CLI::ViewsCommand.new(@name, @fields, force: @force).generate
+        Belt::CLI::ViewsCommand.new(@name, @fields, force: @force, quiet: true).generate
       end
     end
   end

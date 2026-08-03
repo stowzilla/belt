@@ -75,10 +75,11 @@ module Belt
         end
       end
 
-      def initialize(name, fields, force: false)
+      def initialize(name, fields, force: false, quiet: false)
         @name = name.downcase.gsub(/[^a-z0-9_]/, '_')
         @fields = fields
         @force = force
+        @quiet = quiet
         @overwrite_all = false
         @singular_name = Belt::Inflector.singularize(@name)
         @resource_name = Belt::Inflector.pluralize(@singular_name)
@@ -103,14 +104,7 @@ module Belt
 
         inject_routes
 
-        puts "\n✓ Views for '#{@singular_name}' generated!"
-        puts "\nFiles created:"
-        puts "  #{pages_dir}/#{@plural_class_name}Index.jsx"
-        puts "  #{pages_dir}/#{@class_name}Show.jsx"
-        puts "  #{pages_dir}/#{@class_name}New.jsx"
-        puts "  #{pages_dir}/#{@class_name}Edit.jsx"
-        puts "  #{pages_dir}/#{@class_name}Form.jsx"
-        puts '  frontend/src/App.jsx (updated)'
+        puts "\n✓ Views for '#{@singular_name}' generated!" unless @quiet
       end
 
       private
