@@ -60,7 +60,10 @@ module Belt
         boot_app
         puts banner
         ARGV.clear
-        suppress_warnings { require 'irb' }
+        suppress_warnings do
+          require 'irb'
+          require 'rdoc'
+        end
         IRB.start
       end
 
