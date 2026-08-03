@@ -327,7 +327,7 @@ RSpec.describe 'Generate command — references support' do
     end
   end
 
-  describe 'route manifest — nested paths' do
+  describe 'route manifest is not modified when DSL routes file exists' do
     before do
       Belt::CLI::GenerateCommand.new(
         'scaffold', 'comment',
@@ -339,36 +339,14 @@ RSpec.describe 'Generate command — references support' do
       ).generate
     end
 
-    it 'generates paths prefixed with the parent resource' do
+    it 'does not inject into the manifest (belt routes compiles it)' do
       content = File.read('lambda/lib/routes/blog_routes.rb')
-      expect(content).to include('/posts/{post_id}/comments')
+      expect(content).not_to include('/comments')
     end
 
-    it 'generates individual item paths with parent prefix' do
-      content = File.read('lambda/lib/routes/blog_routes.rb')
-      expect(content).to include('/posts/{post_id}/comments/{comment_id}')
-    end
-
-    it 'preserves existing routes for other resources' do
-      content = File.read('lambda/lib/routes/blog_routes.rb')
-      # Original post routes should still exist
-      expect(content).to include("path: '/posts'")
-    end
-  end
-
-  describe 'route manifest — flat paths' do
-    before do
-      Belt::CLI::GenerateCommand.new(
-        'scaffold', 'tag',
-        [{ name: 'label', type: 'string' }],
-        force: true
-      ).generate
-    end
-
-    it 'generates paths without any parent prefix' do
-      content = File.read('lambda/lib/routes/blog_routes.rb')
-      expect(content).to include("path: '/tags'")
-      expect(content).to include("path: '/tags/{tag_id}'")
+    it 'updates config/routes.rb instead' do
+      content = File.read('config/routes.rb')
+      expect(content).to include('resources :comments')
     end
   end
 

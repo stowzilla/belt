@@ -286,7 +286,9 @@ module Belt
         when 'model'
           check_model_collision! unless @force
           generate_model_standalone
-        when 'controller' then generate_controller
+        when 'controller'
+          generate_controller
+          inject_routes
         end
       end
 
@@ -370,25 +372,26 @@ module Belt
 
       def inject_routes
         routes_file = find_routes_file_path
-        return unless routes_file && File.exist?(routes_file)
 
-        content = File.read(routes_file)
-        tables_arg = @fields.any? ? ", tables: [:#{@resource_name}]" : ''
+        if routes_file && File.exist?(routes_file)
+          content = File.read(routes_file)
+          tables_arg = @fields.any? ? ", tables: [:#{@resource_name}]" : ''
 
-        # If this resource has a reference to a parent that already has routes, nest it
-        parent_ref = @references.find do |ref|
-          parent_resource = Belt::Inflector.pluralize(ref[:referenced_model])
-          content.match?(/resources :#{Regexp.escape(parent_resource)}\b/)
-        end
+          # If this resource has a reference to a parent that already has routes, nest it
+          parent_ref = @references.find do |ref|
+            parent_resource = Belt::Inflector.pluralize(ref[:referenced_model])
+            content.match?(/resources :#{Regexp.escape(parent_resource)}\b/)
+          end
 
-        if parent_ref
-          inject_nested_route(content, routes_file, parent_ref, tables_arg)
+          if parent_ref
+            inject_nested_route(content, routes_file, parent_ref, tables_arg)
+          else
+            inject_top_level_route(content, routes_file, tables_arg)
+          end
         else
-          inject_top_level_route(content, routes_file, tables_arg)
+          # Legacy projects without config/routes.rb — update the manifest directly
+          inject_route_manifest
         end
-
-        # Also update route manifest
-        inject_route_manifest
       end
 
       def inject_nested_route(content, routes_file, parent_ref, tables_arg)
