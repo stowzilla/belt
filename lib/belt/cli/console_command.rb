@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'optparse'
+require 'stringio'
 require_relative 'environment_config'
 
 module Belt
@@ -59,7 +60,7 @@ module Belt
         boot_app
         puts banner
         ARGV.clear
-        require 'irb'
+        suppress_warnings { require 'irb' }
         IRB.start
       end
 
@@ -72,7 +73,7 @@ module Belt
       end
 
       def boot_app
-        require 'bundler/setup'
+        suppress_warnings { require 'bundler/setup' }
 
         environment_file = File.join(Belt.root, 'lambda', 'config', 'environment.rb')
         if File.exist?(environment_file)
@@ -131,6 +132,17 @@ module Belt
         else
           result.inspect
         end
+      end
+
+      def suppress_warnings
+        original_verbose = $VERBOSE
+        $VERBOSE = nil
+        original_stderr = $stderr
+        $stderr = StringIO.new
+        yield
+      ensure
+        $stderr = original_stderr
+        $VERBOSE = original_verbose
       end
     end
   end
