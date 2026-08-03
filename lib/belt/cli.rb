@@ -53,6 +53,9 @@ module Belt
 
     TERRAFORM_ACTIONS = Belt::CLI::TerraformCommand::ACTIONS
 
+    # Commands that can run without being inside a Belt project
+    STANDALONE_COMMANDS = %w[new version --version -v doctor].freeze
+
     def self.start(args)
       command = args.shift
 
@@ -61,17 +64,11 @@ module Belt
         exit 1
       end
 
+      # For project-level commands, find and chdir to the project root
+      ensure_project_root!(command) unless STANDALONE_COMMANDS.include?(command)
+
       # `belt destroy` is ambiguous: could be terraform destroy or belt destroy <generator>.
-      # Route to DestroyCommand if the first arg is a known generator or help flag.
-      if command == 'destroy'
-        if args.empty? || args.first =~ /\A-/
-          # belt destroy --help → DestroyCommand help
-          # belt destroy (no args) → terraform destroy (needs env)
-          return DestroyCommand.run(args) if args.include?('--help') || args.include?('-h')
-        elsif DestroyCommand::GENERATORS.include?(args.first) || GeneratorRegistry.generator_names.include?(args.first)
-          return DestroyCommand.run(args)
-        end
-      end
+      return if command == 'destroy' && route_destroy_command(args)
 
       # Terraform shorthand: belt init wups, belt plan wups, belt apply wups, belt destroy wups
       return Belt::CLI::TerraformCommand.run(command, args) if TERRAFORM_ACTIONS.include?(command)
@@ -160,6 +157,47 @@ module Belt
           belt lambda:build_layer       # run a rake task directly
           belt plugin new messaging     # scaffold a belt-messaging style plugin gem
       USAGE
+    end
+
+    def self.not_in_app_message(command)
+      <<~MSG
+        Could not find a Belt application. Run `belt #{command}` from within a Belt project directory, or create a new one:
+
+          belt new <app_name>                         Create a new Belt application
+          belt new <app_name> --frontend react        With a React frontend
+          belt new <app_name> --domain myapp.com      With a custom domain
+
+        Examples:
+          belt new blog
+          belt new my-api --frontend react
+          belt new shop --domain shop.example.com
+
+        See `belt new --help` for all options.
+      MSG
+    end
+
+    def self.ensure_project_root!(command)
+      if Belt.root?
+        Dir.chdir(Belt.root)
+      else
+        puts not_in_app_message(command)
+        exit 1
+      end
+    end
+
+    # Routes `belt destroy` to DestroyCommand when args indicate a generator.
+    # Returns true if handled, false to fall through to TerraformCommand.
+    def self.route_destroy_command(args) # rubocop:disable Naming/PredicateMethod
+      if args.empty? || args.first =~ /\A-/
+        if args.include?('--help') || args.include?('-h')
+          DestroyCommand.run(args)
+          return true
+        end
+      elsif DestroyCommand::GENERATORS.include?(args.first) || GeneratorRegistry.generator_names.include?(args.first)
+        DestroyCommand.run(args)
+        return true
+      end
+      false
     end
   end
 end
