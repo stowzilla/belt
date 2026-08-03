@@ -18,7 +18,7 @@ module Belt
 
       include AppDetection
 
-      FIELD_TYPES = %w[string text integer float boolean date datetime].freeze
+      FIELD_TYPES = %w[string text integer float boolean date datetime references].freeze
 
       GENERATOR_HELP = {
         'scaffold' => {
@@ -30,7 +30,7 @@ module Belt
           ],
           examples: [
             ['belt g scaffold post title body:text'],
-            ['belt g scaffold comment author body:text status'],
+            ['belt g scaffold comment post:references body:text'],
             ['belt g scaffold task --skip-views'],
             ['belt g scaffold post title body:text --force']
           ],
@@ -43,6 +43,16 @@ module Belt
               lambda/lib/routes/<app>_routes.rb                  Route manifest updated
               infrastructure/modules/app/dynamodb.tf             DynamoDB table generated
               frontend/src/pages/<names>/                        React pages (if frontend exists)
+
+            Nested Resources:
+              Use `<parent>:references` to create a nested resource. This will:
+              - Add `belongs_to :<parent>` in the child model
+              - Add `has_many :<children>` in the parent model (if it exists)
+              - Generate a GSI on `<parent>_id` for efficient queries
+              - Nest routes under the parent (e.g., /posts/{post_id}/comments)
+              - Scope the controller index action to the parent
+
+              Example: `belt g scaffold comment post:references body:text`
 
             Alias: `belt g resource` works the same way.
           NOTES
@@ -132,7 +142,13 @@ module Belt
 
       def self.parse_field(arg)
         name, type = arg.split(':', 2)
-        { name: name, type: type || 'string' }
+        type ||= 'string'
+
+        if %w[references belongs_to].include?(type)
+          { name: name, type: 'references', referenced_model: name }
+        else
+          { name: name, type: type }
+        end
       end
 
       RESERVED_NAMES = %w[
@@ -259,6 +275,7 @@ module Belt
         @singular_name = Belt::Inflector.singularize(@name)
         @resource_name = Belt::Inflector.pluralize(@singular_name)
         @class_name = Belt::Inflector.classify(@singular_name)
+        @references, @regular_fields = @fields.partition { |f| f[:type] == 'references' }
       end
 
       def generate
@@ -327,6 +344,7 @@ module Belt
         generate_controller
         inject_routes
         inject_schema
+        inject_parent_associations
         sync_tables
         generate_views_if_frontend
         puts "\n✓ Scaffold '#{@singular_name}' generated!"
@@ -337,11 +355,16 @@ module Belt
         puts "  #{find_contracts_file_path || 'config/contracts.rb'} (updated)"
         puts "  lambda/lib/routes/#{@app_name}_routes.rb (updated)"
         puts "  frontend/src/pages/#{@resource_name}/ (views)" if Dir.exist?('frontend/src')
+        @references.each do |ref|
+          parent_model_path = "lambda/models/#{ref[:referenced_model]}.rb"
+          puts "  #{parent_model_path} (updated — added has_many)" if File.exist?(parent_model_path)
+        end
       end
 
       def generate_model_standalone
         generate_model
         inject_schema
+        inject_parent_associations
         sync_tables
       end
 
@@ -363,6 +386,59 @@ module Belt
 
         content = File.read(routes_file)
         tables_arg = @fields.any? ? ", tables: [:#{@resource_name}]" : ''
+
+        # If this resource has a reference to a parent that already has routes, nest it
+        parent_ref = @references.find do |ref|
+          parent_resource = Belt::Inflector.pluralize(ref[:referenced_model])
+          content.match?(/resources :#{Regexp.escape(parent_resource)}\b/)
+        end
+
+        if parent_ref
+          inject_nested_route(content, routes_file, parent_ref, tables_arg)
+        else
+          inject_top_level_route(content, routes_file, tables_arg)
+        end
+
+        # Also update route manifest
+        inject_route_manifest
+      end
+
+      def inject_nested_route(content, routes_file, parent_ref, tables_arg)
+        parent_resource = Belt::Inflector.pluralize(parent_ref[:referenced_model])
+        resource_line = "resources :#{@resource_name}#{tables_arg}"
+
+        # Find the parent resources line and convert to a block if needed
+        parent_pattern = /^(\s*)resources :#{Regexp.escape(parent_resource)}\b([^\n]*?)(?:\s*do\s*)?$/
+
+        if content.match?(/resources :#{Regexp.escape(parent_resource)}\b[^\n]*\bdo\b/)
+          # Parent already has a block — insert before its closing end
+          # Match the parent block: resources :parent do ... end
+          block_pattern = /^(\s*)(resources :#{Regexp.escape(parent_resource)}\b[^\n]*do\s*\n)(.*?)^\1(end)/m
+          if content.match?(block_pattern)
+            content.sub!(block_pattern) do
+              indent = ::Regexp.last_match(1)
+              opener = ::Regexp.last_match(2)
+              body = ::Regexp.last_match(3)
+              closer = ::Regexp.last_match(4)
+              "#{indent}#{opener}#{body}#{indent}  #{resource_line}\n#{indent}#{closer}"
+            end
+          end
+        else
+          # Parent is a single line — convert to block form
+          content.sub!(parent_pattern) do
+            indent = ::Regexp.last_match(1)
+            parent_line_rest = ::Regexp.last_match(2).rstrip
+            "#{indent}resources :#{parent_resource}#{parent_line_rest} do\n" \
+              "#{indent}  #{resource_line}\n" \
+              "#{indent}end"
+          end
+        end
+
+        File.write(routes_file, content)
+        puts "  update  #{routes_file}"
+      end
+
+      def inject_top_level_route(content, routes_file, tables_arg)
         resource_line = "resources :#{@resource_name}#{tables_arg}"
 
         # If this resource already exists in routes (force mode), replace it
@@ -377,17 +453,14 @@ module Belt
           content.sub!('# resources :posts', resource_line)
         else
           # Find the target namespace block and insert before its closing `end`
-          # Match: `namespace :<name> do` ... `end` (the first `end` at the same indent level)
           namespace_pattern = /^(\s*)namespace :#{Regexp.escape(@app_name)}\b[^\n]*do\s*\n(.*?)^\1end/m
 
           if content.match?(namespace_pattern)
             content.sub!(namespace_pattern) do |match|
               indent = ::Regexp.last_match(1)
-              # Insert the resource line before the namespace's closing `end`
               match.sub(/^(#{indent})end\z/m, "#{indent}  #{resource_line}\n#{indent}end")
             end
           else
-            # Fallback: find any single namespace block and insert into it
             single_ns_pattern = /^(\s*)namespace :\w+\b[^\n]*do\s*\n(.*?)^\1end/m
             if content.match?(single_ns_pattern)
               content.sub!(single_ns_pattern) do |match|
@@ -395,7 +468,6 @@ module Belt
                 match.sub(/^(#{indent})end\z/m, "#{indent}  #{resource_line}\n#{indent}end")
               end
             else
-              # No namespace block found at all — insert at top level before final end
               content.sub!(/^(\s*end\s*)\z/m, "  #{resource_line}\n\\1")
             end
           end
@@ -403,9 +475,6 @@ module Belt
 
         File.write(routes_file, content)
         puts "  update  #{routes_file}"
-
-        # Also update route manifest
-        inject_route_manifest
       end
 
       def inject_route_manifest
@@ -414,15 +483,38 @@ module Belt
 
         id_param = "#{@singular_name}_id"
 
-        new_routes = [
-          "{ verb: 'GET', path: '/#{@resource_name}', controller: '#{@resource_name}', action: 'index' }",
-          "{ verb: 'POST', path: '/#{@resource_name}', controller: '#{@resource_name}', action: 'create' }",
-          "{ verb: 'GET', path: '/#{@resource_name}/{#{id_param}}', controller: '#{@resource_name}', action: 'show' }",
-          "{ verb: 'PUT', path: '/#{@resource_name}/{#{id_param}}', " \
-          "controller: '#{@resource_name}', action: 'update' }",
-          "{ verb: 'DELETE', path: '/#{@resource_name}/{#{id_param}}', " \
-          "controller: '#{@resource_name}', action: 'destroy' }"
-        ]
+        # Determine if this is nested under a parent
+        parent_ref = @references.first
+        if parent_ref
+          parent_resource = Belt::Inflector.pluralize(parent_ref[:referenced_model])
+          parent_singular = parent_ref[:referenced_model]
+          parent_id_param = "#{parent_singular}_id"
+          path_prefix = "/#{parent_resource}/{#{parent_id_param}}"
+
+          new_routes = [
+            "{ verb: 'GET', path: '#{path_prefix}/#{@resource_name}', " \
+            "controller: '#{@resource_name}', action: 'index' }",
+            "{ verb: 'POST', path: '#{path_prefix}/#{@resource_name}', " \
+            "controller: '#{@resource_name}', action: 'create' }",
+            "{ verb: 'GET', path: '#{path_prefix}/#{@resource_name}/{#{id_param}}', " \
+            "controller: '#{@resource_name}', action: 'show' }",
+            "{ verb: 'PUT', path: '#{path_prefix}/#{@resource_name}/{#{id_param}}', " \
+            "controller: '#{@resource_name}', action: 'update' }",
+            "{ verb: 'DELETE', path: '#{path_prefix}/#{@resource_name}/{#{id_param}}', " \
+            "controller: '#{@resource_name}', action: 'destroy' }"
+          ]
+        else
+          new_routes = [
+            "{ verb: 'GET', path: '/#{@resource_name}', controller: '#{@resource_name}', action: 'index' }",
+            "{ verb: 'POST', path: '/#{@resource_name}', controller: '#{@resource_name}', action: 'create' }",
+            "{ verb: 'GET', path: '/#{@resource_name}/{#{id_param}}', " \
+            "controller: '#{@resource_name}', action: 'show' }",
+            "{ verb: 'PUT', path: '/#{@resource_name}/{#{id_param}}', " \
+            "controller: '#{@resource_name}', action: 'update' }",
+            "{ verb: 'DELETE', path: '/#{@resource_name}/{#{id_param}}', " \
+            "controller: '#{@resource_name}', action: 'destroy' }"
+          ]
+        end
 
         existing_content = File.read(manifest_file)
         constant = @app_name.upcase
@@ -456,7 +548,8 @@ module Belt
         content = File.read(schema_file)
 
         # Generate OpenAPI-style model block for API response contracts
-        response_fields = @fields.map { |f| "    #{schema_type_for(f[:type])} :#{f[:name]}" }
+        response_fields = @references.map { |ref| "    string :#{ref[:referenced_model]}_id" }
+        response_fields += @regular_fields.map { |f| "    #{schema_type_for(f[:type])} :#{f[:name]}" }
         response_fields << '    string :created_at'
         response_fields << '    string :updated_at'
 
@@ -488,7 +581,35 @@ module Belt
         when 'boolean' then 'boolean'
         when 'date' then 'date'
         when 'datetime' then 'datetime'
+        when 'references' then 'string'
         else 'string'
+        end
+      end
+
+      def inject_parent_associations
+        @references.each do |ref|
+          parent_model_path = "lambda/models/#{ref[:referenced_model]}.rb"
+          next unless File.exist?(parent_model_path)
+
+          content = File.read(parent_model_path)
+          has_many_line = "  has_many :#{@resource_name}, foreign_key: '#{ref[:referenced_model]}_id', " \
+                          "index: '#{Belt::Inflector.classify(ref[:referenced_model])}Index'"
+
+          next if content.include?("has_many :#{@resource_name}")
+
+          # Insert after the last belongs_to/has_many line, or after class declaration
+          if content.match?(/^\s*(has_many|belongs_to)\s+:/)
+            content.sub!(/^(\s*(?:has_many|belongs_to)\s+:[^\n]+\n)(?!.*(?:has_many|belongs_to))/m) do |match|
+              "#{match}#{has_many_line}\n"
+            end
+          elsif content.match?(/^class\s+\w+\s*<\s*\w+/)
+            content.sub!(/^(class\s+\w+\s*<\s*\w+.*\n)/) do |match|
+              "#{match}#{has_many_line}\n\n"
+            end
+          end
+
+          File.write(parent_model_path, content)
+          puts "  update  #{parent_model_path} (added has_many :#{@resource_name})"
         end
       end
 

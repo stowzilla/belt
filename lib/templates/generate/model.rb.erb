@@ -1,5 +1,16 @@
 # frozen_string_literal: true
 
 class <%= @class_name %> < ApplicationRecord
-  attr_accessor <%= @fields.map { |f| ":#{f[:name]}" }.join(', ') %>
+<% @references.each do |ref| -%>
+  belongs_to :<%= ref[:referenced_model] %>
+<% end -%>
+<% if @references.any? && (@regular_fields.any? || @references.any?) -%>
+
+<% end -%>
+<% @references.each do |ref| -%>
+  attr_accessor :<%= ref[:referenced_model] %>_id
+<% end -%>
+<% @regular_fields.each do |field| -%>
+  attr_accessor :<%= field[:name] %>
+<% end -%>
 end
