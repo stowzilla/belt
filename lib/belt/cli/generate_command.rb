@@ -580,8 +580,7 @@ module Belt
           next unless File.exist?(parent_model_path)
 
           content = File.read(parent_model_path)
-          has_many_line = "  has_many :#{@resource_name}, foreign_key: '#{ref[:referenced_model]}_id', " \
-                          "index: '#{Belt::Inflector.classify(ref[:referenced_model])}Index'"
+          has_many_line = "  has_many :#{@resource_name}"
 
           next if content.include?("has_many :#{@resource_name}")
 
