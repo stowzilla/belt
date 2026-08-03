@@ -123,8 +123,26 @@ module Belt
       end
 
       def extract_resources_from_routes(routes_file)
+        require 'ripper'
         content = File.read(routes_file)
-        content.scan(/resources\s+:(\w+)/).flatten.uniq
+        tokens = Ripper.lex(content)
+        resources = []
+
+        tokens.each_cons(3) do |a, b, c|
+          # Match: identifier "resources" followed by optional whitespace, then symbol ":name"
+          next unless a[1] == :on_ident && a[2] == 'resources'
+
+          # b might be a space or directly the symbol prefix
+          sym_token = b[1] == :on_sp ? c : b
+          next unless sym_token[1] == :on_symbeg && sym_token[2] == ':'
+
+          # The symbol name is the next token
+          sym_idx = tokens.index(sym_token)
+          name_token = tokens[sym_idx + 1]
+          resources << name_token[2] if name_token && name_token[1] == :on_ident
+        end
+
+        resources.uniq
       end
 
       def copy_template(src_dir, dest_dir)
