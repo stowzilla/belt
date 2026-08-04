@@ -84,6 +84,12 @@ module Belt
         # Extract indexes() declaration
         indexes = extract_indexes(content)
 
+        # Extract belongs_to associations and generate convention indexes
+        indexes += extract_belongs_to_indexes(content)
+
+        # Deduplicate by index name
+        indexes.uniq! { |idx| idx[:name] }
+
         { name: model_name, indexes: indexes }
       end
 
@@ -104,6 +110,24 @@ module Belt
           next unless partition_key
 
           indexes << { name: name, partition_key: partition_key, sort_key: sort_key }
+        end
+
+        indexes
+      end
+
+      # Extract belongs_to declarations and generate convention-based GSI indexes.
+      # belongs_to :conversation → ConversationIndex with partition_key: 'conversationId'
+      def extract_belongs_to_indexes(content)
+        indexes = []
+
+        # Skip commented-out belongs_to lines
+        content.lines.reject { |line| line.strip.start_with?('#') }.join
+               .scan(/belongs_to\s+:(\w+)/) do |match|
+          association_name = match[0]
+          index_name = "#{Belt::Inflector.classify(association_name)}Index"
+          partition_key = "#{association_name}Id"
+
+          indexes << { name: index_name, partition_key: partition_key, sort_key: nil }
         end
 
         indexes
