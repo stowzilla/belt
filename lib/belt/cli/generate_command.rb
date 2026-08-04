@@ -14,7 +14,7 @@ module Belt
   module CLI
     class GenerateCommand
       TEMPLATE_DIR = File.expand_path('../../templates/generate', __dir__)
-      GENERATORS = %w[scaffold resource model controller environment frontend views].freeze
+      GENERATORS = %w[scaffold resource model controller environment frontend views index].freeze
 
       include AppDetection
 
@@ -125,6 +125,8 @@ module Belt
         return Belt::CLI::FrontendCommand.run(args) if generator == 'frontend'
 
         return Belt::CLI::ViewsCommand.run(args) if generator == 'views'
+
+        return Belt::CLI::IndexCommand.run(['add'] + args) if generator == 'index'
 
         name = args.shift
         if name.nil? || name.empty?
