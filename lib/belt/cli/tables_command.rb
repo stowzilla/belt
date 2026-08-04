@@ -109,6 +109,23 @@ module Belt
         indexes
       end
 
+      # Extract belongs_to declarations and generate convention-based GSI indexes.
+      # belongs_to :conversation → ConversationIndex with partition_key: 'conversationId'
+      def extract_belongs_to_indexes(content)
+        indexes = []
+
+        content.lines.reject { |line| line.strip.start_with?('#') }.join
+               .scan(/belongs_to\s+:(\w+)/) do |match|
+          association_name = match[0]
+          index_name = "#{Belt::Inflector.classify(association_name)}Index"
+          partition_key = "#{association_name}Id"
+
+          indexes << { name: index_name, partition_key: partition_key, sort_key: nil }
+        end
+
+        indexes
+      end
+
       def generate_dynamodb_tf(models)
         dest = File.join(MODULE_DIR, 'dynamodb.tf')
         existing_content = File.exist?(dest) ? File.read(dest) : nil
