@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.2.18
+
+### New generator: `belt generate auth`
+
+Scaffolds Cognito user pool infrastructure for authentication. Creates the user pool, client, and wires `cognito_user_pool_arns` into the conveyor-belt resource automatically.
+
+```bash
+belt g auth                    # Single pool: "main"
+belt g auth web mobile         # Multiple pools (e.g., web + mobile clients)
+belt g auth web android ios    # Three pools
+belt destroy auth              # Remove generated files
+```
+
+What it generates:
+- `infrastructure/modules/app/cognito.tf` — User pool + client with sensible defaults (password policy, email verification, deletion protection in prod)
+- `infrastructure/modules/app/cognito_outputs.tf` — Pool ID, ARN, and client ID outputs
+- Patches `main.tf` to pass `cognito_user_pool_arns` to the conveyor-belt resource
+
+Multiple pools are supported out of the box — each gets a suffixed name (e.g., `myapp-prod-web`, `myapp-prod-mobile`) and its own set of outputs.
+
 ## 0.2.12
 
 ### Rename: `routes.tf.rb` → `routes.rb`, `schema.tf.rb` → `contracts.rb`
