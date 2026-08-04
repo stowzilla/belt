@@ -105,11 +105,44 @@ module Belt
         generate_frontend_auth if frontend?
 
         puts "\n✓ Auth generated!"
+        print_next_steps
+      end
+
+      def print_next_steps
         puts "\nNext steps:"
-        puts '  1. Review infrastructure/modules/app/cognito.tf'
-        puts '  2. Customize password policy, MFA, or Lambda triggers as needed'
-        puts '  3. Run `belt apply <env>` to deploy'
-        puts '  4. Create your account: aws cognito-idp admin-create-user ...' unless @signup
+        puts '  1. Add auth: :cognito to your routes namespace:'
+        puts ''
+        puts '       namespace :api, auth: :cognito do'
+        puts '         # your resources...'
+        puts '       end'
+        puts ''
+        if frontend?
+          puts '  2. Wire auth into your frontend/src/App.jsx:'
+          puts ''
+          puts "       import Login from './pages/auth/Login'"
+          puts "       import ProtectedRoute from './components/ProtectedRoute'"
+          puts ''
+          puts '       // Add login route:'
+          puts '       <Route path="/login" element={<Login onLogin={() => window.location.href = \'/\'} />} />'
+          puts ''
+          puts '       // Wrap protected routes:'
+          puts '       <Route path="/*" element={<ProtectedRoute><YourApp /></ProtectedRoute>} />'
+          puts ''
+          puts '  3. Deploy: belt deploy'
+          print_create_user_step(4) unless @signup
+        else
+          puts '  2. Deploy: belt deploy'
+          print_create_user_step(3) unless @signup
+        end
+      end
+
+      def print_create_user_step(step_num)
+        puts "  #{step_num}. Create your account:"
+        puts '       aws cognito-idp admin-create-user \\'
+        puts '         --user-pool-id <pool-id-from-terraform-output> \\'
+        puts '         --username your@email.com \\'
+        puts '         --temporary-password TempPass123 \\'
+        puts '         --message-action SUPPRESS'
       end
 
       def remove
