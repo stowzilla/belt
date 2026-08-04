@@ -2,6 +2,7 @@
 
 require 'json'
 require 'open3'
+require_relative '../../belt/inflector'
 
 module Belt
   module CLI
@@ -51,6 +52,7 @@ module Belt
         check_tools
         check_aws_credentials
         check_aws_identity
+        check_table_indexes
 
         puts ''
         print_summary
@@ -152,6 +154,89 @@ module Belt
             @issues << 'AWS authentication failed'
           end
         end
+      end
+
+      def check_table_indexes
+        return unless Belt.root?
+
+        models_dir = File.join(Belt.root, 'lambda/models')
+        dynamodb_tf = File.join(Belt.root, 'infrastructure/modules/app/dynamodb.tf')
+
+        return unless Dir.exist?(models_dir)
+
+        puts ''
+        puts '── Tables & Indexes ──'
+
+        unless File.exist?(dynamodb_tf)
+          print_warn('dynamodb.tf', 'not found — run `belt setup tables` to generate')
+          @warnings << 'dynamodb.tf not generated — run `belt setup tables`'
+          return
+        end
+
+        tf_content = File.read(dynamodb_tf)
+        model_files = Dir.glob(File.join(models_dir, '*.rb'))
+                         .reject { |f| File.basename(f) == 'application_record.rb' }
+
+        model_files.each do |file|
+          check_model_indexes(file, tf_content)
+        end
+      end
+
+      def check_model_indexes(file, tf_content)
+        content = File.read(file)
+        class_match = content.match(/^class\s+(\w+)\s*<\s*ApplicationRecord/)
+        return unless class_match
+
+        model_name = Belt::Inflector.underscore(class_match[1])
+        table_name = Belt::Inflector.pluralize(model_name)
+
+        # Check if table exists in dynamodb.tf
+        unless tf_content.include?("resource \"aws_dynamodb_table\" \"#{table_name}\"")
+          print_fail(table_name, 'table not in dynamodb.tf')
+          @issues << "Table '#{table_name}' missing from dynamodb.tf — run `belt setup tables`"
+          return
+        end
+
+        # Extract expected indexes from belongs_to
+        expected_indexes = extract_expected_indexes(content)
+        return if expected_indexes.empty?
+
+        # Check each expected index exists in the TF file
+        # Scope check to this table's resource block
+        table_block = tf_content[/resource "aws_dynamodb_table" "#{table_name}" \{.*?^\}/m]
+        return unless table_block
+
+        missing = []
+        expected_indexes.each do |idx|
+          if table_block.include?("name            = \"#{idx[:name]}\"")
+            print_ok(table_name, idx[:name]) if @verbose
+          else
+            missing << idx
+          end
+        end
+
+        if missing.empty?
+          print_ok(table_name, "#{expected_indexes.size} index#{'es' if expected_indexes.size > 1} configured")
+        else
+          missing.each do |idx|
+            print_fail(table_name, "missing #{idx[:name]} (required by belongs_to :#{idx[:association]})")
+            @issues << "Table '#{table_name}' missing index '#{idx[:name]}' " \
+                       '— run `belt setup tables` then `belt deploy`'
+          end
+        end
+      end
+
+      def extract_expected_indexes(content)
+        indexes = []
+        content.lines.reject { |line| line.strip.start_with?('#') }.join
+               .scan(/belongs_to\s+:(\w+)/) do |match|
+          association_name = match[0]
+          indexes << {
+            name: "#{Belt::Inflector.classify(association_name)}Index",
+            association: association_name
+          }
+        end
+        indexes
       end
 
       def print_summary
