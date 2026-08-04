@@ -62,6 +62,7 @@ module Belt
       def run_preflight
         check_aws_identity_quiet
         check_table_indexes
+        check_cognito_auth
         return if @issues.empty?
 
         puts "\nPreflight checks failed:\n"
@@ -77,6 +78,7 @@ module Belt
         check_aws_credentials
         check_aws_identity
         check_table_indexes
+        check_cognito_auth
 
         puts ''
         print_summary
@@ -271,6 +273,29 @@ module Belt
           }
         end
         indexes
+      end
+
+      def check_cognito_auth
+        return unless Belt.root?
+
+        routes_file = Belt.routes_file
+        return unless routes_file
+
+        content = File.read(routes_file)
+
+        # Check if any routes use auth: :cognito
+        uses_cognito = content.include?('auth: :cognito')
+        return unless uses_cognito
+
+        # Check if cognito.tf exists
+        cognito_tf = File.join(Belt.root, 'infrastructure/modules/app/cognito.tf')
+        return if File.exist?(cognito_tf)
+
+        puts ''
+        puts '── Authentication ──'
+        print_warn('Cognito', 'routes use auth: :cognito but no cognito.tf found')
+        puts '         Run: belt generate auth'
+        @warnings << 'Routes use auth: :cognito but no Cognito pool is configured — run `belt generate auth`'
       end
 
       def print_summary
