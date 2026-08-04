@@ -3,6 +3,7 @@
 require 'fileutils'
 require 'erb'
 require_relative 'app_detection'
+require_relative 'auth_command'
 require_relative 'environment_command'
 require_relative 'frontend_command'
 require_relative 'tables_command'
@@ -14,7 +15,8 @@ module Belt
   module CLI
     class GenerateCommand
       TEMPLATE_DIR = File.expand_path('../../templates/generate', __dir__)
-      GENERATORS = %w[scaffold resource model controller environment frontend views index].freeze
+
+      GENERATORS = %w[scaffold resource model controller environment frontend views index auth].freeze
 
       include AppDetection
 
@@ -128,6 +130,8 @@ module Belt
 
         return Belt::CLI::IndexCommand.run(['add'] + args) if generator == 'index'
 
+        return Belt::CLI::AuthCommand.run(args) if generator == 'auth'
+
         name = args.shift
         if name.nil? || name.empty?
           print_generator_help(generator)
@@ -194,6 +198,7 @@ module Belt
             scaffold      Generate model, controller, routes, schema, and views (full REST resource)
             model         Generate an ActiveItem model
             controller    Generate a controller
+            auth          Generate Cognito user pool infrastructure
             environment   Create a new deployment environment
             frontend      Scaffold a frontend app (react, vue, svelte)
             views         Generate React pages for a resource

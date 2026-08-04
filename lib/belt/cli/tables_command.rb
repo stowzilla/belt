@@ -120,6 +120,7 @@ module Belt
       def extract_belongs_to_indexes(content)
         indexes = []
 
+        # Skip commented-out belongs_to lines
         content.lines.reject { |line| line.strip.start_with?('#') }.join
                .scan(/belongs_to\s+:(\w+)/) do |match|
           association_name = match[0]
