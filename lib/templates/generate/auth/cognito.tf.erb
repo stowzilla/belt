@@ -13,6 +13,12 @@ resource "aws_cognito_user_pool" "<%= pool[:name] %>" {
     require_uppercase = true
   }
 
+  # Admin-only signup — users cannot self-register.
+  # Create accounts via: aws cognito-idp admin-create-user
+  admin_create_user_config {
+    allow_admin_create_user_only = true
+  }
+
   auto_verified_attributes = ["email"]
 
   account_recovery_setting {
