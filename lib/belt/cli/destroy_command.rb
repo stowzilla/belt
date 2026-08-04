@@ -10,7 +10,7 @@ require_relative '../inflector'
 module Belt
   module CLI
     class DestroyCommand
-      GENERATORS = %w[scaffold resource model controller environment frontend views auth].freeze
+      GENERATORS = %w[scaffold resource model controller environment frontend views index auth].freeze
 
       include AppDetection
 
@@ -61,6 +61,8 @@ module Belt
             exit 1
           end
           new(generator, name, args.map { |a| parse_field(a) }).destroy
+        when 'index'
+          Belt::CLI::IndexCommand.run(['remove'] + args)
         else
           name = args.shift
           if name.nil? || name.empty?

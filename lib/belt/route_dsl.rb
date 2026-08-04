@@ -65,8 +65,9 @@ module Belt
       resource_name = name.to_s
       singular = @gateway.send(:singularize, resource_name)
       param_name = options[:param] || "#{singular}_id"
+      # Auto-add this resource's table before merging inherited tables
+      options = options.merge(tables: [resource_name.to_sym]) unless options.key?(:tables)
       options = merge_inherited_options(options)
-      options = @gateway.send(:auto_infer_tables, resource_name, options)
       resource_options = options.merge(route_type: :resources)
       actions = @gateway.send(:determine_actions, options)
 

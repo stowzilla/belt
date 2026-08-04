@@ -42,6 +42,14 @@ module Belt
       word.to_s.split('_').map(&:capitalize).join
     end
 
+    # "conversation_id" → "conversationId"
+    def camelize_lower(word)
+      parts = word.to_s.split('_')
+      return word if parts.empty?
+
+      parts.first + parts[1..].map(&:capitalize).join
+    end
+
     # "BlogPost" → "blog_post"
     def underscore(word)
       word.to_s

@@ -15,7 +15,8 @@ module Belt
   module CLI
     class GenerateCommand
       TEMPLATE_DIR = File.expand_path('../../templates/generate', __dir__)
-      GENERATORS = %w[scaffold resource model controller environment frontend views auth].freeze
+
+      GENERATORS = %w[scaffold resource model controller environment frontend views index auth].freeze
 
       include AppDetection
 
@@ -126,6 +127,8 @@ module Belt
         return Belt::CLI::FrontendCommand.run(args) if generator == 'frontend'
 
         return Belt::CLI::ViewsCommand.run(args) if generator == 'views'
+
+        return Belt::CLI::IndexCommand.run(['add'] + args) if generator == 'index'
 
         return Belt::CLI::AuthCommand.run(args) if generator == 'auth'
 
@@ -290,7 +293,9 @@ module Belt
         when 'model'
           check_model_collision! unless @force
           generate_model_standalone
-        when 'controller' then generate_controller
+        when 'controller'
+          generate_controller
+          inject_routes
         end
       end
 
@@ -351,18 +356,6 @@ module Belt
         inject_parent_associations
         sync_tables
         generate_views_if_frontend
-        puts "\n✓ Scaffold '#{@singular_name}' generated!"
-        puts "\nFiles created/updated:"
-        puts "  lambda/models/#{@singular_name}.rb"
-        puts "  lambda/controllers/#{@app_name}/#{@resource_name}_controller.rb"
-        puts "  #{find_routes_file_path || 'config/routes.rb'} (updated)"
-        puts "  #{find_contracts_file_path || 'config/contracts.rb'} (updated)"
-        puts "  lambda/lib/routes/#{@app_name}_routes.rb (updated)"
-        puts "  frontend/src/pages/#{@resource_name}/ (views)" if Dir.exist?('frontend/src')
-        @references.each do |ref|
-          parent_model_path = "lambda/models/#{ref[:referenced_model]}.rb"
-          puts "  #{parent_model_path} (updated — added has_many)" if File.exist?(parent_model_path)
-        end
       end
 
       def generate_model_standalone
@@ -386,25 +379,26 @@ module Belt
 
       def inject_routes
         routes_file = find_routes_file_path
-        return unless routes_file && File.exist?(routes_file)
 
-        content = File.read(routes_file)
-        tables_arg = @fields.any? ? ", tables: [:#{@resource_name}]" : ''
+        if routes_file && File.exist?(routes_file)
+          content = File.read(routes_file)
+          tables_arg = @fields.any? ? ", tables: [:#{@resource_name}]" : ''
 
-        # If this resource has a reference to a parent that already has routes, nest it
-        parent_ref = @references.find do |ref|
-          parent_resource = Belt::Inflector.pluralize(ref[:referenced_model])
-          content.match?(/resources :#{Regexp.escape(parent_resource)}\b/)
-        end
+          # If this resource has a reference to a parent that already has routes, nest it
+          parent_ref = @references.find do |ref|
+            parent_resource = Belt::Inflector.pluralize(ref[:referenced_model])
+            content.match?(/resources :#{Regexp.escape(parent_resource)}\b/)
+          end
 
-        if parent_ref
-          inject_nested_route(content, routes_file, parent_ref, tables_arg)
+          if parent_ref
+            inject_nested_route(content, routes_file, parent_ref, tables_arg)
+          else
+            inject_top_level_route(content, routes_file, tables_arg)
+          end
         else
-          inject_top_level_route(content, routes_file, tables_arg)
+          # Legacy projects without config/routes.rb — update the manifest directly
+          inject_route_manifest
         end
-
-        # Also update route manifest
-        inject_route_manifest
       end
 
       def inject_nested_route(content, routes_file, parent_ref, tables_arg)
@@ -596,8 +590,7 @@ module Belt
           next unless File.exist?(parent_model_path)
 
           content = File.read(parent_model_path)
-          has_many_line = "  has_many :#{@resource_name}, foreign_key: '#{ref[:referenced_model]}_id', " \
-                          "index: '#{Belt::Inflector.classify(ref[:referenced_model])}Index'"
+          has_many_line = "  has_many :#{@resource_name}"
 
           next if content.include?("has_many :#{@resource_name}")
 
@@ -632,7 +625,7 @@ module Belt
         return unless Dir.exist?('frontend/src')
         return if @skip_views
 
-        Belt::CLI::ViewsCommand.new(@name, @fields, force: @force).generate
+        Belt::CLI::ViewsCommand.new(@name, @fields, force: @force, quiet: true).generate
       end
     end
   end

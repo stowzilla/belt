@@ -250,18 +250,8 @@ module Belt
       def output_concise(routes)
         return puts('No routes defined.') if routes.empty?
 
-        multi_gateway = routes.map { |r| r[:gateway] }.uniq.length > 1
         verb_w = [routes.map { |r| r[:verb].length }.max, 6].max
         path_w = [routes.map { |r| r[:path].length }.max, 4].max
-
-        if multi_gateway
-          output_concise_multi_gateway(routes, verb_w, path_w)
-        else
-          output_concise_single_gateway(routes, verb_w, path_w)
-        end
-      end
-
-      def output_concise_multi_gateway(routes, verb_w, path_w)
         gw_w = [routes.map { |r| r[:gateway].to_s.length }.max, 7].max
         lam_w = [routes.map { |r| r[:lambda].length }.max, 6].max
 
@@ -275,15 +265,6 @@ module Belt
                  "#{r[:gateway].to_s.ljust(gw_w)}  #{r[:lambda].ljust(lam_w)}  " \
                  "#{r[:controller]}##{r[:action]}"
           puts line
-        end
-      end
-
-      def output_concise_single_gateway(routes, verb_w, path_w)
-        puts "#{'VERB'.ljust(verb_w)}  #{'PATH'.ljust(path_w)}  CONTROLLER#ACTION"
-        puts '-' * (verb_w + path_w + 30)
-
-        routes.each do |r|
-          puts "#{r[:verb].ljust(verb_w)}  #{r[:path].ljust(path_w)}  #{r[:controller]}##{r[:action]}"
         end
       end
 

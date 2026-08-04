@@ -145,6 +145,7 @@ module Belt
 
       def run
         validate!
+        run_preflight_checks!
         env_dir = File.join(@infra_dir, @env)
 
         load_and_apply_env_config!
@@ -261,6 +262,14 @@ module Belt
         abort "Error: Environment '#{@env}' not found at #{env_dir}/.\n\n" \
               "Available environments:\n#{TerraformCommand.list_environments.map { |e| "  #{e}" }.join("\n")}\n\n" \
               "Create it with: belt generate environment #{@env}"
+      end
+
+      def run_preflight_checks!
+        require_relative 'doctor_command'
+        doctor = DoctorCommand.new(preflight: true)
+        return if doctor.run
+
+        abort 'Deploy blocked. Fix the issues above, then try again.'
       end
 
       def validate_aws!

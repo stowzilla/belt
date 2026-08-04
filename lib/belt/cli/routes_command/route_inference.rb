@@ -14,9 +14,10 @@ module Belt
           non_param = segments.reject { |s| s.start_with?(':', '{') }
           return gateway.name if non_param.empty?
 
-          # Nested resources (/posts/{id}/comments) and scoped resources (/admin/users):
-          # join non-param segments → posts/comments, admin/users
-          return non_param.map { |s| s.gsub('-', '_') }.join('/') if route.resource? && non_param.length > 1
+          # Nested resources (/posts/{id}/comments): use the last non-param segment
+          # as the controller name (matches Rails — nesting affects URL, not controller lookup).
+          # Scoped resources (/admin/users) still use the full path when controller is explicitly set.
+          return non_param.last.gsub('-', '_') if route.resource? && non_param.length > 1
 
           # For non-resource routes with a single segment (e.g., post '/signup' in :onboarding),
           # the segment is the action name, not the controller. Use the gateway name as controller.
