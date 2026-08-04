@@ -101,6 +101,7 @@ module Belt
         write_cognito_tf
         write_cognito_outputs_tf
         patch_main_tf
+        patch_env_outputs
         generate_frontend_auth if frontend?
 
         puts "\n✓ Auth generated!"
@@ -242,6 +243,42 @@ module Belt
         arn_value = build_arn_value(arns)
 
         insert_cognito_into_resource(content, main_tf, arn_value)
+      end
+
+      def patch_env_outputs
+        env_dirs = Dir.glob('infrastructure/*/outputs.tf')
+                      .reject { |f| f.include?('modules') }
+
+        env_dirs.each do |outputs_file|
+          content = File.read(outputs_file)
+
+          next if content.include?('cognito_user_pool_id')
+
+          cognito_outputs = @pools.map do |pool|
+            suffix = pool[:suffix]
+            <<~HCL
+
+              output "cognito_user_pool_id#{suffix}" {
+                description = "Cognito User Pool ID#{pool[:label]}"
+                value       = module.app.cognito_user_pool_id#{suffix}
+              }
+
+              output "cognito_client_id#{suffix}" {
+                description = "Cognito User Pool Client ID#{pool[:label]}"
+                value       = module.app.cognito_client_id#{suffix}
+              }
+
+              output "cognito_region" {
+                description = "AWS region for Cognito"
+                value       = var.aws_region
+              }
+            HCL
+          end.join
+
+          File.write(outputs_file, content + cognito_outputs)
+          env_name = File.basename(File.dirname(outputs_file))
+          puts "  update  #{outputs_file} (added cognito outputs for #{env_name})"
+        end
       end
 
       def build_arn_value(arns)
