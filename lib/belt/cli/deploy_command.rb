@@ -14,6 +14,7 @@ require_relative 'path_gem_materializer'
 module Belt
   module CLI
     class DeployCommand
+      DEFAULT_DOCKER_BUILD_IMAGE = 'public.ecr.aws/sam/build-ruby3.4:latest-x86_64'
       def self.run(args)
         # Handle `belt deploy frontend <env>` as before
         if args.first == 'frontend'
@@ -514,12 +515,14 @@ module Belt
         uid = Process.uid
         gid = Process.gid
 
+        image = detect_docker_build_image
+
         docker_cmd = [
           'docker', 'run', '--rm',
           '--platform', 'linux/amd64',
           '-v', "#{build_dir}:/var/task",
           '-w', '/var/task',
-          'public.ecr.aws/sam/build-ruby3.4:latest-x86_64',
+          image,
           '/bin/bash', '-c',
           "bundle config set --local path 'vendor/bundle' && " \
           "bundle config set --local without 'development test' && " \
@@ -538,6 +541,37 @@ module Belt
         # Strip fat from vendor bundle
         strip_vendor_fat(build_dir)
         puts '    ✅ Gems installed'
+      end
+
+      # Reads docker_build_image from the conveyor_belt Terraform resource state.
+      # Falls back to DEFAULT_DOCKER_BUILD_IMAGE if state is unavailable or attribute not set.
+      def detect_docker_build_image
+        env_dir = File.join(@infra_dir, @env)
+        return DEFAULT_DOCKER_BUILD_IMAGE unless Dir.exist?(File.join(env_dir, '.terraform'))
+
+        Dir.chdir(env_dir) do
+          output, status = Open3.capture2('terraform', 'state', 'show', 'conveyor_belt.main')
+          if status.success?
+            # Prefer explicit docker_build_image if set
+            image_match = output.match(/docker_build_image\s*=\s*"([^"]+)"/)
+            if image_match
+              image = image_match[1]
+              puts "    📦 Using custom build image: #{image}"
+              return image
+            end
+
+            # Otherwise derive from ruby_version
+            version_match = output.match(/ruby_version\s*=\s*"([^"]+)"/)
+            if version_match
+              version = version_match[1]
+              image = "public.ecr.aws/sam/build-ruby#{version}:latest-x86_64"
+              puts "    📦 Using build image for Ruby #{version}: #{image}"
+              return image
+            end
+          end
+        end
+
+        DEFAULT_DOCKER_BUILD_IMAGE
       end
 
       def strip_vendor_fat(build_dir)
