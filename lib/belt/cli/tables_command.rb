@@ -84,6 +84,12 @@ module Belt
         # Extract indexes() declaration
         indexes = extract_indexes(content)
 
+        # Extract belongs_to associations and generate convention indexes
+        indexes += extract_belongs_to_indexes(content)
+
+        # Deduplicate by index name
+        indexes.uniq! { |idx| idx[:name] }
+
         { name: model_name, indexes: indexes }
       end
 
