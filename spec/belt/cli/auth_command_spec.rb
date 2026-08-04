@@ -131,7 +131,7 @@ RSpec.describe Belt::CLI::AuthCommand do
     it 'does not duplicate the attribute' do
       main_tf = File.join(module_dir, 'main.tf')
       content = File.read(main_tf)
-      content.sub!('}', "  cognito_user_pool_arns = [aws_cognito_user_pool.existing.arn]\n}")
+      content.sub!(/\}\s*\z/, "  cognito_user_pool_arns = [aws_cognito_user_pool.existing.arn]\n}")
       File.write(main_tf, content)
 
       expect { described_class.run(['--force']) }.to output(/skip.*main\.tf/).to_stdout
