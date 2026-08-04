@@ -2,6 +2,7 @@
 
 require 'fileutils'
 require_relative 'app_detection'
+require_relative 'auth_command'
 require_relative 'generator_registry'
 require_relative 'tables_command'
 require_relative '../inflector'
@@ -9,7 +10,7 @@ require_relative '../inflector'
 module Belt
   module CLI
     class DestroyCommand
-      GENERATORS = %w[scaffold resource model controller environment frontend views].freeze
+      GENERATORS = %w[scaffold resource model controller environment frontend views auth].freeze
 
       include AppDetection
 
@@ -51,6 +52,8 @@ module Belt
           new(generator, name, [], **flags).destroy
         when 'frontend'
           new(generator, nil, []).destroy
+        when 'auth'
+          Belt::CLI::AuthCommand.destroy(args)
         when 'views'
           name = args.shift
           if name.nil? || name.empty?
@@ -98,6 +101,7 @@ module Belt
             resource      Alias for scaffold
             model         Remove an ActiveItem model
             controller    Remove a controller
+            auth          Remove Cognito user pool infrastructure
             environment   Remove a deployment environment and tear down infrastructure
             frontend      Remove the frontend/ directory
             views         Remove React pages for a resource
