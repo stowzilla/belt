@@ -156,7 +156,7 @@ module Belt
     def initialize(name, options = {})
       @name = name.to_s
       @routes = []
-      @default_auth = options[:auth] || :cognito
+      @default_auth = options[:auth] || :none
       @default_lambda = options[:lambda] || name
       @default_cors = options.fetch(:cors, true)
       @default_tables = Array(options[:tables] || [])

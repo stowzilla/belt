@@ -13,6 +13,14 @@ resource "aws_cognito_user_pool" "<%= pool[:name] %>" {
     require_uppercase = true
   }
 
+  # Admin-only signup — users cannot self-register.
+  # Remove this block to allow public sign-up.
+<% unless @signup -%>
+  admin_create_user_config {
+    allow_admin_create_user_only = true
+  }
+
+<% end -%>
   auto_verified_attributes = ["email"]
 
   account_recovery_setting {
@@ -43,6 +51,9 @@ resource "aws_cognito_user_pool_client" "<%= pool[:name] %>" {
 
   explicit_auth_flows = [
     "ALLOW_USER_SRP_AUTH",
+<% if @signup -%>
+    "ALLOW_USER_PASSWORD_AUTH",
+<% end -%>
     "ALLOW_REFRESH_TOKEN_AUTH"
   ]
 

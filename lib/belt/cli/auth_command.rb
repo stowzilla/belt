@@ -19,9 +19,10 @@ module Belt
         end
 
         force = args.delete('--force') || args.delete('-f')
+        signup = args.delete('--signup')
         pools = parse_pools(args)
 
-        new(pools: pools, force: force).generate
+        new(pools: pools, force: force, signup: signup).generate
       end
 
       def self.destroy(_args)
@@ -35,6 +36,7 @@ module Belt
           Usage: belt generate auth [pool_names...] [options]
 
           Options:
+            --signup        Allow public user registration (generates frontend views)
             --force, -f     Overwrite existing cognito.tf (skip collision check)
 
           Arguments:
@@ -42,26 +44,38 @@ module Belt
                             If omitted, generates a single pool named "main".
 
           Examples:
-            belt g auth                        # Single pool: "main"
-            belt g auth web                    # Single pool: "web"
-            belt g auth web mobile             # Two pools: "web" and "mobile"
-            belt g auth web android ios        # Three pools: "web", "android", "ios"
+            belt g auth                        # Admin-only, single pool
+            belt g auth --signup               # Public signup with frontend views
+            belt g auth web                    # Named pool: "web"
+            belt g auth web mobile             # Two pools
             belt g auth --force                # Overwrite existing
 
           What this generates:
             infrastructure/modules/app/cognito.tf          User pool + client resources
             infrastructure/modules/app/cognito_outputs.tf  Pool ID, ARN, and client ID outputs
 
+          With --signup (when frontend/ exists):
+            frontend/src/lib/auth.js                       Auth module (signIn, signUp, etc.)
+            frontend/src/lib/apiClient.js                  API client with Authorization header
+            frontend/src/pages/auth/Login.jsx              Login page
+            frontend/src/pages/auth/SignUp.jsx             Registration page
+            frontend/src/pages/auth/ConfirmEmail.jsx       Email verification page
+            frontend/src/components/ProtectedRoute.jsx     Route guard component
+
+          Without --signup (admin-only, default):
+            frontend/src/lib/auth.js                       Auth module (signIn only)
+            frontend/src/lib/apiClient.js                  API client with Authorization header
+            frontend/src/pages/auth/Login.jsx              Login page
+            frontend/src/components/ProtectedRoute.jsx     Route guard component
+
           It also patches:
             infrastructure/modules/app/main.tf             Adds cognito_user_pool_arns to conveyor_belt
 
           After running:
             1. Review the generated Cognito config in cognito.tf
-            2. Customize password policy, MFA, triggers as needed
-            3. Run `belt apply <env>` to deploy
-
-          To remove:
-            belt destroy auth
+            2. Add auth: :cognito to your routes namespace
+            3. Run `belt deploy` to create the user pool
+            4. Create your account (admin-only): aws cognito-idp admin-create-user ...
         HELP
       end
 
@@ -72,9 +86,10 @@ module Belt
         names.map(&:downcase).map { |n| n.gsub(/[^a-z0-9_]/, '_') }
       end
 
-      def initialize(pools:, force: false)
+      def initialize(pools:, force: false, signup: false)
         @pool_names = pools
         @force = force
+        @signup = signup
         @app_name = detect_app_name
         @pools = build_pool_metadata
       end
@@ -86,12 +101,14 @@ module Belt
         write_cognito_tf
         write_cognito_outputs_tf
         patch_main_tf
+        generate_frontend_auth if frontend?
 
         puts "\n✓ Auth generated!"
         puts "\nNext steps:"
         puts '  1. Review infrastructure/modules/app/cognito.tf'
         puts '  2. Customize password policy, MFA, or Lambda triggers as needed'
         puts '  3. Run `belt apply <env>` to deploy'
+        puts '  4. Create your account: aws cognito-idp admin-create-user ...' unless @signup
       end
 
       def remove
@@ -131,6 +148,54 @@ module Belt
           @pool_names.map do |name|
             { name: name, suffix: "-#{name}", label: " (#{name})" }
           end
+        end
+      end
+
+      def frontend?
+        Dir.exist?('frontend/src')
+      end
+
+      def generate_frontend_auth
+        frontend_template_dir = File.join(TEMPLATE_DIR, 'frontend')
+
+        # Generate auth lib files
+        lib_dir = 'frontend/src/lib'
+        FileUtils.mkdir_p(lib_dir)
+        copy_frontend_file(frontend_template_dir, 'auth.js', File.join(lib_dir, 'auth.js'))
+        copy_frontend_file(frontend_template_dir, 'apiClient.js', File.join(lib_dir, 'apiClient.js'))
+
+        pages_dir = 'frontend/src/pages/auth'
+        FileUtils.mkdir_p(pages_dir)
+        copy_frontend_file(frontend_template_dir, 'Login.jsx', File.join(pages_dir, 'Login.jsx'))
+        if @signup
+          # Generate auth pages
+          copy_frontend_file(frontend_template_dir, 'SignUp.jsx', File.join(pages_dir, 'SignUp.jsx'))
+          copy_frontend_file(frontend_template_dir, 'ConfirmEmail.jsx', File.join(pages_dir, 'ConfirmEmail.jsx'))
+        end
+
+        # Generate ProtectedRoute component
+        components_dir = 'frontend/src/components'
+        FileUtils.mkdir_p(components_dir)
+        copy_frontend_file(frontend_template_dir, 'ProtectedRoute.jsx',
+                           File.join(components_dir, 'ProtectedRoute.jsx'))
+
+        install_cognito_sdk
+      end
+
+      def copy_frontend_file(template_dir, filename, dest)
+        src = File.join(template_dir, filename)
+        FileUtils.cp(src, dest)
+        puts "  create  #{dest}"
+      end
+
+      def install_cognito_sdk
+        puts "\n  Installing @aws-sdk/client-cognito-identity-provider..."
+        success = system('npm', 'install', '@aws-sdk/client-cognito-identity-provider',
+                         '--prefix', 'frontend', '--no-fund', '--no-audit', '--silent')
+        if success
+          puts '  ✓      npm dependency installed'
+        else
+          puts '  ⚠      npm install failed — run: cd frontend && npm install @aws-sdk/client-cognito-identity-provider'
         end
       end
 
