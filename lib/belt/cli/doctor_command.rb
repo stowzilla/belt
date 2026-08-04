@@ -18,13 +18,14 @@ module Belt
 
       def self.run(args)
         verbose = args.include?('--verbose') || args.include?('-v')
+        preflight = args.include?('--preflight')
 
         if args.include?('--help') || args.include?('-h')
           puts usage
           exit 0
         end
 
-        new(verbose: verbose).run
+        new(verbose: verbose, preflight: preflight).run
       end
 
       def self.usage
@@ -34,18 +35,41 @@ module Belt
           Check system dependencies and AWS configuration for Belt.
 
           Options:
-            -v, --verbose    Show detailed output for each check
-            -h, --help       Show this help
+            -v, --verbose      Show detailed output for each check
+            --preflight        Run only deploy-critical checks (indexes, credentials)
+            -h, --help         Show this help
         USAGE
       end
 
-      def initialize(verbose: false)
+      def initialize(verbose: false, preflight: false)
         @verbose = verbose
+        @preflight = preflight
         @issues = []
         @warnings = []
       end
 
-      def run
+      def run # rubocop:disable Naming/PredicateMethod
+        if @preflight
+          run_preflight
+        else
+          run_full
+        end
+
+        @issues.empty?
+      end
+
+      # Returns true if all preflight checks pass, false otherwise.
+      def run_preflight
+        check_aws_identity_quiet
+        check_table_indexes
+        return if @issues.empty?
+
+        puts "\nPreflight checks failed:\n"
+        @issues.each { |i| puts "  ✗ #{i}" }
+        puts ''
+      end
+
+      def run_full
         puts "Belt Doctor\n"
         puts "Checking your system for Belt prerequisites...\n\n"
 
@@ -134,25 +158,35 @@ module Belt
           print_ok('Authentication', "account #{account}")
           puts "         ARN: #{arn}" if @verbose
         else
-          error = output.strip
-          if error.include?('ExpiredToken') || error.include?('expired')
-            print_fail('Authentication', 'credentials expired')
-            puts '         Run: aws sso login'
-            @issues << 'AWS credentials are expired — run `aws sso login`'
-          elsif error.include?('InvalidClientTokenId') || error.include?('SignatureDoesNotMatch')
-            print_fail('Authentication', 'invalid credentials')
-            puts '         Your access key or secret is incorrect.'
-            puts '         Run: aws configure'
-            @issues << 'AWS credentials are invalid'
-          elsif error.include?('Could not connect') || error.include?('Unable to locate credentials')
-            print_fail('Authentication', 'unable to authenticate')
-            puts '         Run: aws configure sso    # or set AWS_PROFILE'
-            @issues << 'Unable to authenticate with AWS'
-          else
-            print_fail('Authentication', 'failed')
-            puts "         #{error.lines.first&.strip}" if error.length.positive?
-            @issues << 'AWS authentication failed'
-          end
+          handle_aws_identity_error(output.strip)
+        end
+      end
+
+      def check_aws_identity_quiet
+        _, status = Open3.capture2e('aws', 'sts', 'get-caller-identity')
+        return if status.success?
+
+        @issues << 'AWS credentials invalid or expired — run `aws sso login`'
+      end
+
+      def handle_aws_identity_error(error)
+        if error.include?('ExpiredToken') || error.include?('expired')
+          print_fail('Authentication', 'credentials expired')
+          puts '         Run: aws sso login'
+          @issues << 'AWS credentials are expired — run `aws sso login`'
+        elsif error.include?('InvalidClientTokenId') || error.include?('SignatureDoesNotMatch')
+          print_fail('Authentication', 'invalid credentials')
+          puts '         Your access key or secret is incorrect.'
+          puts '         Run: aws configure'
+          @issues << 'AWS credentials are invalid'
+        elsif error.include?('Could not connect') || error.include?('Unable to locate credentials')
+          print_fail('Authentication', 'unable to authenticate')
+          puts '         Run: aws configure sso    # or set AWS_PROFILE'
+          @issues << 'Unable to authenticate with AWS'
+        else
+          print_fail('Authentication', 'failed')
+          puts "         #{error.lines.first&.strip}" if error.length.positive?
+          @issues << 'AWS authentication failed'
         end
       end
 
