@@ -201,6 +201,7 @@ module Belt
         pages_dir = 'frontend/src/pages/auth'
         FileUtils.mkdir_p(pages_dir)
         copy_frontend_file(frontend_template_dir, 'Login.jsx', File.join(pages_dir, 'Login.jsx'))
+        copy_frontend_file(frontend_template_dir, 'auth.css', File.join(pages_dir, 'auth.css'))
         if @signup
           # Generate auth pages
           copy_frontend_file(frontend_template_dir, 'SignUp.jsx', File.join(pages_dir, 'SignUp.jsx'))
