@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { confirmSignUp } from '../lib/auth'
+import { confirmSignUp } from '../../lib/auth'
 
 export default function ConfirmEmail() {
   const params = new URLSearchParams(window.location.search)

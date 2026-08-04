@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { signIn, completeNewPassword } from '../lib/auth'
+import { signIn, completeNewPassword } from '../../lib/auth'
+import './auth.css'
 
 export default function Login({ onLogin }) {
   const [email, setEmail] = useState('')
@@ -72,9 +73,6 @@ export default function Login({ onLogin }) {
         <button type="submit" disabled={loading}>
           {loading ? 'Signing in...' : 'Sign In'}
         </button>
-        <p className="auth-link">
-          Don't have an account? <a href="/signup">Sign up</a>
-        </p>
       </form>
     </div>
   )

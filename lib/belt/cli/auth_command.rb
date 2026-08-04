@@ -101,14 +101,48 @@ module Belt
         write_cognito_tf
         write_cognito_outputs_tf
         patch_main_tf
+        patch_env_outputs
         generate_frontend_auth if frontend?
 
         puts "\n✓ Auth generated!"
+        print_next_steps
+      end
+
+      def print_next_steps
         puts "\nNext steps:"
-        puts '  1. Review infrastructure/modules/app/cognito.tf'
-        puts '  2. Customize password policy, MFA, or Lambda triggers as needed'
-        puts '  3. Run `belt apply <env>` to deploy'
-        puts '  4. Create your account: aws cognito-idp admin-create-user ...' unless @signup
+        puts '  1. Add auth: :cognito to your routes namespace:'
+        puts ''
+        puts '       namespace :api, auth: :cognito do'
+        puts '         # your resources...'
+        puts '       end'
+        puts ''
+        if frontend?
+          puts '  2. Wire auth into your frontend/src/App.jsx:'
+          puts ''
+          puts "       import Login from './pages/auth/Login'"
+          puts "       import ProtectedRoute from './components/ProtectedRoute'"
+          puts ''
+          puts '       // Add login route:'
+          puts '       <Route path="/login" element={<Login onLogin={() => window.location.href = \'/\'} />} />'
+          puts ''
+          puts '       // Wrap protected routes:'
+          puts '       <Route path="/*" element={<ProtectedRoute><YourApp /></ProtectedRoute>} />'
+          puts ''
+          puts '  3. Deploy: belt deploy'
+          print_create_user_step(4) unless @signup
+        else
+          puts '  2. Deploy: belt deploy'
+          print_create_user_step(3) unless @signup
+        end
+      end
+
+      def print_create_user_step(step_num)
+        puts "  #{step_num}. Create your account:"
+        puts '       aws cognito-idp admin-create-user \\'
+        puts '         --user-pool-id <pool-id-from-terraform-output> \\'
+        puts '         --username your@email.com \\'
+        puts '         --temporary-password TempPass123 \\'
+        puts '         --message-action SUPPRESS'
       end
 
       def remove
@@ -167,6 +201,7 @@ module Belt
         pages_dir = 'frontend/src/pages/auth'
         FileUtils.mkdir_p(pages_dir)
         copy_frontend_file(frontend_template_dir, 'Login.jsx', File.join(pages_dir, 'Login.jsx'))
+        copy_frontend_file(frontend_template_dir, 'auth.css', File.join(pages_dir, 'auth.css'))
         if @signup
           # Generate auth pages
           copy_frontend_file(frontend_template_dir, 'SignUp.jsx', File.join(pages_dir, 'SignUp.jsx'))
@@ -242,6 +277,42 @@ module Belt
         arn_value = build_arn_value(arns)
 
         insert_cognito_into_resource(content, main_tf, arn_value)
+      end
+
+      def patch_env_outputs
+        env_dirs = Dir.glob('infrastructure/*/outputs.tf')
+                      .reject { |f| f.include?('modules') }
+
+        env_dirs.each do |outputs_file|
+          content = File.read(outputs_file)
+
+          next if content.include?('cognito_user_pool_id')
+
+          cognito_outputs = @pools.map do |pool|
+            suffix = pool[:suffix]
+            <<~HCL
+
+              output "cognito_user_pool_id#{suffix}" {
+                description = "Cognito User Pool ID#{pool[:label]}"
+                value       = module.app.cognito_user_pool_id#{suffix}
+              }
+
+              output "cognito_client_id#{suffix}" {
+                description = "Cognito User Pool Client ID#{pool[:label]}"
+                value       = module.app.cognito_client_id#{suffix}
+              }
+
+              output "cognito_region" {
+                description = "AWS region for Cognito"
+                value       = var.aws_region
+              }
+            HCL
+          end.join
+
+          File.write(outputs_file, content + cognito_outputs)
+          env_name = File.basename(File.dirname(outputs_file))
+          puts "  update  #{outputs_file} (added cognito outputs for #{env_name})"
+        end
       end
 
       def build_arn_value(arns)
