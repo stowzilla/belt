@@ -379,18 +379,18 @@ module Belt
       #   gateway :api, auth: :cognito do
       #     resources :posts                # → lambda: "api"
       #
-      #     lambda :onboarding do
+      #     function :onboarding do
       #       resources :stuff              # → lambda: "onboarding"
       #     end
       #
-      #     lambda :custom do
+      #     function :custom do
       #       get '/blah'                   # → lambda: "custom"
       #     end
       #   end
-      def lambda(name, options = {}, &)
+      def function(name, options = {}, &)
         previous_lambda = @lambda_target
         @lambda_target = name.to_s
-        # lambda blocks can also carry auth/tables
+        # function blocks can also carry auth/tables
         previous_auth = @scope_auth
         previous_tables = @scope_tables
         @scope_auth = options[:auth] if options[:auth]
@@ -561,9 +561,8 @@ module Belt
 
       def apply_scope_to_route(options)
         route_options = options.dup
-        # Lambda target resolution: explicit lambda block > scope module > gateway default
+        # Lambda target: only explicit function block affects it
         route_options[:lambda] ||= @lambda_target if @lambda_target
-        route_options[:lambda] ||= @scope_module if @scope_module
         route_options[:auth] ||= @scope_auth if @scope_auth
         route_options[:controller] ||= @scope_controller if @scope_controller
         if @scope_tables.any? || route_options[:tables]
@@ -576,9 +575,8 @@ module Belt
       def apply_scope_options(options)
         result = options.dup
         result[:auth] ||= @scope_auth if @scope_auth
-        # Lambda target resolution: explicit lambda block > scope module > gateway default
+        # Lambda target: only explicit function block affects it
         result[:lambda] ||= @lambda_target if @lambda_target
-        result[:lambda] ||= @scope_module if @scope_module
         result[:controller] ||= @scope_controller if @scope_controller
         result[:tables] = (@scope_tables + Array(result[:tables] || [])).uniq if @scope_tables.any? || result[:tables]
         result

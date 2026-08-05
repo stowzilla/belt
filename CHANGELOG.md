@@ -2,30 +2,30 @@
 
 ## 0.2.21
 
-### Route DSL: `gateway`, `lambda`, `namespace`, and `scope` keywords
+### Route DSL: `gateway`, `function`, `namespace`, and `scope` keywords
 
 The route DSL now uses terminology that matches AWS infrastructure:
 
 - **`gateway`** — Creates an API Gateway with a default Lambda function of the same name (replaces top-level `namespace`)
-- **`lambda`** — Targets enclosed routes to a different Lambda function
-- **`namespace`** — Rails-like path + module prefix (e.g., `/admin/users` with `admin/users` controller)
-- **`scope`** — Flexible grouping with `path:`, `module:`, `auth:`, `tables:` options
+- **`function`** — Targets enclosed routes to a different Lambda function
+- **`namespace`** — Rails-like path + module prefix (e.g., `/admin/users` with `admin/users` controller). Does NOT change Lambda target.
+- **`scope`** — Flexible grouping with `path:`, `module:`, `auth:`, `tables:` options. Does NOT change Lambda target.
 
 ```ruby
 Belt.application.routes.draw do
   gateway :api, auth: :cognito do
     resources :posts                    # → lambda: "api", path: /posts
 
-    lambda :onboarding do
+    function :onboarding do
       resources :steps                  # → lambda: "onboarding", path: /steps
     end
 
     namespace :admin do
-      resources :users                  # → path: /admin/users, controller: "admin/users"
+      resources :users                  # → lambda: "api", path: /admin/users, controller: "admin/users"
     end
 
     scope path: 'v2', module: 'v2' do
-      resources :widgets                # → path: /v2/widgets, controller: "v2/widgets"
+      resources :widgets                # → lambda: "api", path: /v2/widgets, controller: "v2/widgets"
     end
   end
 end

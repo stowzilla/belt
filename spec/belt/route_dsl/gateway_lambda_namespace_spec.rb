@@ -3,7 +3,7 @@
 require 'spec_helper'
 require 'belt/route_dsl'
 
-RSpec.describe 'Route DSL: gateway, lambda, namespace, and scope keywords' do
+RSpec.describe 'Route DSL: gateway, function, namespace, and scope keywords' do
   before { Belt.instance_variable_set(:@application, nil) }
 
   def build_routes(&block)
@@ -75,13 +75,13 @@ RSpec.describe 'Route DSL: gateway, lambda, namespace, and scope keywords' do
     end
   end
 
-  describe 'lambda keyword (inside RouteBuilder)' do
+  describe 'function keyword (inside RouteBuilder)' do
     it 'targets routes to a different Lambda function' do
       gateways = build_routes do
         gateway :api, auth: :cognito do
           resources :posts
 
-          lambda :onboarding do
+          function :onboarding do
             resources :steps, only: %i[index create]
           end
         end
@@ -95,12 +95,16 @@ RSpec.describe 'Route DSL: gateway, lambda, namespace, and scope keywords' do
       step_routes.each { |r| expect(r.lambda.to_s).to eq('onboarding') }
     end
 
-    it 'supports multiple lambda blocks in the same gateway' do
+    it 'supports multiple function blocks in the same gateway' do
       gateways = build_routes do
         gateway :api do
           resources :posts
 
-          lambda :custom do
+          function :onboarding do
+            resources :stuff
+          end
+
+          function :custom do
             get '/blah', action: :blah, controller: :custom
           end
         end
@@ -116,10 +120,10 @@ RSpec.describe 'Route DSL: gateway, lambda, namespace, and scope keywords' do
       expect(blah_route.lambda.to_s).to eq('custom')
     end
 
-    it 'does not leak lambda context outside the block' do
+    it 'does not leak function context outside the block' do
       gateways = build_routes do
         gateway :api do
-          send(:lambda, :worker) do
+          function :worker do
             resources :jobs, only: [:create]
           end
           resources :users, only: [:index]
@@ -137,7 +141,7 @@ RSpec.describe 'Route DSL: gateway, lambda, namespace, and scope keywords' do
     it 'can carry auth option' do
       gateways = build_routes do
         gateway :api, auth: :cognito do
-          lambda :public_api, auth: :none do
+          function :public_api, auth: :none do
             get '/health', action: :health, controller: :status
           end
         end
@@ -150,7 +154,7 @@ RSpec.describe 'Route DSL: gateway, lambda, namespace, and scope keywords' do
     it 'can carry tables option' do
       gateways = build_routes do
         gateway :api do
-          lambda :reports, tables: [:analytics] do
+          function :reports, tables: [:analytics] do
             resources :reports, only: [:index], tables: [:reports]
           end
         end
@@ -163,7 +167,7 @@ RSpec.describe 'Route DSL: gateway, lambda, namespace, and scope keywords' do
   end
 
   describe 'namespace keyword (Rails-like, inside RouteBuilder)' do
-    it 'adds both path prefix and module prefix' do
+    it 'adds both path prefix and module prefix but NOT lambda target' do
       gateways = build_routes do
         gateway :api do
           namespace :admin do
@@ -179,6 +183,9 @@ RSpec.describe 'Route DSL: gateway, lambda, namespace, and scope keywords' do
 
       controllers = routes.map(&:controller).uniq
       expect(controllers).to eq(['admin/users'])
+
+      # namespace does NOT change the lambda target
+      routes.each { |r| expect(r.lambda).to eq(:api) }
     end
 
     it 'nests namespace inside namespace' do
@@ -195,6 +202,7 @@ RSpec.describe 'Route DSL: gateway, lambda, namespace, and scope keywords' do
       route = gateways.first.routes.first
       expect(route.path).to eq('/admin/v2/users')
       expect(route.controller).to eq('admin/v2/users')
+      expect(route.lambda).to eq(:api) # still the gateway default
     end
 
     it 'inherits auth from parent namespace' do
@@ -245,9 +253,10 @@ RSpec.describe 'Route DSL: gateway, lambda, namespace, and scope keywords' do
       expect(route.path).to eq('/v1/posts')
       # controller is v1/posts because path prefix determines controller when no module override
       expect(route.controller).to eq('v1/posts')
+      expect(route.lambda).to eq(:api) # unchanged
     end
 
-    it 'scope with module: only adds module prefix (no path change)' do
+    it 'scope with module: only adds module prefix (no path change, no lambda change)' do
       gateways = build_routes do
         gateway :api do
           scope module: 'v2' do
@@ -259,6 +268,7 @@ RSpec.describe 'Route DSL: gateway, lambda, namespace, and scope keywords' do
       route = gateways.first.routes.first
       expect(route.path).to eq('/posts')
       expect(route.controller).to eq('v2/posts')
+      expect(route.lambda).to eq(:api) # module does NOT affect lambda
     end
 
     it 'scope with both path: and module: adds both' do
@@ -273,23 +283,11 @@ RSpec.describe 'Route DSL: gateway, lambda, namespace, and scope keywords' do
       route = gateways.first.routes.first
       expect(route.path).to eq('/internal/settings')
       expect(route.controller).to eq('admin/settings')
-    end
-
-    it 'scope module: sets the lambda target' do
-      gateways = build_routes do
-        gateway :api do
-          scope module: 'workers' do
-            resources :jobs, only: [:create]
-          end
-        end
-      end
-
-      route = gateways.first.routes.first
-      expect(route.lambda.to_s).to eq('workers')
+      expect(route.lambda).to eq(:api) # unchanged
     end
   end
 
-  describe 'combined usage: gateway + lambda + namespace + scope' do
+  describe 'combined usage: gateway + function + namespace + scope' do
     it 'supports the full proposed DSL' do
       gateways = build_routes do
         gateway :api, auth: :cognito do
@@ -297,11 +295,11 @@ RSpec.describe 'Route DSL: gateway, lambda, namespace, and scope keywords' do
             resources :messages, only: %i[index create]
           end
 
-          send(:lambda, :onboarding) do
+          function :onboarding do
             resources :stuff
           end
 
-          send(:lambda, :custom) do
+          function :custom do
             get '/blah', action: :blah, controller: :custom
           end
 
@@ -325,25 +323,26 @@ RSpec.describe 'Route DSL: gateway, lambda, namespace, and scope keywords' do
       msg_routes = routes.select { |r| r.path.include?('messages') }
       expect(msg_routes.map(&:path)).to include('/conversations/{conversation_id}/messages')
 
-      # Onboarding lambda
+      # function :onboarding
       stuff_routes = routes.select { |r| r.path.include?('stuff') }
       stuff_routes.each { |r| expect(r.lambda.to_s).to eq('onboarding') }
 
-      # Custom lambda
+      # function :custom
       blah_route = routes.find { |r| r.path == '/blah' }
       expect(blah_route.lambda.to_s).to eq('custom')
 
-      # Namespace: admin
+      # namespace :admin — does NOT change lambda
       admin_routes = routes.select { |r| r.path.start_with?('/admin') }
       admin_routes.each do |r|
         expect(r.controller).to start_with('admin/')
         expect(r.auth).to eq(:cognito) # inherited from gateway
+        expect(r.lambda).to eq(:api)   # namespace doesn't change lambda
       end
 
-      # Scope: v2
+      # scope path: 'v2', module: 'v2' — does NOT change lambda
       v2_route = routes.find { |r| r.path == '/v2/posts' }
       expect(v2_route.controller).to eq('v2/posts')
-      expect(v2_route.lambda.to_s).to eq('v2')
+      expect(v2_route.lambda).to eq(:api) # scope module doesn't change lambda
     end
   end
 end
