@@ -1,5 +1,7 @@
 Belt.application.routes.draw do
-  namespace :api do
+  # Creates an API Gateway named "api" with a default Lambda function of the same name.
+  # Use `function :other_name do ... end` inside to route specific paths to additional Lambdas.
+  gateway :api do
     # Public stack-check / welcome (HTML for browsers, JSON for the SPA shell)
     get "/", action: :show, controller: :welcome, auth: :none
     # resources :posts

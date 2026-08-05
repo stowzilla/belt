@@ -3,12 +3,14 @@
 module Belt
   module CLI
     module AppDetection
-      # Detects the primary namespace from the route definitions.
+      # Detects the primary gateway from the route definitions.
       # Used by generators to determine controller directory and route file naming.
       def detect_namespace
         routes_file = find_routes_file_path
         if routes_file && File.exist?(routes_file)
-          match = File.read(routes_file).match(/namespace :(\w+)/)
+          content = File.read(routes_file)
+          # Prefer `gateway :name` but fall back to legacy `namespace :name` at top-level
+          match = content.match(/^\s*gateway :(\w+)/) || content.match(/^\s*namespace :(\w+)/)
           return match[1] if match
         end
         File.basename(Dir.pwd)

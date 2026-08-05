@@ -105,7 +105,7 @@ require "belt"
 
 include Belt::LambdaHandler
 
-ROUTER = Belt::ActionRouter.new(routes: Routes::API, namespace: "api")
+ROUTER = Belt::ActionRouter.new(routes: Routes::API, gateway: "api")
 
 def execute(path:, body:, event:)
   ROUTER.route(event: event, body: body)
@@ -140,7 +140,7 @@ Define routes in `infrastructure/routes.tf.rb`:
 
 ```ruby
 Belt.application.routes.draw do
-  namespace :api do
+  gateway :api do
     resources :posts, only: [:index, :show, :create]
   end
 end
@@ -169,6 +169,45 @@ The provider will:
 - Create API Gateway routes matching your DSL
 - Generate IAM policies for DynamoDB table access
 - Set up CloudWatch log groups
+
+### Route DSL Keywords
+
+The routes DSL has four keywords that map to infrastructure and code organization:
+
+| Keyword | Purpose | Affects Lambda? |
+|---------|---------|-----------------|
+| `gateway` | Creates an API Gateway + default Lambda | Yes — sets the default Lambda for all routes inside |
+| `function` | Routes to a different Lambda | Yes — overrides the gateway's default |
+| `namespace` | Adds path prefix + controller module | No — Rails-like code organization only |
+| `scope` | Flexible path/module/auth grouping | No — grouping and shared options only |
+
+**Example combining all four:**
+
+```ruby
+Belt.application.routes.draw do
+  gateway :api, auth: :cognito do
+    resources :posts                    # → lambda: api, path: /posts, controller: posts
+
+    namespace :admin do
+      resources :users                  # → lambda: api, path: /admin/users, controller: admin/users
+    end
+
+    function :worker do
+      resources :jobs                   # → lambda: worker, path: /jobs, controller: jobs
+
+      namespace :internal do
+        resources :tasks                # → lambda: worker, path: /internal/tasks, controller: internal/tasks
+      end
+    end
+
+    scope path: 'v2', module: 'legacy' do
+      resources :widgets                # → lambda: api, path: /v2/widgets, controller: legacy/widgets
+    end
+  end
+end
+```
+
+**Key point:** `namespace` and `scope` are purely organizational — they affect URL paths and controller module resolution but never change which Lambda handles the request. Use `function` when you need routes to go to a different Lambda.
 
 ## BeltController Features
 
@@ -423,7 +462,7 @@ The command expects `infrastructure/routes.tf.rb` in the current working directo
 
 ```ruby
 Belt.application.routes.draw do
-  namespace :api do
+  gateway :api do
     resources :posts, only: [:index, :show, :create, :destroy]
     resource :profile, only: [:show, :update]
     get "health", action: :health
