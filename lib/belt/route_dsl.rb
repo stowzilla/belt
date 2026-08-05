@@ -52,49 +52,46 @@ module Belt
 
   class NestedResourceBuilder
     def initialize(gateway, prefix, collection_prefix, inherited_tables: [], inherited_auth: nil, # rubocop:disable Metrics/ParameterLists
-                   inherited_controller: nil)
+                   inherited_controller: nil, inherited_lambda: nil)
       @gateway = gateway
       @prefix = prefix
       @collection_prefix = collection_prefix
       @inherited_tables = inherited_tables
       @inherited_auth = inherited_auth
       @inherited_controller = inherited_controller
+      @inherited_lambda = inherited_lambda
     end
 
-    def resources(name, options = {})
+    def resources(name, options = {}, &block)
       resource_name = name.to_s
       singular = @gateway.send(:singularize, resource_name)
       param_name = options[:param] || "#{singular}_id"
-      # Auto-add this resource's table before merging inherited tables
       options = options.merge(tables: [resource_name.to_sym]) unless options.key?(:tables)
       options = merge_inherited_options(options)
       resource_options = options.merge(route_type: :resources)
       actions = @gateway.send(:determine_actions, options)
 
-      @gateway.send(:add_route, :get, "#{@prefix}/#{resource_name}", resource_options) if actions.include?(:index)
-      @gateway.send(:add_route, :post, "#{@prefix}/#{resource_name}", resource_options) if actions.include?(:create)
-      if actions.include?(:show)
-        @gateway.send(:add_route, :get, "#{@prefix}/#{resource_name}/{#{param_name}}",
-                      resource_options)
-      end
-      if actions.include?(:update)
-        @gateway.send(:add_route, :put, "#{@prefix}/#{resource_name}/{#{param_name}}",
-                      resource_options)
-      end
-      return unless actions.include?(:destroy)
+      add_nested_resource_routes(resource_name, param_name, resource_options, actions)
+      return unless block
 
-      @gateway.send(:add_route, :delete, "#{@prefix}/#{resource_name}/{#{param_name}}",
-                    resource_options)
+      nested_member_prefix = "#{@prefix}/#{resource_name}/{#{param_name}}"
+      nested_collection_prefix = "#{@prefix}/#{resource_name}"
+      nested_builder = NestedResourceBuilder.new(@gateway, nested_member_prefix, nested_collection_prefix,
+                                                 inherited_tables: Array(options[:tables] || []),
+                                                 inherited_auth: options[:auth] || @inherited_auth,
+                                                 inherited_controller: @inherited_controller,
+                                                 inherited_lambda: @inherited_lambda)
+      nested_builder.instance_eval(&block)
     end
 
     def member(&)
       MemberCollectionBuilder.new(@gateway, @prefix, @inherited_tables, @inherited_auth,
-                                  @inherited_controller).instance_eval(&)
+                                  @inherited_controller, @inherited_lambda).instance_eval(&)
     end
 
     def collection(&)
       MemberCollectionBuilder.new(@gateway, @collection_prefix, @inherited_tables,
-                                  @inherited_auth, @inherited_controller).instance_eval(&)
+                                  @inherited_auth, @inherited_controller, @inherited_lambda).instance_eval(&)
     end
 
     %i[get post put delete patch].each do |method|
@@ -108,6 +105,20 @@ module Belt
 
     private
 
+    def add_nested_resource_routes(resource_name, param_name, resource_options, actions)
+      @gateway.send(:add_route, :get, "#{@prefix}/#{resource_name}", resource_options) if actions.include?(:index)
+      @gateway.send(:add_route, :post, "#{@prefix}/#{resource_name}", resource_options) if actions.include?(:create)
+      if actions.include?(:show)
+        @gateway.send(:add_route, :get, "#{@prefix}/#{resource_name}/{#{param_name}}", resource_options)
+      end
+      if actions.include?(:update)
+        @gateway.send(:add_route, :put, "#{@prefix}/#{resource_name}/{#{param_name}}", resource_options)
+      end
+      return unless actions.include?(:destroy)
+
+      @gateway.send(:add_route, :delete, "#{@prefix}/#{resource_name}/{#{param_name}}", resource_options)
+    end
+
     def merge_inherited_options(options)
       result = options.dup
       if @inherited_tables.any?
@@ -116,17 +127,20 @@ module Belt
       end
       result[:auth] ||= @inherited_auth if @inherited_auth
       result[:controller] ||= @inherited_controller if @inherited_controller
+      result[:lambda] ||= @inherited_lambda if @inherited_lambda
       result
     end
   end
 
   class MemberCollectionBuilder
-    def initialize(gateway, prefix, inherited_tables, inherited_auth, inherited_controller = nil)
+    def initialize(gateway, prefix, inherited_tables, inherited_auth, # rubocop:disable Metrics/ParameterLists
+                   inherited_controller = nil, inherited_lambda = nil)
       @gateway = gateway
       @prefix = prefix
       @inherited_tables = inherited_tables
       @inherited_auth = inherited_auth
       @inherited_controller = inherited_controller
+      @inherited_lambda = inherited_lambda
     end
 
     %i[get post put delete patch].each do |method|
@@ -147,6 +161,7 @@ module Belt
       end
       result[:auth] ||= @inherited_auth if @inherited_auth
       result[:controller] ||= @inherited_controller if @inherited_controller
+      result[:lambda] ||= @inherited_lambda if @inherited_lambda
       result
     end
   end
@@ -198,9 +213,11 @@ module Belt
       resource_tables = Array(options[:tables] || [])
       inherited_tables = (@default_tables + resource_tables).uniq
       inherited_auth = options[:auth] || @default_auth
+      inherited_lambda = options[:lambda]
       nested_builder = NestedResourceBuilder.new(self, member_prefix, collection_prefix,
                                                  inherited_tables: inherited_tables,
-                                                 inherited_auth: inherited_auth)
+                                                 inherited_auth: inherited_auth,
+                                                 inherited_lambda: inherited_lambda)
       nested_builder.instance_eval(&)
     end
 
@@ -523,7 +540,7 @@ module Belt
         resource_name = name.to_s
         singular = Belt::Inflector.singularize(resource_name)
         param_name = options[:param] || "#{singular}_id"
-        controller = determine_scoped_controller(resource_name)
+        controller = options[:controller] || determine_scoped_controller(resource_name)
         resource_options = options.merge(route_type: :resources, controller: controller)
         actions = determine_scoped_actions(options)
 
@@ -540,13 +557,14 @@ module Belt
         nested_builder = NestedResourceBuilder.new(@gateway, member_prefix, collection_prefix,
                                                    inherited_tables: inherited_tables,
                                                    inherited_auth: inherited_auth,
-                                                   inherited_controller: controller)
+                                                   inherited_controller: controller,
+                                                   inherited_lambda: @lambda_target)
         nested_builder.instance_eval(&)
       end
 
       def build_scoped_resource(name, options)
         resource_name = name.to_s
-        controller = determine_scoped_controller(resource_name)
+        controller = options[:controller] || determine_scoped_controller(resource_name)
         resource_options = options.merge(route_type: :resource, controller: controller)
         actions = determine_scoped_actions(options, default: %i[show update destroy create])
 
