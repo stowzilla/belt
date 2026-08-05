@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.2.21
+
+### Route DSL: `gateway`, `lambda`, `namespace`, and `scope` keywords
+
+The route DSL now uses terminology that matches AWS infrastructure:
+
+- **`gateway`** — Creates an API Gateway with a default Lambda function of the same name (replaces top-level `namespace`)
+- **`lambda`** — Targets enclosed routes to a different Lambda function
+- **`namespace`** — Rails-like path + module prefix (e.g., `/admin/users` with `admin/users` controller)
+- **`scope`** — Flexible grouping with `path:`, `module:`, `auth:`, `tables:` options
+
+```ruby
+Belt.application.routes.draw do
+  gateway :api, auth: :cognito do
+    resources :posts                    # → lambda: "api", path: /posts
+
+    lambda :onboarding do
+      resources :steps                  # → lambda: "onboarding", path: /steps
+    end
+
+    namespace :admin do
+      resources :users                  # → path: /admin/users, controller: "admin/users"
+    end
+
+    scope path: 'v2', module: 'v2' do
+      resources :widgets                # → path: /v2/widgets, controller: "v2/widgets"
+    end
+  end
+end
+```
+
+**ActionRouter** now accepts `gateway:` keyword (preferred):
+
+```ruby
+ROUTER = Belt::ActionRouter.new(routes: Routes::API, gateway: 'api')
+```
+
+**100% backward compatible:** `namespace :api do` at top level still works (aliased to `gateway`), and `ActionRouter.new(namespace: 'api')` still works.
+
 ## 0.2.18
 
 ### New generator: `belt generate auth`

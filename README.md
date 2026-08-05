@@ -105,7 +105,7 @@ require "belt"
 
 include Belt::LambdaHandler
 
-ROUTER = Belt::ActionRouter.new(routes: Routes::API, namespace: "api")
+ROUTER = Belt::ActionRouter.new(routes: Routes::API, gateway: "api")
 
 def execute(path:, body:, event:)
   ROUTER.route(event: event, body: body)
@@ -140,7 +140,7 @@ Define routes in `infrastructure/routes.tf.rb`:
 
 ```ruby
 Belt.application.routes.draw do
-  namespace :api do
+  gateway :api do
     resources :posts, only: [:index, :show, :create]
   end
 end
@@ -423,7 +423,7 @@ The command expects `infrastructure/routes.tf.rb` in the current working directo
 
 ```ruby
 Belt.application.routes.draw do
-  namespace :api do
+  gateway :api do
     resources :posts, only: [:index, :show, :create, :destroy]
     resource :profile, only: [:show, :update]
     get "health", action: :health
