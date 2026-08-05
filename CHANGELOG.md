@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0
+
+Version bump only — no code changes from 0.2.21.
+
+**Why 0.3.0 instead of another patch?** The route DSL changes in 0.2.21 (`gateway`/`function`/`namespace`/`scope`) were a minor-version level change (new features, new keywords). RubyGems doesn't allow republishing the same version, so we're bumping to 0.3.0 to correct the semver trajectory.
+
+If you're on 0.2.21, you already have the DSL changes. This release is purely for version hygiene.
+
 ## 0.2.21
 
 ### Route DSL: `gateway`, `function`, `namespace`, and `scope` keywords
