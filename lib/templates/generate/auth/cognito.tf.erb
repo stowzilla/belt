@@ -51,9 +51,7 @@ resource "aws_cognito_user_pool_client" "<%= pool[:name] %>" {
 
   explicit_auth_flows = [
     "ALLOW_USER_SRP_AUTH",
-<% if @signup -%>
     "ALLOW_USER_PASSWORD_AUTH",
-<% end -%>
     "ALLOW_REFRESH_TOKEN_AUTH"
   ]
 
