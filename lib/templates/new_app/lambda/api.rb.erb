@@ -9,7 +9,7 @@ require_relative 'lib/routes/api_routes'
 require_relative 'controllers/<%= @app_name %>/<%= r %>_controller'
 <% end -%>
 
-ROUTER = Belt::ActionRouter.new(routes: Routes::API, namespace: 'api')
+ROUTER = Belt::ActionRouter.new(routes: Routes::API, gateway: 'api')
 
 def execute(path:, body:, event:)
   ROUTER.route(event: event, body: body)

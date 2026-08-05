@@ -1,5 +1,5 @@
 Belt.application.routes.draw do
-  namespace :api do
+  gateway :api do
     # Public stack-check / welcome (HTML for browsers, JSON for the SPA shell)
     get "/", action: :show, controller: :welcome, auth: :none
     # resources :posts

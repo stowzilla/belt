@@ -450,18 +450,25 @@ module Belt
         elsif content.include?('# resources :posts')
           content.sub!('# resources :posts', resource_line)
         else
-          # Find the target namespace block and insert before its closing `end`
+          # Find the target gateway (or legacy namespace) block and insert before its closing `end`
+          gateway_pattern = /^(\s*)gateway :#{Regexp.escape(@app_name)}\b[^\n]*do\s*\n(.*?)^\1end/m
           namespace_pattern = /^(\s*)namespace :#{Regexp.escape(@app_name)}\b[^\n]*do\s*\n(.*?)^\1end/m
 
-          if content.match?(namespace_pattern)
-            content.sub!(namespace_pattern) do |match|
+          target_pattern = if content.match?(gateway_pattern)
+                             gateway_pattern
+                           elsif content.match?(namespace_pattern)
+                             namespace_pattern
+                           end
+
+          if target_pattern
+            content.sub!(target_pattern) do |match|
               indent = ::Regexp.last_match(1)
               match.sub(/^(#{indent})end\z/m, "#{indent}  #{resource_line}\n#{indent}end")
             end
           else
-            single_ns_pattern = /^(\s*)namespace :\w+\b[^\n]*do\s*\n(.*?)^\1end/m
-            if content.match?(single_ns_pattern)
-              content.sub!(single_ns_pattern) do |match|
+            single_gw_pattern = /^(\s*)(?:gateway|namespace) :\w+\b[^\n]*do\s*\n(.*?)^\1end/m
+            if content.match?(single_gw_pattern)
+              content.sub!(single_gw_pattern) do |match|
                 indent = ::Regexp.last_match(1)
                 match.sub(/^(#{indent})end\z/m, "#{indent}  #{resource_line}\n#{indent}end")
               end

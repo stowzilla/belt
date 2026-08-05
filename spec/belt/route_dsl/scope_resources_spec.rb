@@ -7,7 +7,7 @@ RSpec.describe 'RouteBuilder#resources inside scope' do
   def build_routes(&block)
     Belt.instance_variable_set(:@application, nil)
     routes = Belt.application.routes.draw do
-      namespace :api do
+      gateway :api do
         instance_eval(&block)
       end
     end
