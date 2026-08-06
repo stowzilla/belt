@@ -243,7 +243,9 @@ module Belt
       end
 
       def table_name(model_name)
-        "${var.app_name}-${var.environment}-#{Belt::Inflector.pluralize(model_name)}"
+        # Dasherize to match ActiveItem's table_name_for convention:
+        # class_name.underscore.dasherize.pluralize
+        "${var.app_name}-${var.environment}-#{Belt::Inflector.pluralize(model_name).tr('_', '-')}"
       end
     end
   end
