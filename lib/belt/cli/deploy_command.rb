@@ -145,10 +145,9 @@ module Belt
 
       def run
         validate!
+        load_and_apply_env_config!
         run_preflight_checks!
         env_dir = File.join(@infra_dir, @env)
-
-        load_and_apply_env_config!
 
         puts "belt → deploying #{@env} (in #{env_dir}/)\n\n"
 
