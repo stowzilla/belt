@@ -218,7 +218,8 @@ module Belt
       end
 
       def table_name(model_name)
-        "${var.app_name}-${var.environment}-#{Belt::Inflector.pluralize(model_name)}"
+        table_suffix = Belt::Inflector.pluralize(model_name).tr('_', '-')
+        "${var.app_name}-${var.environment}-#{table_suffix}"
       end
     end
   end
