@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.2
+
+### Bug fix
+
+- **Table name normalization**: Route JSON output now uses hyphens instead of underscores in inferred table names, matching the ActiveItem convention (e.g., `user-sessions` instead of `user_sessions`). (#51)
+
+## 0.3.1
+
+Version bump only — tagged release for internal tracking.
+
 ## 0.3.0
 
 Version bump only — no code changes from 0.2.21.
