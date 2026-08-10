@@ -2,6 +2,7 @@
 
 require 'fileutils'
 require_relative 'app_detection'
+require_relative 'auth_command'
 require_relative 'generator_registry'
 require_relative 'tables_command'
 require_relative '../inflector'
@@ -9,7 +10,7 @@ require_relative '../inflector'
 module Belt
   module CLI
     class DestroyCommand
-      GENERATORS = %w[scaffold resource model controller environment frontend views].freeze
+      GENERATORS = %w[scaffold resource model controller environment frontend views index auth].freeze
 
       include AppDetection
 
@@ -44,12 +45,15 @@ module Belt
         when 'environment'
           name = args.shift
           if name.nil? || name.empty?
-            puts 'Usage: belt destroy environment <name>'
+            puts 'Usage: belt destroy environment <name> [--force] [--skip-terraform]'
             exit 1
           end
-          new(generator, name, []).destroy
+          flags = parse_environment_flags(args)
+          new(generator, name, [], **flags).destroy
         when 'frontend'
           new(generator, nil, []).destroy
+        when 'auth'
+          Belt::CLI::AuthCommand.destroy(args)
         when 'views'
           name = args.shift
           if name.nil? || name.empty?
@@ -57,6 +61,8 @@ module Belt
             exit 1
           end
           new(generator, name, args.map { |a| parse_field(a) }).destroy
+        when 'index'
+          Belt::CLI::IndexCommand.run(['remove'] + args)
         else
           name = args.shift
           if name.nil? || name.empty?
@@ -65,6 +71,19 @@ module Belt
           end
           new(generator, name, args.map { |a| parse_field(a) }).destroy
         end
+      end
+
+      def self.parse_environment_flags(args)
+        flags = { force: false, skip_terraform: false }
+        args.each do |arg|
+          case arg
+          when '--force', '-f'
+            flags[:force] = true
+          when '--skip-terraform'
+            flags[:skip_terraform] = true
+          end
+        end
+        flags
       end
 
       def self.parse_field(arg)
@@ -84,26 +103,38 @@ module Belt
             resource      Alias for scaffold
             model         Remove an ActiveItem model
             controller    Remove a controller
-            environment   Remove a deployment environment directory
+            auth          Remove Cognito user pool infrastructure
+            environment   Remove a deployment environment and tear down infrastructure
             frontend      Remove the frontend/ directory
             views         Remove React pages for a resource
+
+          Environment options:
+            --force, -f          Skip all prompts (CI mode)
+            --skip-terraform     Delete local files without running terraform destroy
 
           Examples:
             belt d scaffold post title:string body:text status:string
             belt d model user
             belt d controller comments
             belt d environment staging
+            belt d environment dev --skip-terraform
+            belt d environment dev --force
             belt d frontend
             belt d views post
 
           ⚠ This is destructive. Files will be permanently deleted.
+
+          For environments: if terraform state is detected, you'll be prompted to run
+          `terraform destroy` first to tear down cloud resources before removing files.
         HELP
       end
 
-      def initialize(generator, name, fields)
+      def initialize(generator, name, fields, force: false, skip_terraform: false)
         @generator = generator
         @name = name&.downcase&.gsub(/[^a-z0-9_]/, '_')
         @fields = fields
+        @force = force
+        @skip_terraform = skip_terraform
         @app_name = detect_namespace
         @singular_name = @name ? Belt::Inflector.singularize(@name) : nil
         @resource_name = @singular_name ? Belt::Inflector.pluralize(@singular_name) : nil
@@ -149,14 +180,172 @@ module Belt
 
       def destroy_environment
         dir = "infrastructure/#{@name}"
-        if Dir.exist?(dir)
-          FileUtils.rm_rf(dir)
-          @removed << dir
-          puts "  remove  #{dir}/"
-          puts "\n✓ Environment '#{@name}' destroyed!"
-        else
+
+        unless Dir.exist?(dir)
           puts "✗ Environment '#{@name}' not found at #{dir}/"
           exit 1
+        end
+
+        # Check if terraform state exists (infra may still be live)
+        if !@skip_terraform && terraform_state_exists?(dir)
+          puts "⚠  Environment '#{@name}' appears to have active infrastructure."
+          puts "   Terraform state was found — resources may still be running.\n\n"
+
+          if @force
+            puts '   --force passed, skipping terraform destroy.'
+          else
+            puts '   Options:'
+            puts '     1) Run `terraform destroy` to tear down infrastructure first (recommended)'
+            puts '     2) Skip terraform and just delete the local files (--skip-terraform)'
+            puts "     3) Cancel\n\n"
+
+            print "   Run terraform destroy for '#{@name}'? [y/N/skip] "
+            response = $stdin.gets&.strip&.downcase
+
+            case response
+            when 'y', 'yes'
+              run_terraform_destroy(dir)
+            when 'skip', 's'
+              puts '   Skipping terraform destroy.'
+            else
+              puts 'Cancelled.'
+              exit 0
+            end
+          end
+        end
+
+        # Final confirmation before deleting files
+        unless @force
+          print "\nPermanently delete #{dir}/? [y/N] "
+          response = $stdin.gets&.strip&.downcase
+          unless response&.start_with?('y')
+            puts 'Cancelled.'
+            exit 0
+          end
+        end
+
+        FileUtils.rm_rf(dir)
+        @removed << dir
+        puts "  remove  #{dir}/"
+        puts "\n✓ Environment '#{@name}' destroyed!"
+      end
+
+      def terraform_state_exists?(dir)
+        # Check for local .terraform directory (initialized state)
+        return true if Dir.exist?(File.join(dir, '.terraform'))
+
+        # Check if backend.tf exists (remote state configured)
+        backend_file = File.join(dir, 'backend.tf')
+        return false unless File.exist?(backend_file)
+
+        # Try to query remote state — if terraform is initialized and state exists,
+        # the environment likely has live resources
+        Dir.chdir(dir) do
+          # Quick check: does `terraform show` return anything?
+          output = `terraform show -no-color 2>&1`
+          Process.last_status.success? && !output.strip.empty? && !output.include?('No state')
+        end
+      rescue StandardError
+        # If we can't determine state, assume it might exist and warn
+        true
+      end
+
+      def run_terraform_destroy(dir)
+        puts "\n━━━ terraform destroy (#{@name}) ━━━"
+
+        Dir.chdir(dir) do
+          # Initialize if needed
+          unless Dir.exist?('.terraform')
+            puts '  Initializing terraform...'
+            unless system('terraform', 'init', '-input=false')
+              puts "\n✗ terraform init failed. You may need to destroy manually:"
+              puts "  cd #{dir} && terraform init && terraform destroy"
+              exit 1
+            end
+          end
+
+          # Empty S3 buckets before destroy — terraform can't delete non-empty buckets
+          empty_s3_buckets_in_state
+
+          # Run destroy with auto-approve (user already confirmed)
+          unless system('terraform', 'destroy', '-auto-approve')
+            puts "\n✗ terraform destroy failed."
+            puts '  Infrastructure may still be running. Fix and retry, or use --skip-terraform.'
+            exit 1
+          end
+        end
+
+        puts '  ✓ Infrastructure destroyed.'
+      end
+
+      def empty_s3_buckets_in_state
+        output = `terraform state list 2>/dev/null`
+        return unless Process.last_status.success?
+
+        bucket_resources = output.lines.map(&:strip).grep(/\Aaws_s3_bucket\./)
+        return if bucket_resources.empty?
+
+        bucket_resources.each do |resource|
+          bucket_name = resolve_bucket_name(resource)
+          next unless bucket_name
+
+          empty_s3_bucket(bucket_name)
+        end
+      end
+
+      def resolve_bucket_name(resource)
+        output = `terraform state show '#{resource}' 2>/dev/null`
+        return nil unless Process.last_status.success?
+
+        match = output.match(/^\s*bucket\s*=\s*"([^"]+)"/)
+        match&.[](1)
+      end
+
+      def empty_s3_bucket(bucket_name)
+        # Check if bucket exists
+        `aws s3api head-bucket --bucket '#{bucket_name}' 2>&1`
+        return unless Process.last_status.success?
+
+        puts "  Emptying S3 bucket: #{bucket_name}"
+
+        # Delete all object versions (handles versioned buckets)
+        `aws s3 rm 's3://#{bucket_name}' --recursive 2>/dev/null`
+
+        # Also delete versioned objects and delete markers
+        delete_all_versions(bucket_name)
+      end
+
+      def delete_all_versions(bucket_name)
+        loop do
+          output = `aws s3api list-object-versions --bucket '#{bucket_name}' --max-items 1000 2>/dev/null`
+          break unless Process.last_status.success?
+
+          begin
+            data = JSON.parse(output)
+          rescue JSON::ParserError
+            break
+          end
+
+          versions = (data['Versions'] || []) + (data['DeleteMarkers'] || [])
+          break if versions.empty?
+
+          # Build delete objects payload
+          objects = versions.map do |v|
+            { 'Key' => v['Key'], 'VersionId' => v['VersionId'] }
+          end
+
+          delete_payload = JSON.generate({ 'Objects' => objects, 'Quiet' => true })
+
+          # Use a temp file for the payload since it can be large
+          require 'tempfile'
+          Tempfile.create(['delete-objects', '.json']) do |f|
+            f.write(delete_payload)
+            f.flush
+            `aws s3api delete-objects --bucket '#{bucket_name}' --delete 'file://#{f.path}' 2>/dev/null`
+          end
+
+          # If there's no next token, we're done
+          break unless data['NextToken'] || data['IsTruncated']
         end
       end
 

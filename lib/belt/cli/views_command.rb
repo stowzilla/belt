@@ -10,10 +10,14 @@ module Belt
       TEMPLATE_DIR = File.expand_path('../../templates/views', __dir__)
 
       def self.run(args)
+        force = args.delete('--force') || args.delete('-f')
+
         name = args.shift
         if name.nil? || name.empty?
-          puts 'Usage: belt generate views <resource> [field:type ...]'
+          puts 'Usage: belt generate views <resource> [field:type ...] [options]'
           puts "\nGenerates React pages for all REST actions (index, show, new, edit)."
+          puts "\nOptions:"
+          puts '  --force, -f    Overwrite existing files without prompting'
           puts "\nExamples:"
           puts '  belt generate views post title:string content:text status:string'
           puts '  belt generate views comment body:text author:string'
@@ -25,14 +29,19 @@ module Belt
           { name: n, type: t || 'string' }
         end
 
-        # If no fields provided, try to read from schema.tf.rb
+        # If no fields provided, try to read from contracts.rb
         fields = read_schema_fields(name) if fields.empty?
 
-        new(name, fields).generate
+        new(name, fields, force: force).generate
       end
 
       def self.read_schema_fields(name)
-        schema_file = ['config/schema.tf.rb', 'infrastructure/schema.tf.rb'].find { |f| File.exist?(f) }
+        schema_file = [
+          'config/contracts.rb',
+          'config/contracts.tf.rb',
+          'config/schema.tf.rb',
+          'infrastructure/schema.tf.rb'
+        ].find { |f| File.exist?(f) }
         return [] unless schema_file
 
         content = File.read(schema_file)
@@ -40,20 +49,38 @@ module Belt
 
         # Extract fields from model block
         if content =~ /model :#{singular} do\n(.*?)\n\s*end/m
-          ::Regexp.last_match(1).scan(/field :(\w+), type: :(\w+)/).except('created_at', 'updated_at')
-                  .map do |n, t|
-            {
-              name: n, type: t
-            }
+          block_content = ::Regexp.last_match(1)
+          timestamp_fields = %w[created_at updated_at]
+
+          # Support both formats:
+          #   field :name, type: :string   (legacy)
+          #   string :name                 (current schema DSL)
+          dsl_types = %w[string text integer number boolean float date datetime]
+          dsl_pattern = /(?:#{dsl_types.join('|')}) :(\w+)/
+          fields = block_content.scan(/field :(\w+), type: :(\w+)/)
+          fields += block_content.scan(dsl_pattern).map do |match|
+            field_name = match[0]
+            # Extract type from the DSL method name on that line
+            type_match = block_content.match(/(\w+) :#{Regexp.escape(field_name)}/)
+            [field_name, type_match ? type_match[1] : 'string']
+          end
+
+          fields.filter_map do |n, t|
+            next if timestamp_fields.include?(n)
+
+            { name: n, type: t }
           end
         else
           []
         end
       end
 
-      def initialize(name, fields)
+      def initialize(name, fields, force: false, quiet: false)
         @name = name.downcase.gsub(/[^a-z0-9_]/, '_')
         @fields = fields
+        @force = force
+        @quiet = quiet
+        @overwrite_all = false
         @singular_name = Belt::Inflector.singularize(@name)
         @resource_name = Belt::Inflector.pluralize(@singular_name)
         @class_name = Belt::Inflector.classify(@singular_name)
@@ -77,14 +104,7 @@ module Belt
 
         inject_routes
 
-        puts "\n✓ Views for '#{@singular_name}' generated!"
-        puts "\nFiles created:"
-        puts "  #{pages_dir}/#{@plural_class_name}Index.jsx"
-        puts "  #{pages_dir}/#{@class_name}Show.jsx"
-        puts "  #{pages_dir}/#{@class_name}New.jsx"
-        puts "  #{pages_dir}/#{@class_name}Edit.jsx"
-        puts "  #{pages_dir}/#{@class_name}Form.jsx"
-        puts '  frontend/src/App.jsx (updated)'
+        puts "\n✓ Views for '#{@singular_name}' generated!" unless @quiet
       end
 
       private
@@ -92,8 +112,61 @@ module Belt
       def write_template(template_name, dest_path)
         template_path = File.join(TEMPLATE_DIR, template_name)
         content = ERB.new(File.read(template_path), trim_mode: '-').result(binding)
+        existed = File.exist?(dest_path)
+
+        if existed && !@force && !@overwrite_all
+          action = prompt_overwrite(dest_path)
+          case action
+          when :yes
+            # fall through to write
+          when :all
+            @overwrite_all = true
+            # fall through to write
+          when :no
+            puts "  skip    #{dest_path}"
+            return
+          when :quit
+            puts "\nAborted."
+            exit 1
+          end
+        end
+
         File.write(dest_path, content)
-        puts "  create  #{dest_path}"
+        puts "  #{existed ? 'overwrite' : 'create'}  #{dest_path}"
+      end
+
+      def prompt_overwrite(path)
+        return :yes if @overwrite_all
+
+        print "  conflict  #{path}\n"
+        print "  Overwrite #{path}? (enter \"h\" for help) [Ynaqh] "
+        $stdout.flush
+
+        loop do
+          answer = $stdin.gets&.strip&.downcase
+          case answer
+          when '', 'y', 'yes'
+            return :yes
+          when 'n', 'no'
+            return :no
+          when 'a', 'all'
+            @overwrite_all = true
+            return :all
+          when 'q', 'quit'
+            return :quit
+          when 'h', 'help'
+            puts '  Y - yes, overwrite this file'
+            puts '  n - no, skip this file'
+            puts '  a - all, overwrite this and all remaining files'
+            puts '  q - quit, abort the generator'
+            puts '  h - help, show this help'
+            print "  Overwrite #{path}? (enter \"h\" for help) [Ynaqh] "
+            $stdout.flush
+          else
+            print '  Please enter Y, n, a, q, or h: '
+            $stdout.flush
+          end
+        end
       end
 
       def inject_routes
@@ -103,6 +176,12 @@ module Belt
         content = File.read(app_jsx)
         pages_dir = @resource_name
         plural_class = @plural_class_name || Belt::Inflector.camelize(@resource_name)
+
+        # Skip route injection if routes for this resource already exist
+        if content.include?("path=\"/#{@resource_name}\"")
+          puts "  skip    #{app_jsx} (routes already exist)"
+          return
+        end
 
         import_lines = [
           "import #{plural_class}Index from './pages/#{pages_dir}/#{plural_class}Index'",

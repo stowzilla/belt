@@ -24,7 +24,24 @@ Gem::Specification.new do |spec|
   spec.executables = ['belt']
   spec.require_paths = ['lib']
 
-  spec.add_dependency 'activeitem', '~> 0.0'
+  spec.add_dependency 'activeitem', '~> 0.0', '>= 0.0.13'
   spec.add_dependency 'activesupport', '>= 7.0'
+  spec.add_dependency 'irb', '>= 1.0'
   spec.add_dependency 'lambda_loadout', '~> 0.0'
+  spec.add_dependency 'rdoc', '>= 6.0'
+
+  spec.post_install_message = <<~MSG
+
+    ╭────────────────────────────────────────────╮
+    │  Belt installed successfully!               │
+    │                                            │
+    │  Run `belt doctor` to verify your setup:   │
+    │    • AWS CLI                               │
+    │    • Terraform                             │
+    │    • AWS credentials & authentication      │
+    │                                            │
+    │  Then: belt new <app_name>                 │
+    ╰────────────────────────────────────────────╯
+
+  MSG
 end

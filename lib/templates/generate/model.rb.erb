@@ -1,18 +1,14 @@
 # frozen_string_literal: true
 
 class <%= @class_name %> < ApplicationRecord
-<% @fields.each do |field| -%>
-  attr_accessor :<%= field[:name] %>
+<% @references.each do |ref| -%>
+  belongs_to :<%= ref[:referenced_model] %>
 <% end -%>
+<% if @references.any? && @regular_fields.any? -%>
 
-  def to_h
-    {
-      id: id,
-<% @fields.each do |field| -%>
-      <%= field[:name] %>: <%= field[:name] %>,
 <% end -%>
-      created_at: created_at,
-      updated_at: updated_at
-    }
-  end
+<% all_accessors = @regular_fields.map { |f| ":#{f[:name]}" } -%>
+<% if all_accessors.any? -%>
+  attr_accessor <%= all_accessors.join(', ') %>
+<% end -%>
 end

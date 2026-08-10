@@ -7,22 +7,26 @@ module Belt
   # Routes incoming requests to controllers based on a route manifest.
   #
   # Usage:
-  #   ROUTER = Belt::ActionRouter.new(routes: MY_ROUTES, namespace: "api")
+  #   ROUTER = Belt::ActionRouter.new(routes: MY_ROUTES, gateway: "api")
   #   response = ROUTER.route(event: event, body: body)
   #
   class ActionRouter
     class RouteNotFound < StandardError; end
 
-    def initialize(routes:, namespace:)
-      @namespace = namespace.to_s
-      @namespace_module_name = "#{@namespace.split('_').map(&:capitalize).join}Controllers"
+    def initialize(routes:, gateway: nil, namespace: nil)
+      # Accept `gateway:` (preferred) or legacy `namespace:` keyword
+      gw = gateway || namespace
+      raise ArgumentError, 'Belt::ActionRouter requires a gateway: (or legacy namespace:) argument' unless gw
+
+      @gateway = gw.to_s
+      @gateway_module_name = "#{@gateway.split('_').map(&:capitalize).join}Controllers"
       @routes = build_route_table(routes)
     end
 
     def route(event:, body:)
       method = event['httpMethod']
       full_path = event['path']
-      match_path = strip_namespace_prefix(full_path)
+      match_path = strip_gateway_prefix(full_path)
 
       route_info = find_route(method, match_path)
 
@@ -56,10 +60,10 @@ module Belt
 
     private
 
-    def strip_namespace_prefix(path)
+    def strip_gateway_prefix(path)
       return '/' if path.nil?
 
-      prefix = "/#{@namespace}"
+      prefix = "/#{@gateway}"
       if path.start_with?(prefix)
         stripped = path.sub(prefix, '')
         stripped.empty? ? '/' : stripped
@@ -102,20 +106,40 @@ module Belt
     end
 
     def dispatch_to_controller(route_info, event, body)
-      controller_class = resolve_controller(route_info[:controller])
+      controller_name = route_info[:controller]
+
+      # Prevent path traversal — controller names must be simple identifiers or single-level nested
+      unless valid_controller_name?(controller_name)
+        Belt::Observability::Logger.instance&.warn('Invalid controller name', controller: controller_name)
+        return error_response('Not found', 404, event)
+      end
+
+      controller_class = resolve_controller(controller_name)
       controller = controller_class.new(event: event, body: body)
 
-      controller_name = controller_class.name.split('::').last.gsub('Controller', '')
-      Belt::Observability::Logger.instance&.info("Processing by #{controller_name}##{route_info[:action]}")
+      class_label = controller_class.name.split('::').last.gsub('Controller', '')
+      Belt::Observability::Logger.instance&.info("Processing by #{class_label}##{route_info[:action]}")
 
       controller.dispatch(route_info[:action].to_sym)
     end
 
+    # Validate controller names to prevent path traversal.
+    # Allows: "posts", "admin/posts" (single nesting level, no dots or special chars)
+    def valid_controller_name?(name)
+      return false if name.nil? || name.empty?
+      return false if name.include?('..')
+      return false if name.start_with?('/') || name.end_with?('/')
+      return false if name.include?('\\')
+
+      # Allow only lowercase letters, digits, underscores, and forward slashes for nesting
+      name.match?(%r{\A[a-z][a-z0-9_]*(/[a-z][a-z0-9_]*)?\z})
+    end
+
     def resolve_controller(controller_name)
-      # Try namespace module first (app's own controllers)
+      # Try gateway module first (app's own controllers)
       begin
-        namespace_module = Object.const_get(@namespace_module_name)
-        return resolve_from_module(namespace_module, controller_name)
+        gateway_module = Object.const_get(@gateway_module_name)
+        return resolve_from_module(gateway_module, controller_name)
       rescue NameError
         # Fall through to controller_paths lookup
       end
@@ -124,23 +148,31 @@ module Belt
       resolve_from_paths(controller_name)
     end
 
-    def resolve_from_module(namespace_module, controller_name)
+    def resolve_from_module(gateway_module, controller_name)
       if controller_name.include?('/')
         parts = controller_name.split('/')
-        parent = namespace_module.const_get(parts[0].split('_').map(&:capitalize).join)
+        parent = gateway_module.const_get(parts[0].split('_').map(&:capitalize).join)
         parent.const_get("#{parts[1].split('_').map(&:capitalize).join}Controller")
       else
-        namespace_module.const_get("#{controller_name.split('_').map(&:capitalize).join}Controller")
+        gateway_module.const_get("#{controller_name.split('_').map(&:capitalize).join}Controller")
       end
     end
 
     def resolve_from_paths(controller_name)
       if controller_name.include?('/')
       end
-      file_name = "#{controller_name}_controller.rb"
+      file_name = "#{controller_name.gsub('/', '_')}_controller.rb"
 
       Belt.all_controller_paths.each do |path|
         full_path = File.join(path, file_name)
+
+        # Ensure resolved path stays within the allowed controller directory
+        begin
+          resolved = File.realpath(full_path)
+        rescue Errno::ENOENT, Errno::EACCES
+          next
+        end
+        next unless resolved.start_with?(File.realpath(path))
         next unless File.exist?(full_path)
 
         require full_path
@@ -148,9 +180,9 @@ module Belt
         class_name = "#{controller_name.split(%r{[_/]}).map(&:capitalize).join}Controller"
         return Object.const_get(class_name) if Object.const_defined?(class_name)
 
-        # Try under namespace module (e.g., BrablogControllers::PostsController)
-        if Object.const_defined?(@namespace_module_name)
-          ns = Object.const_get(@namespace_module_name)
+        # Try under gateway module (e.g., ApiControllers::PostsController)
+        if Object.const_defined?(@gateway_module_name)
+          ns = Object.const_get(@gateway_module_name)
           return ns.const_get(class_name) if ns.const_defined?(class_name)
         end
       end
@@ -165,7 +197,7 @@ module Belt
     def error_response(message, status_code, event = nil)
       origin = Belt::Helpers::CorsOrigin.resolve_origin(Belt::Helpers::CorsOrigin.origin_from_event(event))
       headers = {
-        'Access-Control-Allow-Headers' => 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+        'Access-Control-Allow-Headers' => 'Content-Type,Accept,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
         'Access-Control-Allow-Methods' => 'GET,POST,PUT,DELETE,PATCH,OPTIONS',
         'Content-Type' => 'application/json'
       }

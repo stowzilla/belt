@@ -28,6 +28,7 @@ module Belt
       def run
         validate!
         generate_frontend_tf
+        ensure_cloudfront_cors
         return if @quiet
 
         puts "\n✓ Frontend infrastructure generated in #{MODULE_DIR}!"
@@ -50,6 +51,46 @@ module Belt
         content = ERB.new(File.read(template_path), trim_mode: '-').result(binding)
         File.write(dest, content)
         puts "  create  #{dest}" unless @quiet
+      end
+
+      # Wire CloudFront origin into conveyor_belt frontend_urls so SPA→API CORS works.
+      # Handles common scaffold shapes so users never need the tutorial's manual CORS fix.
+      def ensure_cloudfront_cors
+        main_tf = File.join(MODULE_DIR, 'main.tf')
+        return unless File.exist?(main_tf)
+
+        content = File.read(main_tf)
+        return if content.include?('aws_cloudfront_distribution.frontend.domain_name')
+
+        replacement = lambda do |indent|
+          <<~TF.chomp
+            #{indent}# CloudFront first so SPA→API CORS works out of the box.
+            #{indent}frontend_urls = concat(
+            #{indent}  ["https://${aws_cloudfront_distribution.frontend.domain_name}"],
+            #{indent}  var.frontend_urls
+            #{indent})
+          TF
+        end
+
+        # `frontend_urls = var.frontend_urls`
+        simple = /^(\s*)frontend_urls\s*=\s*var\.frontend_urls\s*$/
+        if content.match?(simple)
+          content = content.sub(simple) { replacement.call(Regexp.last_match(1)) }
+          File.write(main_tf, content)
+          puts "  update  #{main_tf} (CloudFront CORS)" unless @quiet
+          return
+        end
+
+        # `frontend_urls = concat(var.frontend_urls)` or multi-line concat without CloudFront
+        concat_only = /^(\s*)frontend_urls\s*=\s*concat\(\s*\n?\s*var\.frontend_urls\s*\n?\s*\)\s*$/m
+        if content.match?(concat_only)
+          content = content.sub(concat_only) { replacement.call(Regexp.last_match(1)) }
+          File.write(main_tf, content)
+          puts "  update  #{main_tf} (CloudFront CORS)" unless @quiet
+          return
+        end
+
+        puts "  skip    #{main_tf} (add CloudFront to frontend_urls manually for CORS)" unless @quiet
       end
     end
   end

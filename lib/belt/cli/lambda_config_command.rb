@@ -34,7 +34,7 @@ module Belt
       SUPPORTED_KEYS = %w[
         timeout memory_size env_vars env_keys
         s3_buckets dynamodb_tables sns_triggers sqs_triggers
-        reserved_concurrency ephemeral_storage
+        reserved_concurrency ephemeral_storage iam_policy_arns
       ].freeze
 
       def self.run(args)
@@ -112,6 +112,7 @@ module Belt
             sqs_triggers         SQS queue triggers
             reserved_concurrency Reserved concurrency limit
             ephemeral_storage    Ephemeral storage in MB (512-10240)
+            iam_policy_arns      Additional IAM policy ARNs (supports ref())
         HELP
       end
 

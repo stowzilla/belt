@@ -1,0 +1,63 @@
+# <%= gem_name %>
+
+<%= summary %>.
+
+A [Belt](https://github.com/stowzilla/belt) plugin. Add the gem to a Belt app, then run the generator to install infrastructure and app wiring.
+
+## Installation
+
+Add to your Belt app's Gemfile:
+
+```ruby
+gem '<%= gem_name %>'
+# Or during development:
+# gem '<%= gem_name %>', path: '../<%= gem_name %>'
+```
+
+Then:
+
+```bash
+bundle install
+belt generate <%= plugin_name %>
+```
+
+## What You Get
+
+### From the gem (no generation needed)
+
+```ruby
+# Configure
+<%= constant_path %>.configure do |config|
+  # config.option = value
+end
+```
+
+### From the generator (`belt g <%= plugin_name %>`)
+
+Edit `lib/belt/generators/<%= underscored %>_generator.rb` and templates under
+`lib/belt/<%= underscored %>/templates/` to define what gets installed into apps.
+
+Typical plugin generators create some combination of:
+
+- **Terraform module** — `infrastructure/modules/<%= plugin_name %>/`
+- **Lambda entry point** — `lambda/<%= plugin_name %>.rb`
+- **Lambda config** — `config/lambda/<%= plugin_name %>.yml`
+- **Route / schema injection** — updates to `config/routes.rb` / `config/contracts.rb`
+- **Optional controller overrides** — `belt g <%= plugin_name %> --controllers`
+
+## Development
+
+```bash
+bundle install
+bundle exec rspec
+```
+
+## Removing
+
+```bash
+belt destroy <%= plugin_name %>
+```
+
+## License
+
+MIT

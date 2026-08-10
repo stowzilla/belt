@@ -1,9 +1,288 @@
-function Home() {
+import { useEffect, useState } from 'react'
+import { apiClient } from '../lib/apiClient'
+
+// Mirrors lib/belt/assets/welcome.css so SPA and Lambda HTML welcome match.
+// All content lives in the hero overlay — no scroll under the poster.
+const welcomeStyles = `
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body, #root { height: 100%; }
+  .belt-welcome {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0b1220;
+    color: #2d3748;
+    min-height: 100vh;
+    height: 100%;
+    overflow: hidden;
+  }
+  .belt-welcome .hero {
+    position: relative;
+    width: 100%;
+    height: 100vh;
+    overflow: hidden;
+  }
+  .belt-welcome .hero-bg {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    /* Pin the logo / sky — crop hills at the bottom if the viewport is short */
+    object-position: top center;
+    display: block;
+  }
+  .belt-welcome .overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    padding: 1.35rem 1.6rem 1.25rem;
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-radius: 14px;
+    text-align: center;
+    max-width: 560px;
+    width: min(92vw, 560px);
+    max-height: min(92vh, 620px);
+    overflow: auto;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  }
+  .belt-welcome .overlay h1 {
+    font-size: 1.85rem;
+    font-weight: 700;
+    color: #2d3748;
+    margin-bottom: 0.3rem;
+    line-height: 1.2;
+  }
+  .belt-welcome .overlay .subtitle {
+    font-size: 0.95rem;
+    color: #4a5568;
+    line-height: 1.4;
+  }
+  .belt-welcome .stack-check {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    margin: 1rem 0 0.85rem;
+    flex-wrap: wrap;
+  }
+  .belt-welcome .check-item {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.7rem;
+    border-radius: 8px;
+    font-weight: 500;
+    font-size: 0.88rem;
+  }
+  .belt-welcome .check-pass {
+    background: rgba(39, 174, 96, 0.12);
+    border: 1px solid rgba(39, 174, 96, 0.35);
+    color: #1e8449;
+  }
+  .belt-welcome .check-neutral {
+    background: rgba(113, 128, 150, 0.1);
+    border: 1px solid rgba(113, 128, 150, 0.28);
+    color: #4a5568;
+  }
+  .belt-welcome .icon { font-size: 1rem; }
+  .belt-welcome .arrow { color: #718096; font-size: 1.05rem; }
+  .belt-welcome .next-steps {
+    text-align: left;
+    border-top: 1px solid rgba(45, 55, 72, 0.12);
+    padding-top: 0.75rem;
+    margin-top: 0.15rem;
+  }
+  .belt-welcome .next-steps h2 {
+    font-size: 0.92rem;
+    margin-bottom: 0.45rem;
+    color: #2d3748;
+    text-align: left;
+  }
+  .belt-welcome .next-steps ol {
+    padding-left: 1.2rem;
+    margin: 0;
+  }
+  .belt-welcome .next-steps li {
+    margin-bottom: 0.4rem;
+    color: #4a5568;
+    line-height: 1.4;
+    font-size: 0.88rem;
+  }
+  .belt-welcome .next-steps li:last-child { margin-bottom: 0; }
+  .belt-welcome .next-steps code {
+    background: rgba(99, 45, 145, 0.1);
+    padding: 0.12rem 0.35rem;
+    border-radius: 4px;
+    color: #632d91;
+    font-size: 0.78rem;
+    word-break: break-word;
+  }
+  .belt-welcome .footer-note {
+    margin-top: 0.75rem;
+    padding-top: 0.65rem;
+    border-top: 1px solid rgba(45, 55, 72, 0.1);
+    font-size: 0.78rem;
+    color: #718096;
+    text-align: center;
+  }
+  .belt-welcome .footer-note code {
+    background: rgba(45, 55, 72, 0.06);
+    padding: 0.08rem 0.3rem;
+    border-radius: 3px;
+    color: #4a5568;
+  }
+  .belt-welcome .status-main {
+    padding: 3rem 2rem;
+    text-align: center;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: #4a5568;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  .belt-welcome .status-main h1 {
+    font-size: 1.75rem;
+    color: #2d3748;
+    margin-bottom: 0.75rem;
+  }
+  .belt-welcome .error { color: #b91c1c; margin-top: 0.75rem; }
+  .belt-welcome .muted { color: #6b7280; margin-top: 0.5rem; font-size: 0.95rem; }
+  @media (max-height: 640px) {
+    .belt-welcome .overlay { padding: 1rem 1.15rem; }
+    .belt-welcome .overlay h1 { font-size: 1.5rem; }
+    .belt-welcome .overlay .subtitle { font-size: 0.88rem; }
+    .belt-welcome .stack-check { margin: 0.7rem 0 0.55rem; }
+    .belt-welcome .check-item { padding: 0.28rem 0.55rem; font-size: 0.8rem; }
+    .belt-welcome .next-steps li { font-size: 0.82rem; }
+  }
+`
+
+function StackItem({ ok, label }) {
+  // DynamoDB false is expected (no tables yet) — neutral, not a warning.
+  const className = ok ? 'check-item check-pass' : 'check-item check-neutral'
   return (
-    <main style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
-      <h1><%= @module_name %></h1>
-      <p>Your Belt app is running. Edit <code>src/pages/Home.jsx</code> to get started.</p>
-    </main>
+    <div className={className}>
+      <span className="icon" aria-hidden="true">{ok ? '✓' : '○'}</span>
+      <span>{label}</span>
+    </div>
+  )
+}
+
+// Turn "Label: belt some command" into mixed text + <code> when possible.
+function StepLine({ step }) {
+  const match = typeof step === 'string' ? step.match(/^(.*?):\s+(belt\s.+)$/) : null
+  if (match) {
+    return (
+      <>
+        {match[1]}: <code>{match[2]}</code>
+      </>
+    )
+  }
+  return step
+}
+
+function Home() {
+  const [welcome, setWelcome] = useState(null)
+  const [error, setError] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+
+    apiClient('/')
+      .then((data) => {
+        if (!cancelled) {
+          setWelcome(data)
+          setLoading(false)
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err.message || 'Failed to reach API')
+          setLoading(false)
+        }
+      })
+
+    return () => { cancelled = true }
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="belt-welcome">
+        <style>{welcomeStyles}</style>
+        <main className="status-main">
+          <p className="muted">Connecting to API…</p>
+        </main>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="belt-welcome">
+        <style>{welcomeStyles}</style>
+        <main className="status-main">
+          <h1><%= @module_name %></h1>
+          <p className="error">Could not load welcome data from the API.</p>
+          <p className="muted">{error}</p>
+          <p className="muted" style={{ marginTop: '1rem' }}>
+            Check <code>VITE_API_URL</code> (run <code>belt frontend env dev</code>) and that CORS allows this origin.
+          </p>
+        </main>
+      </div>
+    )
+  }
+
+  const stack = welcome.stack || {}
+  const dynamoOk = !!stack.dynamodb
+  const title = welcome.title || '<%= @module_name %>'
+  const subtitle = welcome.subtitle || 'Your Belt app is running.'
+
+  return (
+    <div className="belt-welcome">
+      <style>{welcomeStyles}</style>
+
+      <div className="hero">
+        {welcome.background_image ? (
+          <img
+            src={welcome.background_image}
+            alt="Belt"
+            className="hero-bg"
+          />
+        ) : (
+          <div className="hero-bg" style={{ minHeight: '100vh', background: '#1a202c' }} />
+        )}
+        <div className="overlay">
+          <h1>{title}</h1>
+          <p className="subtitle">{subtitle}</p>
+
+          <div className="stack-check">
+            <StackItem ok={!!stack.api_gateway} label="API Gateway" />
+            <span className="arrow">→</span>
+            <StackItem ok={!!stack.lambda} label="Lambda" />
+            <span className="arrow">→</span>
+            <StackItem ok={dynamoOk} label="DynamoDB" />
+          </div>
+
+          {Array.isArray(welcome.next_steps) && welcome.next_steps.length > 0 && (
+            <div className="next-steps">
+              <h2>Next Steps</h2>
+              <ol>
+                {welcome.next_steps.map((step, i) => (
+                  <li key={i}><StepLine step={step} /></li>
+                ))}
+              </ol>
+            </div>
+          )}
+
+          <p className="footer-note">
+            Edit <code>src/pages/Home.jsx</code> to replace this page.
+          </p>
+        </div>
+      </div>
+    </div>
   )
 }
 

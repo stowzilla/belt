@@ -1,0 +1,135 @@
+# AGENTS.md — <%= gem_name %>
+
+This file is for AI agents (and humans) working **on this Belt plugin gem**, not on a host Belt app.
+
+Host apps get their own `AGENTS.md` from `belt new`. Core belt docs live in the [belt](https://github.com/stowzilla/belt) repo (`README.md` + root `AGENTS.md`).
+
+## What this gem is
+
+**<%= gem_name %>** is a Belt plugin: optional capability that installs into Belt apps via the generator API.
+
+- **Runtime API** lives in the gem (`<%= constant_path %>`) — apps require the gem and call it directly
+- **Generator** copies only what the host app must own (Terraform, Lambda entrypoints, optional overrides)
+- After the gem is in an app's Gemfile, `belt generate <%= plugin_name %>` / `belt destroy <%= plugin_name %>` work automatically
+
+## Stack
+
+| Piece | Role |
+|-------|------|
+| **belt** | Host framework + CLI; discovers this generator via `GeneratorRegistry` |
+| **<%= gem_name %>** (this repo) | Plugin runtime + `belt generate <%= plugin_name %>` |
+| Host Belt app | Where Terraform / Lambda config land after generation |
+
+## Layout
+
+```
+<%= gem_name %>/
+├── <%= gem_name %>.gemspec
+├── lib/
+│   ├── <%= gem_name %>.rb              # require entrypoint
+│   └── belt/
+│       ├── <%= underscored %>.rb       # <%= constant_path %> API
+│       ├── <%= underscored %>/
+│       │   ├── configuration.rb
+│       │   ├── version.rb
+│       │   └── templates/              # ERB used by the generator
+│       └── generators/
+│           └── <%= underscored %>_generator.rb   # ← auto-discovered
+├── spec/
+├── README.md
+└── AGENTS.md                           # This file
+```
+
+**Do not rename** `lib/belt/generators/<%= underscored %>_generator.rb` or the class
+`Belt::Generators::<%= generator_class %>` — discovery depends on that path and name.
+
+## Generator contract
+
+Implemented in `lib/belt/generators/<%= underscored %>_generator.rb`:
+
+| Method | Required? | Purpose |
+|--------|-----------|---------|
+| `.run(args)` | **Yes** | Install into the current Belt app |
+| `.destroy(args)` | Recommended | Tear down what generate created |
+| `.description` | Recommended | One-liner for `belt generate --help` |
+
+Class must live in `Belt::Generators` and be named `<%= generator_class %>`.
+
+Reference implementations (copy structure, don't invent a parallel one):
+
+- `belt-messaging` — SMS via AWS End User Messaging
+- `belt-pay` — Stripe payments & subscriptions
+
+## Generator checklist
+
+When fleshing out the generator, typically install:
+
+1. **Terraform module** → `infrastructure/modules/<%= plugin_name %>/` (`main.tf`, `variables.tf`, `outputs.tf`)
+2. **Lambda config** → `config/lambda/<%= plugin_name %>.yml` (timeout, memory, env, triggers)
+3. **Lambda entrypoint** → `lambda/<%= plugin_name %>.rb` using `Belt::LambdaHandler`
+4. **Routes / schema** → inject into `config/routes.rb` or `config/contracts.rb` when needed
+5. **Optional overrides** → `--controllers` (or similar) for app-local subclasses — keep defaults in the gem
+6. **Destroy path** → `belt destroy <%= plugin_name %>` removes generated artifacts
+7. **Help** → `.description` plus `--help` / `-h` explaining files and next steps
+
+**Principle:** runtime stays in the gem; generators copy only host-owned infra and optional overrides (same idea as `rails g devise:views`).
+
+## Local development
+
+```bash
+bundle install
+bundle exec rspec
+```
+
+Wire into a Belt app while iterating:
+
+```ruby
+# In the app Gemfile
+gem "<%= gem_name %>", path: "../<%= gem_name %>"
+```
+
+```bash
+cd /path/to/belt-app
+bundle install
+belt generate --help          # should list "<%= plugin_name %>" under Gem Generators
+belt generate <%= plugin_name %>
+belt destroy <%= plugin_name %>
+```
+
+`belt deploy` vendors `path:` gems into `vendor/cache` so Lambda packaging works without publishing.
+
+## Configuration pattern
+
+```ruby
+<%= constant_path %>.configure do |config|
+  # config.option = value
+end
+```
+
+Extend `lib/belt/<%= underscored %>/configuration.rb` and document options in README.
+
+## Conventions
+
+1. Follow patterns from `belt-messaging` / `belt-pay` before inventing new structure
+2. Keep the generator idempotent where practical; support `--force` for overwrites
+3. Specs under `spec/` for configuration and any non-trivial generator logic
+4. User-facing changes → `CHANGELOG.md`
+5. Never commit secrets, API keys, or real AWS account IDs
+6. Prefer gem defaults + optional generate flags over dumping all code into the app
+
+## Where to look first
+
+| Task | Start here |
+|------|------------|
+| Runtime API | `lib/belt/<%= underscored %>.rb`, `lib/belt/<%= underscored %>/` |
+| What gets installed into apps | `lib/belt/generators/<%= underscored %>_generator.rb` |
+| Generator ERB templates | `lib/belt/<%= underscored %>/templates/` |
+| Version / gemspec | `lib/belt/<%= underscored %>/version.rb`, `<%= gem_name %>.gemspec` |
+| How belt discovers this | belt gem: `Belt::CLI::GeneratorRegistry` |
+
+## Do not
+
+- Move the generator file out of `lib/belt/generators/*_generator.rb`
+- Require a manual initializer in the host app for registration — discovery is automatic
+- Put host-app deploy runbooks here — those belong in the app's `AGENTS.md`
+- Duplicate large runtime classes into generated app files unless the user opts in (e.g. `--controllers`)

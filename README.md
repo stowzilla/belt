@@ -71,23 +71,30 @@ require "belt"
 class PostsController < BeltController::Base
   before_action :authenticate!
 
+  # Implicit response: assigns become the JSON body
+  # → { "posts": [ { "id": "...", "title": "..." }, ... ] }
   def index
-    posts = Post.where(user_id: current_user_id, index: "UserIndex")
-    success_response(posts.map(&:attributes))
+    @posts = Post.where(user_id: current_user_id, index: "UserIndex")
   end
 
   def show
-    post = Post.find(params["id"])
-    success_response(post.attributes)
+    @post = Post.find(params["id"])
   end
 
+  # Implicit body + non-200 status
   def create
     attrs = params.require(:post).permit(:title, :body).to_h
-    post = Post.create!(attrs.merge(user_id: current_user_id))
-    success_response(post.attributes, 201)
+    @post = Post.create!(attrs.merge(user_id: current_user_id))
+    response_status :created
+  end
+
+  def destroy
+    Post.find(params["id"]).destroy
+    head :no_content
   end
 end
 ```
+
 
 ### 4. Lambda entry point
 
@@ -98,7 +105,7 @@ require "belt"
 
 include Belt::LambdaHandler
 
-ROUTER = Belt::ActionRouter.new(routes: Routes::API, namespace: "api")
+ROUTER = Belt::ActionRouter.new(routes: Routes::API, gateway: "api")
 
 def execute(path:, body:, event:)
   ROUTER.route(event: event, body: body)
@@ -133,7 +140,7 @@ Define routes in `infrastructure/routes.tf.rb`:
 
 ```ruby
 Belt.application.routes.draw do
-  namespace :api do
+  gateway :api do
     resources :posts, only: [:index, :show, :create]
   end
 end
@@ -162,6 +169,45 @@ The provider will:
 - Create API Gateway routes matching your DSL
 - Generate IAM policies for DynamoDB table access
 - Set up CloudWatch log groups
+
+### Route DSL Keywords
+
+The routes DSL has four keywords that map to infrastructure and code organization:
+
+| Keyword | Purpose | Affects Lambda? |
+|---------|---------|-----------------|
+| `gateway` | Creates an API Gateway + default Lambda | Yes — sets the default Lambda for all routes inside |
+| `function` | Routes to a different Lambda | Yes — overrides the gateway's default |
+| `namespace` | Adds path prefix + controller module | No — Rails-like code organization only |
+| `scope` | Flexible path/module/auth grouping | No — grouping and shared options only |
+
+**Example combining all four:**
+
+```ruby
+Belt.application.routes.draw do
+  gateway :api, auth: :cognito do
+    resources :posts                    # → lambda: api, path: /posts, controller: posts
+
+    namespace :admin do
+      resources :users                  # → lambda: api, path: /admin/users, controller: admin/users
+    end
+
+    function :worker do
+      resources :jobs                   # → lambda: worker, path: /jobs, controller: jobs
+
+      namespace :internal do
+        resources :tasks                # → lambda: worker, path: /internal/tasks, controller: internal/tasks
+      end
+    end
+
+    scope path: 'v2', module: 'legacy' do
+      resources :widgets                # → lambda: api, path: /v2/widgets, controller: legacy/widgets
+    end
+  end
+end
+```
+
+**Key point:** `namespace` and `scope` are purely organizational — they affect URL paths and controller module resolution but never change which Lambda handles the request. Use `function` when you need routes to go to a different Lambda.
 
 ## BeltController Features
 
@@ -199,9 +245,42 @@ end
 
 ```ruby
 success_response({ id: "123", name: "Example" })       # 200 JSON with CORS
-success_response({ id: "123" }, 201)                    # 201 Created
-error_response("Not found", 404)                        # 404 JSON error
+success_response({ id: "123" }, :created)               # 201 Created (symbol or int)
+error_response("Not found", :not_found)                 # 404 JSON error
+error_response("Nope", :unprocessable_entity)           # 422
 html_response("<h1>Hello</h1>")                         # 200 HTML with CORS
+head :no_content                                        # 204 empty body
+head :created                                           # 201 empty body
+```
+
+### Default format (API vs HTML)
+
+```ruby
+# App-wide — typically in lambda/config/environment.rb
+Belt.configure do |config|
+  config.default_format = :json   # default
+end
+
+# Per-controller override
+class PagesController < ApplicationController
+  self.default_format = :html
+end
+```
+
+- **`:json`** (default): action assigns → `success_response({ posts: [...] })`
+- **`:html`**: action assigns stay on the controller; Belt implicitly `render`s
+  `views/<controller>/<action>.html.erb`. Missing template raises `Belt::TemplateNotFound`
+  (no silent JSON fallback).
+- Explicit helpers always win: `success_response`, `error_response`, `html_response`,
+  `render`, `head`.
+
+### Non-200 with implicit assigns
+
+```ruby
+def create
+  @post = Post.create!(...)
+  response_status :created   # → 201 + { post: {...} }
+end
 ```
 
 ## Controller Discovery
@@ -383,7 +462,7 @@ The command expects `infrastructure/routes.tf.rb` in the current working directo
 
 ```ruby
 Belt.application.routes.draw do
-  namespace :api do
+  gateway :api do
     resources :posts, only: [:index, :show, :create, :destroy]
     resource :profile, only: [:show, :update]
     get "health", action: :health
@@ -534,6 +613,175 @@ These are set via Terraform variables in each environment's `terraform.tfvars`. 
 ### First Deploy Note
 
 The backup phase reads table names from Terraform outputs. On a brand-new environment that has never been deployed, there are no outputs yet — Belt will warn and skip the backup phase gracefully. After the first successful deploy, backups run normally on subsequent deploys.
+
+## Plugins
+
+Belt is designed to stay lean. Optional capabilities ship as **separate gems** that plug into the CLI and runtime the same way Rails engines and generators do.
+
+### Official / example plugins
+
+| Gem | Purpose | Status |
+|-----|---------|--------|
+| [`belt-messaging`](https://github.com/stowzilla/belt-messaging) | Two-way SMS via AWS End User Messaging (Pinpoint) | Early (not production-hardened) |
+| [`belt-pay`](https://github.com/stowzilla/belt-pay) | Stripe payments & subscriptions | Early (not production-hardened) |
+
+Install a plugin in a Belt app:
+
+```ruby
+# Gemfile
+gem "belt-messaging"
+# gem "belt-pay"
+```
+
+```bash
+bundle install
+belt generate messaging   # or: belt g pay
+belt generate --help      # lists built-ins + gem generators
+```
+
+### How plugins register
+
+No central registry file, no initializer hook. Belt discovers generators by scanning loaded gems:
+
+1. Gem is in the app `Gemfile` and bundled
+2. Gem ships a file at `lib/belt/generators/<name>_generator.rb`
+3. Class lives in `Belt::Generators`, named `<Name>Generator`
+4. Implements `.run(args)` (required), `.destroy(args)` and `.description` (optional)
+
+That is the whole contract. After `bundle install`, `belt generate <name>` and `belt destroy <name>` just work.
+
+See `Belt::CLI::GeneratorRegistry` and the CHANGELOG entry for **0.1.13 Generator Extension API**.
+
+### Plugin layout (canonical)
+
+```
+belt-messaging/
+├── belt-messaging.gemspec
+├── lib/
+│   ├── belt-messaging.rb              # require entrypoint
+│   └── belt/
+│       ├── messaging.rb               # Belt::Messaging API
+│       ├── messaging/
+│       │   ├── configuration.rb
+│       │   ├── version.rb
+│       │   ├── controllers/           # default controllers (optional)
+│       │   └── templates/             # ERB templates for the generator
+│       │       ├── terraform/
+│       │       ├── lambda/
+│       │       ├── config/
+│       │       └── controllers/
+│       └── generators/
+│           └── messaging_generator.rb # ← auto-discovered
+└── spec/
+```
+
+**Runtime code stays in the gem.** Generators copy only what the host app must own (Terraform modules, Lambda entrypoints, optional controller overrides). Prefer gem defaults + `belt g <plugin> --controllers` over dumping everything into the app (same idea as `rails g devise:views`).
+
+### Creating a new plugin
+
+Scaffold a ready-to-fill gem (Rails-style `plugin new`):
+
+```bash
+belt plugin new notifications
+# → ./belt-notifications/
+
+belt plugin new pay --path ~/Code --summary "Stripe payments for Belt"
+# → ~/Code/belt-pay/
+```
+
+Then:
+
+```bash
+cd belt-notifications
+bundle install
+# implement lib/belt/notifications/* and the generator
+```
+
+Point a Belt app at it while developing:
+
+```ruby
+# In the app Gemfile
+gem "belt-notifications", path: "../belt-notifications"
+```
+
+```bash
+bundle install
+belt generate notifications
+```
+
+When packaging Lambdas, `belt deploy` vendors path gems into `vendor/cache` so conveyor-belt can package them.
+
+### Generator checklist (for humans and agents)
+
+A solid plugin generator typically:
+
+1. **Terraform module** → `infrastructure/modules/<name>/` (`main.tf`, `variables.tf`, `outputs.tf`)
+2. **Lambda config** → `config/lambda/<name>.yml` (timeout, memory, env, triggers)
+3. **Lambda entrypoint** → `lambda/<name>.rb` using `Belt::LambdaHandler`
+4. **Routes / schema** → inject into `config/routes.tf.rb` or `infrastructure/schema.tf.rb` when needed
+5. **Optional overrides** → `--controllers` flag for app-local subclasses
+6. **Destroy path** → `belt destroy <name>` removes what generate created
+7. **Help text** → `.description` + `--help` explaining what was installed and next steps
+
+Copy from `belt-messaging` or `belt-pay` rather than inventing a new structure.
+
+## Contributing
+
+Bug reports and pull requests are welcome on [GitHub](https://github.com/stowzilla/belt).
+
+### Development setup
+
+```bash
+git clone https://github.com/stowzilla/belt.git
+cd belt
+bundle install
+bundle exec rspec
+bundle exec rubocop
+```
+
+### Guidelines
+
+1. **Branch from `master`** — open a PR against `master`
+2. **Keep changes focused** — one concern per PR when practical
+3. **Follow existing patterns** — look at neighboring files and `lib/belt/cli/` before inventing new ones
+4. **Tests + lint** — run `bundle exec rspec` and `bundle exec rubocop` before opening (or updating) a PR. CI requires both (plus `bundler-audit`); failing checks block merge on `master`
+5. **Changelog** — note user-facing changes in `CHANGELOG.md` under the next version / Unreleased
+6. **No secrets** — never commit AWS keys, tokens, or real account IDs
+
+### Project layout (for contributors)
+
+| Path | What lives there |
+|------|------------------|
+| `lib/belt.rb` | Public require entry |
+| `lib/belt/` | Framework core (controller, router, handler, observability) |
+| `lib/belt/cli/` | CLI commands (`new`, `generate`, `deploy`, `plugin`, …) |
+| `lib/belt_controller/` | `BeltController::Base` |
+| `lib/templates/` | ERB templates for `belt new`, generators, plugin scaffold |
+| `exe/belt` | CLI executable |
+| `spec/` | RSpec suite |
+| `AGENTS.md` | Agent-oriented map of this gem (layout, CLI, plugin contract) |
+
+AI / coding agents: start with **[AGENTS.md](AGENTS.md)**. Belt apps and plugins scaffolded by the CLI get their own `AGENTS.md` as well (`belt new`, `belt plugin new`).
+
+### Local gem development against an app
+
+```ruby
+# In a Belt app's Gemfile
+gem "belt", path: "../belt"
+```
+
+`belt deploy` detects `path:` gems and materializes them into `vendor/cache` for Lambda packaging so you can iterate without publishing a gem for every try.
+
+### Contributing a plugin
+
+Plugins are separate repositories (not vendored into this repo). To add a new first-class capability:
+
+1. `belt plugin new <name>` (or copy `belt-messaging` / `belt-pay`)
+2. Implement the runtime API + generator contract above
+3. Document install steps in the plugin README (`gem …` → `belt generate …`)
+4. Open a PR on the plugin repo; optionally link it from this README's plugin table
+
+Questions about plugin design or core changes: open a GitHub issue or discuss in the project Discord.
 
 ## License
 

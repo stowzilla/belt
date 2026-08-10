@@ -1,7 +1,10 @@
 # frozen_string_literal: true
 
+require 'activeitem'
 require_relative 'belt/version'
 require_relative 'belt/root'
+require_relative 'belt/configuration'
+require_relative 'belt/http_status'
 require_relative 'belt/parameters'
 require_relative 'belt/observability'
 require_relative 'belt/lambda_handler'
@@ -17,6 +20,20 @@ module Belt
 
   class << self
     attr_reader :controller_paths
+
+    # Runtime configuration (lambda/config/environment.rb). Separate from the
+    # CLI sandboxed DSL in infrastructure/<env>/belt.rb.
+    def configuration
+      @configuration ||= Configuration.new
+    end
+
+    def configure
+      yield configuration
+    end
+
+    def reset_configuration!
+      @configuration = Configuration.new
+    end
 
     # Auto-discover lambda/controllers dirs in all loaded gems
     def gem_controller_paths

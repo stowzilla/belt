@@ -6,7 +6,7 @@ This file explains the project structure, tooling, and conventions for AI agents
 
 - **Belt** — CLI and runtime framework (like Rails for serverless). Provides Lambda handler, action router, controller base class, and CLI tooling.
 - **ActiveItem** — ActiveRecord-like ORM for DynamoDB. Models inherit from `ActiveItem::Base`.
-- **Conveyor Belt** — Terraform provider that reads a Ruby DSL (`routes.tf.rb`) and creates API Gateway + Lambda + IAM infrastructure.
+- **Conveyor Belt** — Terraform provider that reads a Ruby DSL (`routes.rb`) and creates API Gateway + Lambda + IAM infrastructure.
 - **Lambda Loadout** — Lambda cold-start optimizer (auto-required by Belt).
 
 ## Project Structure
@@ -23,8 +23,8 @@ This file explains the project structure, tooling, and conventions for AI agents
 │   ├── lib/routes/                     # Route manifests (auto-generated)
 │   └── Gemfile                         # Lambda-specific dependencies
 ├── config/
-│   ├── routes.tf.rb                    # API routes (Conveyor Belt DSL)
-│   ├── schema.tf.rb                    # Model schema definitions
+│   ├── routes.rb                       # API routes (Conveyor Belt DSL)
+│   ├── contracts.rb                    # API request/response contracts
 │   └── lambda/                         # Per-lambda config (like database.yml)
 │       └── api.yml                     # Lambda timeout, memory, env vars
 ├── infrastructure/
@@ -53,16 +53,16 @@ belt output <env>                                      # terraform output
 
 ## How Routing Works
 
-1. `config/routes.tf.rb` defines routes using a DSL:
+1. `config/routes.rb` defines routes using a DSL:
    ```ruby
    Belt.application.routes.draw do
-     namespace :<%= @app_name %> do
+     gateway :<%= @app_name %> do
        resources :things, tables: [:things]
      end
    end
    ```
 
-2. Conveyor Belt creates an API Gateway where the namespace becomes a base path mapping. URLs look like:
+2. Conveyor Belt creates an API Gateway where the gateway name becomes a base path mapping. URLs look like:
    ```
    https://api.<env>.example.com/<%= @app_name %>/things
    ```

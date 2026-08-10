@@ -1,82 +1,136 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  height: 100%;
+}
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #f8f9fa;
+  background: #0b1220;
   color: #2d3748;
   min-height: 100vh;
+  overflow: hidden;
 }
 
-/* Hero section — full width background image */
+/* Hero fills the viewport — all content lives in the overlay (no scroll) */
 .hero {
   position: relative;
   width: 100%;
+  height: 100vh;
   overflow: hidden;
 }
 .hero-bg {
   width: 100%;
-  height: auto;
+  height: 100%;
+  object-fit: cover;
+  /* Pin the logo / sky — crop hills at the bottom if the viewport is short */
+  object-position: top center;
   display: block;
 }
 .overlay {
   position: absolute;
-  top: 35%;
+  top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  padding: 2rem 3rem;
-  background: rgba(255, 255, 255, 0.50);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  border-radius: 12px;
+  padding: 1.35rem 1.6rem 1.25rem;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 14px;
   text-align: center;
-  max-width: 600px;
-  width: 90%;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  max-width: 560px;
+  width: min(92vw, 560px);
+  max-height: min(92vh, 620px);
+  overflow: auto;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
 }
 .overlay h1 {
-  font-size: 2.2rem;
+  font-size: 1.85rem;
   font-weight: 700;
   color: #2d3748;
-  margin-bottom: 0.4rem;
+  margin-bottom: 0.3rem;
+  line-height: 1.2;
 }
 .overlay .subtitle {
-  font-size: 1.1rem;
+  font-size: 0.95rem;
   color: #4a5568;
+  line-height: 1.4;
 }
 
-/* Content below the hero */
-.container {
-  max-width: 700px;
-  margin: 0 auto;
-  padding: 2rem;
-}
+/* Stack + next steps sit inside the white card */
 .stack-check {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.75rem;
-  margin-bottom: 2rem;
+  gap: 0.4rem;
+  margin: 1rem 0 0.85rem;
   flex-wrap: wrap;
 }
 .check-item {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.5rem 1rem;
+  gap: 0.35rem;
+  padding: 0.35rem 0.7rem;
   border-radius: 8px;
   font-weight: 500;
+  font-size: 0.88rem;
 }
 .check-pass {
-  background: rgba(39, 174, 96, 0.1);
-  border: 1px solid rgba(39, 174, 96, 0.3);
+  background: rgba(39, 174, 96, 0.12);
+  border: 1px solid rgba(39, 174, 96, 0.35);
   color: #1e8449;
+}
+/* Optional / empty DynamoDB — not an error, just not in use yet */
+.check-neutral {
+  background: rgba(113, 128, 150, 0.1);
+  border: 1px solid rgba(113, 128, 150, 0.28);
+  color: #4a5568;
 }
 .check-warn {
   background: rgba(243, 156, 18, 0.1);
   border: 1px solid rgba(243, 156, 18, 0.3);
   color: #d68910;
 }
-.icon { font-size: 1.1rem; }
-.arrow { color: #718096; font-size: 1.2rem; }
+.icon { font-size: 1rem; }
+.arrow { color: #718096; font-size: 1.05rem; }
+
+.next-steps {
+  text-align: left;
+  border-top: 1px solid rgba(45, 55, 72, 0.12);
+  padding-top: 0.75rem;
+  margin-top: 0.15rem;
+}
+.next-steps h2 {
+  font-size: 0.92rem;
+  margin-bottom: 0.45rem;
+  color: #2d3748;
+  text-align: left;
+}
+.next-steps ol {
+  padding-left: 1.2rem;
+  margin: 0;
+}
+.next-steps li {
+  margin-bottom: 0.4rem;
+  color: #4a5568;
+  line-height: 1.4;
+  font-size: 0.88rem;
+}
+.next-steps li:last-child { margin-bottom: 0; }
+.next-steps code,
+.info code {
+  background: rgba(99, 45, 145, 0.1);
+  padding: 0.12rem 0.35rem;
+  border-radius: 4px;
+  color: #632d91;
+  font-size: 0.78rem;
+  word-break: break-word;
+}
+
+/* Legacy blocks (local server welcome, older layouts) */
+.container {
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 2rem;
+}
 .info {
   background: #ffffff;
   border: 1px solid #e2e8f0;
@@ -87,26 +141,44 @@ body {
 .info p { margin-bottom: 0.5rem; color: #4a5568; }
 .info p:last-child { margin-bottom: 0; }
 .info strong { color: #2d3748; }
-.info code {
-  background: rgba(99, 45, 145, 0.08);
-  padding: 0.15rem 0.4rem;
+.dynamodb-hint {
+  text-align: center;
+  margin: 0.5rem 0;
+  color: #4a5568;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+.dynamodb-hint code {
+  background: rgba(99, 45, 145, 0.1);
+  padding: 0.12rem 0.35rem;
   border-radius: 4px;
   color: #632d91;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
+  word-break: break-word;
 }
-.next-steps {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 1.5rem;
+.footer-note {
+  margin-top: 0.75rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid rgba(45, 55, 72, 0.1);
+  font-size: 0.78rem;
+  color: #718096;
+  text-align: center;
 }
-.next-steps h2 { font-size: 1.1rem; margin-bottom: 1rem; color: #2d3748; }
-.next-steps ol { padding-left: 1.5rem; }
-.next-steps li { margin-bottom: 0.6rem; color: #4a5568; line-height: 1.5; }
-.next-steps code {
-  background: rgba(99, 45, 145, 0.08);
-  padding: 0.15rem 0.4rem;
-  border-radius: 4px;
-  color: #632d91;
-  font-size: 0.85rem;
+.footer-note code {
+  background: rgba(45, 55, 72, 0.06);
+  padding: 0.08rem 0.3rem;
+  border-radius: 3px;
+  color: #4a5568;
+}
+
+/* Tiny viewports: shrink type a bit so everything still fits */
+@media (max-height: 640px) {
+  .overlay {
+    padding: 1rem 1.15rem;
+  }
+  .overlay h1 { font-size: 1.5rem; }
+  .overlay .subtitle { font-size: 0.88rem; }
+  .stack-check { margin: 0.7rem 0 0.55rem; }
+  .check-item { padding: 0.28rem 0.55rem; font-size: 0.8rem; }
+  .next-steps li { font-size: 0.82rem; }
 }

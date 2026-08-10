@@ -4,55 +4,105 @@ require_relative 'application_controller'
 
 module <%= @module_name %>Controllers
   class <%= @class_name %>sController < ApplicationController
+<% if @references.any? -%>
+<% parent = @references.first -%>
+<% parent_resource = Belt::Inflector.pluralize(parent[:referenced_model]) -%>
+<% parent_class = Belt::Inflector.classify(parent[:referenced_model]) -%>
+    # GET /<%= parent_resource %>/:id/<%= @resource_name %>
+    def index
+      @<%= @resource_name %> = <%= @class_name %>.where(<%= parent[:referenced_model] %>_id: params[:<%= parent[:referenced_model] %>_id], index: '<%= Belt::Inflector.classify(parent[:referenced_model]) %>Index')
+    end
+
+    # POST /<%= parent_resource %>/:id/<%= @resource_name %>
+    def create
+      @<%= @singular_name %> = <%= @class_name %>.new(<%= (["#{parent[:referenced_model]}_id: params[:#{parent[:referenced_model]}_id]"] + @regular_fields.map { |f| "#{f[:name]}: params[:#{f[:name]}]" }).join(', ') %>)
+
+      if @<%= @singular_name %>.save
+        response_status :created
+      else
+        error_response(@<%= @singular_name %>.errors.full_messages.join(', '), :unprocessable_entity)
+      end
+    end
+
+    # GET /<%= parent_resource %>/:id/<%= @resource_name %>/:<%= @singular_name %>_id
+    def show
+      @<%= @singular_name %> = <%= @class_name %>.find(params[:<%= @singular_name %>_id])
+      return error_response('<%= @class_name %> not found', :not_found) unless @<%= @singular_name %>
+    end
+
+    # PUT /<%= parent_resource %>/:id/<%= @resource_name %>/:<%= @singular_name %>_id
+    def update
+      @<%= @singular_name %> = <%= @class_name %>.find(params[:<%= @singular_name %>_id])
+      return error_response('<%= @class_name %> not found', :not_found) unless @<%= @singular_name %>
+
+      attrs = {}
+<% @regular_fields.each do |field| -%>
+      attrs[:<%= field[:name] %>] = params[:<%= field[:name] %>] if params.key?(:<%= field[:name] %>)
+<% end -%>
+
+      if @<%= @singular_name %>.update(attrs)
+        # implicit response
+      else
+        error_response(@<%= @singular_name %>.errors.full_messages.join(', '), :unprocessable_entity)
+      end
+    end
+
+    # DELETE /<%= parent_resource %>/:id/<%= @resource_name %>/:<%= @singular_name %>_id
+    def destroy
+      <%= @singular_name %> = <%= @class_name %>.find(params[:<%= @singular_name %>_id])
+      return error_response('<%= @class_name %> not found', :not_found) unless <%= @singular_name %>
+
+      <%= @singular_name %>.destroy
+      head :no_content
+    end
+<% else -%>
     # GET /<%= @resource_name %>
     def index
-      <%= @resource_name %> = <%= @class_name %>.all
-      success_response(<%= @resource_name %>: <%= @resource_name %>.map(&:to_h))
+      @<%= @resource_name %> = <%= @class_name %>.all
     end
 
     # POST /<%= @resource_name %>
     def create
-      <%= @singular_name %> = <%= @class_name %>.new(<%= @fields.map { |f| "#{f[:name]}: params[:#{f[:name]}]" }.join(', ') %>)
+      @<%= @singular_name %> = <%= @class_name %>.new(<%= @regular_fields.map { |f| "#{f[:name]}: params[:#{f[:name]}]" }.join(', ') %>)
 
-      if <%= @singular_name %>.save
-        success_response(<%= @singular_name %>: <%= @singular_name %>.to_h)
+      if @<%= @singular_name %>.save
+        response_status :created
       else
-        error_response(<%= @singular_name %>.errors.full_messages.join(', '), 422)
+        error_response(@<%= @singular_name %>.errors.full_messages.join(', '), :unprocessable_entity)
       end
     end
 
     # GET /<%= @resource_name %>/:<%= @singular_name %>_id
     def show
-      <%= @singular_name %> = <%= @class_name %>.find(params[:<%= @singular_name %>_id])
-      return error_response('<%= @class_name %> not found', 404) unless <%= @singular_name %>
-
-      success_response(<%= @singular_name %>: <%= @singular_name %>.to_h)
+      @<%= @singular_name %> = <%= @class_name %>.find(params[:<%= @singular_name %>_id])
+      return error_response('<%= @class_name %> not found', :not_found) unless @<%= @singular_name %>
     end
 
     # PUT /<%= @resource_name %>/:<%= @singular_name %>_id
     def update
-      <%= @singular_name %> = <%= @class_name %>.find(params[:<%= @singular_name %>_id])
-      return error_response('<%= @class_name %> not found', 404) unless <%= @singular_name %>
+      @<%= @singular_name %> = <%= @class_name %>.find(params[:<%= @singular_name %>_id])
+      return error_response('<%= @class_name %> not found', :not_found) unless @<%= @singular_name %>
 
       attrs = {}
-<% @fields.each do |field| -%>
+<% @regular_fields.each do |field| -%>
       attrs[:<%= field[:name] %>] = params[:<%= field[:name] %>] if params.key?(:<%= field[:name] %>)
 <% end -%>
 
-      if <%= @singular_name %>.update(attrs)
-        success_response(<%= @singular_name %>: <%= @singular_name %>.to_h)
+      if @<%= @singular_name %>.update(attrs)
+        # implicit response
       else
-        error_response(<%= @singular_name %>.errors.full_messages.join(', '), 422)
+        error_response(@<%= @singular_name %>.errors.full_messages.join(', '), :unprocessable_entity)
       end
     end
 
     # DELETE /<%= @resource_name %>/:<%= @singular_name %>_id
     def destroy
       <%= @singular_name %> = <%= @class_name %>.find(params[:<%= @singular_name %>_id])
-      return error_response('<%= @class_name %> not found', 404) unless <%= @singular_name %>
+      return error_response('<%= @class_name %> not found', :not_found) unless <%= @singular_name %>
 
       <%= @singular_name %>.destroy
-      success_response(message: '<%= @class_name %> deleted')
+      head :no_content
     end
+<% end -%>
   end
 end

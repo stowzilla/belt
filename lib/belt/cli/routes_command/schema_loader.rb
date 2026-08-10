@@ -8,14 +8,14 @@ module Belt
         private
 
         def load_schema_models(routes_file)
-          schema_file = resolve_schema_file(routes_file)
+          schema_file = resolve_contracts_file(routes_file)
           return [] unless schema_file && File.exist?(schema_file)
 
           Belt.instance_variable_set(:@application, nil)
           begin
             eval(File.read(schema_file), binding, schema_file) # rubocop:disable Security/Eval
           rescue StandardError => e
-            warn "Warning: Failed to load schema file #{schema_file}: #{e.message}"
+            warn "Warning: Failed to load contracts file #{schema_file}: #{e.message}"
             return []
           end
 
@@ -23,15 +23,25 @@ module Belt
           build_models_from_schema(schema)
         end
 
-        def resolve_schema_file(routes_file)
+        def resolve_contracts_file(routes_file)
           schema_file = @options[:schema_file]
           unless schema_file
             routes_dir = File.dirname(File.expand_path(routes_file))
-            schema_file = File.join(routes_dir, 'schema.tf.rb')
+            # Check new convention first, then legacy names
+            candidates = [
+              File.join(routes_dir, 'contracts.rb'),
+              File.join(routes_dir, 'contracts.tf.rb'),
+              File.join(routes_dir, 'schema.tf.rb')
+            ]
+            schema_file = candidates.find { |f| File.exist?(f) }
+
             # Fall back to infrastructure/ if not found in same directory as routes
-            unless File.exist?(schema_file)
-              alt = 'infrastructure/schema.tf.rb'
-              schema_file = alt if File.exist?(alt)
+            unless schema_file
+              legacy_candidates = [
+                'infrastructure/contracts.rb',
+                'infrastructure/schema.tf.rb'
+              ]
+              schema_file = legacy_candidates.find { |f| File.exist?(f) }
             end
           end
           schema_file

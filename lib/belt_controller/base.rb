@@ -7,11 +7,13 @@ require_relative '../belt/helpers/response'
 require_relative '../belt/helpers/error_logging'
 require_relative '../belt/helpers/cors_origin'
 require_relative '../belt/rendering'
+require_relative 'implicit_response'
 
 module BeltController
   class Base
     include Belt::Helpers::Response
     include Belt::Rendering
+    include ImplicitResponse
 
     attr_reader :event, :body
 
@@ -46,6 +48,25 @@ module BeltController
 
       def skip_before_action(method_name, only: nil, except: nil)
         skipped_before_actions << { method: method_name, only: only&.map(&:to_sym), except: except&.map(&:to_sym) }
+      end
+
+      # Implicit response format when the action does not call success_response /
+      # error_response / html_response / render / head.
+      # Inherits up the controller chain; falls back to Belt.configuration.default_format.
+      def default_format
+        return @default_format if defined?(@default_format)
+        return superclass.default_format if superclass.respond_to?(:default_format)
+
+        Belt.configuration.default_format
+      end
+
+      def default_format=(value)
+        format = value.to_sym
+        unless Belt::Configuration::VALID_FORMATS.include?(format)
+          raise ArgumentError, "default_format must be :json or :html (got #{value.inspect})"
+        end
+
+        @default_format = format
       end
 
       def all_before_actions
@@ -115,9 +136,11 @@ module BeltController
       end
 
       run_before_actions(action_sym)
+      # Snapshot ivars so we only auto-serialize assigns set by the action (Rails-style)
+      @__assigns_before = instance_variables
       result = send(action_sym)
       run_after_actions(action_sym)
-      result
+      finalize_response(result)
     rescue StandardError => e
       handle_exception(e)
     end

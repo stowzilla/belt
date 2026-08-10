@@ -31,7 +31,8 @@ module Belt
       end
 
       def run
-        validate!
+        return unless validate!
+
         models = parse_models
         if models.empty?
           puts "No models found in #{MODELS_DIR}/" unless @quiet
@@ -49,11 +50,11 @@ module Belt
             abort "Error: No models directory found at #{MODELS_DIR}/. " \
                   'Run `belt generate model` to create your first model.'
           end
-          return
+          return false
         end
-        return if Dir.exist?(MODULE_DIR)
+        return true if Dir.exist?(MODULE_DIR)
 
-        return if @quiet
+        return false if @quiet
 
         abort "Error: Module directory not found at #{MODULE_DIR}/.\n" \
               'Run `belt new` to create a project with the correct structure.'
@@ -83,6 +84,12 @@ module Belt
         # Extract indexes() declaration
         indexes = extract_indexes(content)
 
+        # Extract belongs_to associations and generate convention indexes
+        indexes += extract_belongs_to_indexes(content)
+
+        # Deduplicate by index name
+        indexes.uniq! { |idx| idx[:name] }
+
         { name: model_name, indexes: indexes }
       end
 
@@ -103,6 +110,24 @@ module Belt
           next unless partition_key
 
           indexes << { name: name, partition_key: partition_key, sort_key: sort_key }
+        end
+
+        indexes
+      end
+
+      # Extract belongs_to declarations and generate convention-based GSI indexes.
+      # belongs_to :conversation → ConversationIndex with partition_key: 'conversationId'
+      def extract_belongs_to_indexes(content)
+        indexes = []
+
+        # Skip commented-out belongs_to lines
+        content.lines.reject { |line| line.strip.start_with?('#') }.join
+               .scan(/belongs_to\s+:(\w+)/) do |match|
+          association_name = match[0]
+          index_name = "#{Belt::Inflector.classify(association_name)}Index"
+          partition_key = "#{association_name}Id"
+
+          indexes << { name: index_name, partition_key: partition_key, sort_key: nil }
         end
 
         indexes
@@ -218,8 +243,9 @@ module Belt
       end
 
       def table_name(model_name)
-        table_suffix = Belt::Inflector.pluralize(model_name).tr('_', '-')
-        "${var.app_name}-${var.environment}-#{table_suffix}"
+        # Dasherize to match ActiveItem's table_name_for convention:
+        # class_name.underscore.dasherize.pluralize
+        "${var.app_name}-${var.environment}-#{Belt::Inflector.pluralize(model_name).tr('_', '-')}"
       end
     end
   end

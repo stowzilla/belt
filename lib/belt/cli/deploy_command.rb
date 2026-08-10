@@ -9,10 +9,12 @@ require_relative 'terraform_command'
 require_relative 'backup_config'
 require_relative 'backup_runner'
 require_relative 'environment_config'
+require_relative 'path_gem_materializer'
 
 module Belt
   module CLI
     class DeployCommand
+      DEFAULT_DOCKER_BUILD_IMAGE = 'public.ecr.aws/sam/build-ruby3.4:latest-x86_64'
       def self.run(args)
         # Handle `belt deploy frontend <env>` as before
         if args.first == 'frontend'
@@ -143,13 +145,14 @@ module Belt
 
       def run
         validate!
-        env_dir = File.join(@infra_dir, @env)
-
         load_and_apply_env_config!
+        run_preflight_checks!
+        env_dir = File.join(@infra_dir, @env)
 
         puts "belt → deploying #{@env} (in #{env_dir}/)\n\n"
 
         ensure_lockfile_consistent!
+        warn_active_path_gems!
         generate_routes_if_needed
         run_backups unless @skip_backup
 
@@ -258,6 +261,14 @@ module Belt
         abort "Error: Environment '#{@env}' not found at #{env_dir}/.\n\n" \
               "Available environments:\n#{TerraformCommand.list_environments.map { |e| "  #{e}" }.join("\n")}\n\n" \
               "Create it with: belt generate environment #{@env}"
+      end
+
+      def run_preflight_checks!
+        require_relative 'doctor_command'
+        doctor = DoctorCommand.new(preflight: true)
+        return if doctor.run
+
+        abort 'Deploy blocked. Fix the issues above, then try again.'
       end
 
       def validate_aws!
@@ -457,7 +468,53 @@ module Belt
         FileUtils.cp(gemfile, build_dir) if File.exist?(gemfile)
         FileUtils.cp(lockfile, build_dir) if File.exist?(lockfile)
 
+        copy_vendor_cache(build_dir)
+        materialize_path_gems!(build_dir)
+
         puts '    📁 Copied handlers, controllers, models, lib, config'
+      end
+
+      # Stage prebuilt .gem files so Docker `bundle install` can install unreleased
+      # gems as normal package installs (with specifications/), not path/git layouts.
+      # Prefer project-root vendor/cache (next to Gemfile — Bundler's natural path);
+      # fall back to lambda/vendor/cache for older layouts.
+      def copy_vendor_cache(build_dir)
+        cache_dir = [
+          File.join(@project_root, 'vendor', 'cache'),
+          File.join(@project_root, 'lambda', 'vendor', 'cache')
+        ].find { |dir| Dir.exist?(dir) && !Dir.empty?(dir) }
+        return unless cache_dir
+
+        dest = File.join(build_dir, 'vendor', 'cache')
+        FileUtils.mkdir_p(dest)
+        FileUtils.cp_r(Dir.glob(File.join(cache_dir, '*')), dest)
+        gem_count = Dir.glob(File.join(dest, '*.gem')).size
+        puts "    📦 Copied vendor/cache (#{gem_count} local gem(s))"
+      end
+
+      # path: gems install under bundler/gems/ with no specifications/ — Lambda's
+      # bare `require 'belt'` can't see them. Build real .gem files into the
+      # package's vendor/cache and pin versions in the *build* Gemfile/lock only.
+      def materialize_path_gems!(build_dir)
+        gems = PathGemMaterializer.materialize!(build_dir, project_root: @project_root)
+        return if gems.empty?
+
+        puts "    🔧 Materialized path gem(s) → vendor/cache: #{gems.join(', ')}"
+      end
+
+      # path: gems need host-side materialize before Docker install. --rebuild
+      # always does it. Full terraform apply needs a conveyor-belt build that
+      # includes path-gem materialize (discord-vendor-cache-gemfile-parent+).
+      def warn_active_path_gems!
+        lockfile = File.join(@project_root, 'Gemfile.lock')
+        return unless File.exist?(lockfile)
+        return unless File.read(lockfile).match?(/^PATH\n/)
+
+        puts '  ⚠ Gemfile.lock has PATH gems (path: in Gemfile).'
+        puts "    Safe now: belt deploy #{@env} --rebuild (always materializes)."
+        puts '    Full terraform apply needs conveyor-belt with path-gem materialize.'
+        puts '    Or pin a version + drop a built .gem in vendor/cache/'
+        puts ''
       end
 
       def build_gems(build_dir)
@@ -466,12 +523,14 @@ module Belt
         uid = Process.uid
         gid = Process.gid
 
+        image = detect_docker_build_image
+
         docker_cmd = [
           'docker', 'run', '--rm',
           '--platform', 'linux/amd64',
           '-v', "#{build_dir}:/var/task",
           '-w', '/var/task',
-          'public.ecr.aws/sam/build-ruby3.4:latest-x86_64',
+          image,
           '/bin/bash', '-c',
           "bundle config set --local path 'vendor/bundle' && " \
           "bundle config set --local without 'development test' && " \
@@ -490,6 +549,37 @@ module Belt
         # Strip fat from vendor bundle
         strip_vendor_fat(build_dir)
         puts '    ✅ Gems installed'
+      end
+
+      # Reads docker_build_image from the conveyor_belt Terraform resource state.
+      # Falls back to DEFAULT_DOCKER_BUILD_IMAGE if state is unavailable or attribute not set.
+      def detect_docker_build_image
+        env_dir = File.join(@infra_dir, @env)
+        return DEFAULT_DOCKER_BUILD_IMAGE unless Dir.exist?(File.join(env_dir, '.terraform'))
+
+        Dir.chdir(env_dir) do
+          output, status = Open3.capture2('terraform', 'state', 'show', 'conveyor_belt.main')
+          if status.success?
+            # Prefer explicit docker_build_image if set
+            image_match = output.match(/docker_build_image\s*=\s*"([^"]+)"/)
+            if image_match
+              image = image_match[1]
+              puts "    📦 Using custom build image: #{image}"
+              return image
+            end
+
+            # Otherwise derive from ruby_version
+            version_match = output.match(/ruby_version\s*=\s*"([^"]+)"/)
+            if version_match
+              version = version_match[1]
+              image = "public.ecr.aws/sam/build-ruby#{version}:latest-x86_64"
+              puts "    📦 Using build image for Ruby #{version}: #{image}"
+              return image
+            end
+          end
+        end
+
+        DEFAULT_DOCKER_BUILD_IMAGE
       end
 
       def strip_vendor_fat(build_dir)

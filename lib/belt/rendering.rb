@@ -54,6 +54,7 @@ module Belt
     #   render layout: false           — skip layout (default: no layout)
     #
     def render(options = {})
+      # Status may be Integer or Symbol (:created, :ok, …)
       status = options.fetch(:status, 200)
 
       html = if options.key?(:inline)

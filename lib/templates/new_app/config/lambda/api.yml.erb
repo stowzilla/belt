@@ -5,6 +5,7 @@
 #   timeout           Lambda timeout in seconds (default: 30)
 #   memory_size       Lambda memory in MB (default: 256)
 #   env_vars          Environment variables (static values or ref() for Terraform values)
+#   iam_policy_arns   Additional IAM policy ARNs to attach (supports ref())
 #   dynamodb_tables   DynamoDB table access (by name — ARNs built by convention)
 #   s3_buckets        S3 bucket access declarations
 #   sns_triggers      SNS topic triggers
