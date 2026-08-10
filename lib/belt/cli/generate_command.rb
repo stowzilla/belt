@@ -152,6 +152,10 @@ module Belt
 
         if %w[references belongs_to].include?(type)
           { name: name, type: 'references', referenced_model: name }
+        elsif name.end_with?('_id')
+          # Treat *_id fields as references (e.g. conversation_id → belongs_to :conversation)
+          referenced_model = name.sub(/_id\z/, '')
+          { name: referenced_model, type: 'references', referenced_model: referenced_model }
         else
           { name: name, type: type }
         end
