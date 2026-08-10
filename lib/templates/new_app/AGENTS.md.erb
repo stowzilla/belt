@@ -2,6 +2,18 @@
 
 This file explains the project structure, tooling, and conventions for AI agents working in this codebase.
 
+## Quick Reference
+
+```bash
+belt explain <topic>      # Get documentation on any Belt concept
+belt explain routing      # How routes work
+belt explain controllers  # Controller patterns and response helpers
+belt explain models       # ActiveItem (DynamoDB ORM)
+belt explain deployment   # Deploy lifecycle
+belt explain generators   # Scaffolding new resources
+belt explain --help       # List all available topics
+```
+
 ## Stack
 
 - **Belt** — CLI and runtime framework (like Rails for serverless). Provides Lambda handler, action router, controller base class, and CLI tooling.
@@ -33,6 +45,79 @@ This file explains the project structure, tooling, and conventions for AI agents
 └── AGENTS.md                           # This file
 ```
 
+## Common Tasks (Copy-Paste Recipes)
+
+### Add a new REST resource
+
+```bash
+belt generate resource order item_id:string quantity:number total:number status:string
+belt setup tables <env>
+belt apply <env>
+```
+
+This creates: model, controller (with all CRUD actions), route entry, and DynamoDB schema.
+
+### Add a model only (no API endpoint)
+
+```bash
+belt generate model audit_log user_id:string action:string resource:string
+belt setup tables <env>
+belt apply <env>
+```
+
+### Add a controller only (route already exists)
+
+```bash
+belt generate controller admin/reports
+```
+
+### Add a new route to an existing resource
+
+Edit `config/routes.rb`:
+```ruby
+# Inside the gateway block, add:
+get "posts/search", controller: :posts, action: :search
+```
+
+Then add the `search` action to `lambda/controllers/<%= @app_name %>/posts_controller.rb`.
+
+### Deploy changes
+
+```bash
+belt deploy <env>          # full deploy (init → plan → apply)
+belt deploy <env> --auto   # skip confirmation
+```
+
+### Inspect current routes
+
+```bash
+belt routes                # human-readable table
+belt routes -f json        # machine-readable
+belt routes -g posts       # filter by pattern
+```
+
+### Open a console
+
+```bash
+belt c <env>               # interactive Ruby session with app loaded
+belt c <env> --run "Post.count"  # one-liner
+```
+
+### Check system health
+
+```bash
+belt doctor                # verify AWS creds, Terraform, Ruby, etc.
+```
+
+### Add a new environment
+
+```bash
+belt generate environment staging
+belt setup state           # if no state bucket exists
+belt setup tables staging
+belt deploy staging
+```
+
 ## Belt CLI Commands
 
 ```bash
@@ -43,12 +128,17 @@ belt generate controller <name>                        # Generate controller onl
 belt generate environment <env_name>                   # Generate Terraform environment directory
 belt setup state                                       # Create/select S3 state bucket
 belt setup tables <env>                                # Generate DynamoDB table definitions from schema
+belt explain <topic>                                   # Show documentation for a concept
 belt init <env>                                        # terraform init
 belt plan <env>                                        # terraform plan
 belt apply <env>                                       # terraform apply
 belt destroy <env>                                     # terraform destroy
-belt destroy environment <env>                         # same (mirrors generate environment)
 belt output <env>                                      # terraform output
+belt routes [-g PATTERN] [-f json]                     # Show route definitions
+belt contracts [-g PATTERN] [-f json]                  # Show API contracts
+belt console <env>                                     # Interactive Ruby console
+belt logs <lambda> [-f] [-s 5m] [-e env]               # View Lambda logs
+belt doctor                                            # Check dependencies
 ```
 
 ## How Routing Works
@@ -62,12 +152,12 @@ belt output <env>                                      # terraform output
    end
    ```
 
-2. Conveyor Belt creates an API Gateway where the gateway name becomes a base path mapping. URLs look like:
+2. Conveyor Belt creates API Gateway routes. URLs look like:
    ```
    https://api.<env>.example.com/<%= @app_name %>/things
    ```
 
-3. The Lambda entry point (`lambda/<%= @app_name %>.rb`) uses `Belt::ActionRouter` to dispatch requests to controllers based on the route manifest in `lambda/lib/routes/`.
+3. The Lambda entry point (`lambda/<%= @app_name %>.rb`) uses `Belt::ActionRouter` to dispatch requests to controllers based on the route manifest.
 
 4. `resources :things` generates: `GET /things`, `POST /things`, `GET /things/:id`, `PUT /things/:id`, `DELETE /things/:id`. **PUT, not PATCH.**
 
@@ -83,7 +173,13 @@ end
 
 Table names resolve as `{APP_NAME}-{ENVIRONMENT}-{pluralized_model}` (e.g., `<%= @app_name %>-wups-posts`).
 
-Key ActiveItem methods: `create!`, `find`, `where`, `update`, `destroy`, `all`, `count`, `exists?`.
+Key methods: `create!`, `find`, `find_by`, `where`, `update`, `destroy`, `all`, `count`, `exists?`.
+
+Querying with indexes:
+```ruby
+Post.where(user_id: "u-123", index: "UserIndex")
+Post.find_by(status: "active", index: "StatusIndex")
+```
 
 ## How Controllers Work
 
@@ -93,24 +189,35 @@ Controllers inherit from `BeltController::Base`:
 module <%= @module_name %>Controllers
   class ThingsController < ApplicationController
     def index
-      items = Thing.all
-      success_response(things: items.map(&:to_h))
+      @things = Thing.all  # implicit JSON: { "things": [...] }
     end
 
     def show
-      item = Thing.find(params[:id])
-      success_response(thing: item.to_h)
+      @thing = Thing.find(params[:id])  # implicit JSON: { "thing": {...} }
     end
 
     def create
-      item = Thing.create!(params.slice(:title, :content))
-      success_response(thing: item.to_h, status: 201)
+      attrs = params.require(:thing).permit(:title, :content).to_h
+      @thing = Thing.create!(attrs)
+      response_status :created  # 201 + implicit JSON
+    end
+
+    def destroy
+      Thing.find(params[:id]).destroy
+      head :no_content  # 204
     end
   end
 end
 ```
 
-`params` contains merged path parameters and parsed JSON body. Use `success_response` and `error_response` helpers.
+**Key patterns:**
+- `params` = merged path parameters + parsed JSON body
+- Instance variables auto-serialize to JSON response
+- `response_status :created` sets status without explicit response
+- `head :no_content` for empty responses
+- `success_response(data, status)` for explicit control
+- `error_response(message, status)` for error responses
+- `rescue_from` for exception handling
 
 ## Deployment Flow
 
@@ -119,16 +226,30 @@ export AWS_PROFILE=<your_profile>
 belt setup state                  # One-time: create S3 state bucket
 belt generate environment <env>   # One-time: scaffold Terraform configs
 belt setup tables <env>           # Generate DynamoDB table resources
-belt init <env>                   # Initialize Terraform
-belt apply <env>                  # Deploy everything
+belt deploy <env>                 # Deploy everything (init → plan → apply)
 ```
 
-## Adding a New Resource
+## Key Differences from Rails
+
+| Rails | Belt |
+|-------|------|
+| PostgreSQL / MySQL | DynamoDB (NoSQL) |
+| ActiveRecord | ActiveItem |
+| `PATCH` for updates | `PUT` for updates |
+| `rails server` | Deployed to AWS Lambda |
+| `rails routes` | `belt routes` |
+| `rails console` | `belt console <env>` |
+| `config/routes.rb` → URL paths | `config/routes.rb` → URL paths + infrastructure |
+| Migrations | `belt setup tables <env>` |
+| `has_many` / `belongs_to` | Manual (no joins in DynamoDB) |
+| Template rendering | JSON responses (default) |
+
+## Troubleshooting
 
 ```bash
-belt generate resource comment body:text author:string post_id:string
-belt setup tables <env>
-belt apply <env>
+belt doctor                        # Check all dependencies
+belt explain <topic>               # Documentation for any concept
+belt routes -f json                # Verify route configuration
+belt logs <lambda> -e <env> -s 5m  # Check recent Lambda logs
+belt c <env> --run "Post.count"    # Verify data access
 ```
-
-This creates the model, controller, updates routes + schema, generates the DynamoDB table definition, and deploys.

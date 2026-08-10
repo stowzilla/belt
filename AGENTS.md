@@ -87,6 +87,7 @@ Commands are registered in `Belt::CLI::COMMANDS_DEFINITION` (`lib/belt/cli.rb`).
 | `destroy` / `d` | `cli/destroy_command.rb` |
 | `plugin` | `cli/plugin_command.rb` (`plugin new`) |
 | `deploy` | `cli/deploy_command.rb` (+ path gem materializer) |
+| `explain` | `cli/explain_command.rb` + `lib/belt/docs/*.md` |
 | `routes` | `cli/routes_command.rb` |
 | `contracts` | `cli/contracts_command.rb` |
 | `doctor` | `cli/doctor_command.rb` |
@@ -96,6 +97,17 @@ Commands are registered in `Belt::CLI::COMMANDS_DEFINITION` (`lib/belt/cli.rb`).
 | Frontend | `cli/frontend_*.rb` |
 
 When adding a command: require it from `cli.rb`, add it to `COMMANDS_DEFINITION`, document usage in README/CHANGELOG as needed.
+
+## `belt explain` — inline documentation
+
+Docs live in `lib/belt/docs/*.md`. These are the single source of truth for:
+- `belt explain <topic>` (CLI)
+- belt.dev/docs (auto-generated at build time)
+- Agent context (agents can read these directly from the gem)
+
+**When to update docs:** Any PR that changes CLI behavior, controller lifecycle, routing DSL, deployment flow, or observability features MUST update the corresponding `lib/belt/docs/*.md` file. If adding a new feature category, add a new doc file and register the topic alias in `cli/explain_command.rb`.
+
+Current topics: `routing`, `controllers`, `models`, `deployment`, `generators`, `lambda_handler`, `observability`, `console`, `backups`, `plugins`, `structure`.
 
 ## Plugin / GeneratorRegistry contract
 
@@ -153,6 +165,7 @@ Do not confuse app `AGENTS.md` guidance (routing, models, deploy) with this file
 | Task | Start here |
 |------|------------|
 | New CLI subcommand | `lib/belt/cli.rb`, then a new `cli/*_command.rb` |
+| Update/add `belt explain` topic | `lib/belt/docs/<topic>.md` + register alias in `cli/explain_command.rb` |
 | Change `belt new` output | `cli/new_command.rb` + `templates/new_app/` |
 | Change plugin scaffold | `cli/plugin_command.rb` + `templates/plugin/` |
 | Built-in generators | `cli/generate_command.rb` + `templates/generate/` |
