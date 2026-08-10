@@ -31,8 +31,15 @@ module Belt
       route_info = find_route(method, match_path)
 
       unless route_info
-        Belt::Observability::Logger.instance&.warn('Route not found', method: method, path: full_path)
-        return error_response('Not found', 404, event)
+        # Fallback: serve the Belt welcome page for GET / when no explicit root route exists.
+        # This handles the case where API Gateway delivers the request (e.g. via a catch-all
+        # integration or proxy route) but the route manifest doesn't include GET /.
+        if method == 'GET' && root_path?(match_path)
+          route_info = { verb: 'GET', pattern: '/', segments: [], controller: 'welcome', action: 'show' }
+        else
+          Belt::Observability::Logger.instance&.warn('Route not found', method: method, path: full_path)
+          return error_response('Not found', 404, event)
+        end
       end
 
       path_params = extract_path_params(route_info[:pattern], match_path)
@@ -59,6 +66,10 @@ module Belt
     end
 
     private
+
+    def root_path?(path)
+      path == '/' || path.empty?
+    end
 
     def strip_gateway_prefix(path)
       return '/' if path.nil?
