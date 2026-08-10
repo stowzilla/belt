@@ -114,8 +114,32 @@ module Belt
           gateway.routes.each do |route|
             routes << build_route_hash(route, gateway)
           end
+          inject_welcome_route!(routes, gateway) unless root_route?(gateway)
         end
         routes.sort_by { |r| route_specificity(r[:path], r[:verb]) }
+      end
+
+      # Ensure every gateway has a GET / route so the API Gateway resource is created.
+      # Without this, visiting the root URL returns a 404 at the gateway level before
+      # the request ever reaches Lambda.
+      def root_route?(gateway)
+        gateway.routes.any? { |r| r.method == 'GET' && normalize_path(r.path) == '/' }
+      end
+
+      def inject_welcome_route!(routes, gateway)
+        routes << {
+          name: 'root',
+          verb: 'GET',
+          path: '/',
+          gateway: gateway.name,
+          lambda: gateway.default_lambda.to_s,
+          controller: 'welcome',
+          action: 'show',
+          auth: 'none',
+          tables: [],
+          request_model: '',
+          response_model: ''
+        }
       end
 
       def build_route_hash(route, gateway)

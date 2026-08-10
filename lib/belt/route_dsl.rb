@@ -428,6 +428,23 @@ module Belt
         end
       end
 
+      # Rails-like `root` — defines a GET / route.
+      #
+      # Examples:
+      #   root to: "welcome#show"
+      #   root action: :show, controller: :welcome
+      #   root "pages#home"
+      def root(options_or_target = nil, **options)
+        if options_or_target.is_a?(String)
+          options[:to] = options_or_target
+        elsif options_or_target.is_a?(Hash)
+          options = options_or_target.merge(options)
+        end
+        options[:auth] ||= :none
+        route_options = apply_scope_to_route(options)
+        @gateway.send(:get, '/', route_options)
+      end
+
       def resources(name, options = {}, &)
         options = apply_scope_options(options)
 
