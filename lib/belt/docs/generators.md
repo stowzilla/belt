@@ -1,0 +1,128 @@
+# Generators
+
+Belt generators scaffold code and infrastructure for common patterns.
+Run `belt generate --help` to see all available generators (built-in + plugins).
+
+## Built-in Generators
+
+### Resource (scaffold)
+
+Creates model + controller + routes + schema entry:
+
+```bash
+belt generate resource post title:string body:text user_id:string status:string
+belt g resource comment body:text author:string post_id:string
+```
+
+This is the most common generator — it sets up everything for a new REST endpoint.
+
+### Model
+
+Creates just the model file + schema entry:
+
+```bash
+belt generate model post title:string body:text user_id:string
+belt g model payment amount:number currency:string
+```
+
+### Controller
+
+Creates just the controller:
+
+```bash
+belt generate controller posts
+belt g controller admin/users
+```
+
+### Environment
+
+Scaffolds a new Terraform environment directory:
+
+```bash
+belt generate environment staging
+belt g environment prod
+```
+
+### Frontend
+
+Adds a frontend framework to the project:
+
+```bash
+belt generate frontend react
+belt generate frontend vue
+belt generate frontend svelte
+```
+
+### Views
+
+Generates React pages for a resource's REST actions:
+
+```bash
+belt generate views post title:string body:text status:string
+belt g views comment body:text author:string
+```
+
+### Auth
+
+Sets up Cognito authentication:
+
+```bash
+belt generate auth
+belt g auth --provider cognito
+```
+
+## Field Types
+
+When specifying fields, use these types:
+
+| Type | DynamoDB Type | Notes |
+|------|---------------|-------|
+| `string` | S | Default if no type given |
+| `text` | S | Same as string (semantic hint) |
+| `number` | N | Numeric values |
+| `boolean` | BOOL | True/false |
+| `list` | L | Array values |
+| `map` | M | Nested objects |
+
+## Destroying Generated Code
+
+Every generator has a matching destroy command:
+
+```bash
+belt destroy resource post
+belt destroy model comment
+belt destroy controller admin/users
+belt destroy environment staging
+belt destroy frontend
+belt destroy views post
+```
+
+## Plugin Generators
+
+Gems that follow the Belt plugin contract are auto-discovered:
+
+```bash
+belt generate messaging     # from belt-messaging gem
+belt generate pay           # from belt-pay gem
+belt generate --help        # lists all available generators
+```
+
+## Generator Workflow (Common Pattern)
+
+```bash
+# 1. Generate the resource
+belt generate resource order item_id:string quantity:number total:number status:string
+
+# 2. Generate DynamoDB table from schema
+belt setup tables dev01
+
+# 3. Deploy
+belt deploy dev01
+```
+
+## See Also
+
+- `belt explain models` — how generated models work
+- `belt explain controllers` — how generated controllers work
+- `belt explain routing` — how generated routes work
+- `belt explain deployment` — deploying generated code

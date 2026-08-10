@@ -26,6 +26,7 @@ require_relative 'cli/console_command'
 require_relative 'cli/logs_command'
 require_relative 'cli/doctor_command'
 require_relative 'cli/plugin_command'
+require_relative 'cli/explain_command'
 
 module Belt
   module CLI
@@ -42,6 +43,7 @@ module Belt
       'setup' => Belt::CLI::SetupCommand,
       'doctor' => Belt::CLI::DoctorCommand,
       'plugin' => Belt::CLI::PluginCommand,
+      'explain' => Belt::CLI::ExplainCommand,
       'deploy' => Belt::CLI::DeployCommand,
       'frontend' => Belt::CLI::FrontendEnvCommand,
       %w[server s] => Belt::CLI::ServerCommand,
@@ -55,7 +57,7 @@ module Belt
     TERRAFORM_ACTIONS = Belt::CLI::TerraformCommand::ACTIONS
 
     # Commands that can run without being inside a Belt project
-    STANDALONE_COMMANDS = %w[new version --version -v doctor].freeze
+    STANDALONE_COMMANDS = %w[new version --version -v doctor explain].freeze
 
     def self.start(args)
       command = args.shift
@@ -124,6 +126,7 @@ module Belt
           setup frontend <env>                        Generate S3 + CloudFront infrastructure
           doctor                                      Check system dependencies and AWS config
           plugin new <name>                           Scaffold a new Belt plugin gem
+          explain <topic>                             Explain a Belt concept (routing, models, …)
           init [environment] <env>                    terraform init for environment
           plan [environment] <env>                    terraform plan for environment
           apply [environment] <env>                   terraform apply for environment
