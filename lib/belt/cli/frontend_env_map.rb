@@ -10,7 +10,9 @@ module Belt
     #
     # Map file (optional), first match wins:
     #   frontend/env.yml
+    #   frontend/env.yaml
     #   .belt/frontend_env.yml
+    #   .belt/frontend_env.yaml
     #
     # Example:
     #   VITE_API_URL: api_url
@@ -21,7 +23,9 @@ module Belt
     class FrontendEnvMap
       MAP_CANDIDATES = [
         File.join('frontend', 'env.yml'),
-        File.join('.belt', 'frontend_env.yml')
+        File.join('frontend', 'env.yaml'),
+        File.join('.belt', 'frontend_env.yml'),
+        File.join('.belt', 'frontend_env.yaml')
       ].freeze
 
       DEFAULT_MAP = { 'VITE_API_URL' => 'api_url' }.freeze

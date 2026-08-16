@@ -17,9 +17,9 @@ RSpec.describe Belt::CLI::LambdaConfigCommand do
     Dir.chdir(original_dir)
   end
 
-  def create_config(name, content)
+  def create_config(name, content, ext: 'yml')
     FileUtils.mkdir_p('config/lambda')
-    File.write("config/lambda/#{name}.yml", content)
+    File.write("config/lambda/#{name}.#{ext}", content)
   end
 
   describe '.load_configs' do
@@ -149,6 +149,51 @@ RSpec.describe Belt::CLI::LambdaConfigCommand do
       configs = described_class.load_configs(environment: 'dev', config_dir: 'config/lambda')
       expect(configs['heavy']['ephemeral_storage']).to eq(2048)
       expect(configs['heavy']['reserved_concurrency']).to eq(5)
+    end
+
+    it 'loads .yaml files' do
+      create_config('worker', <<~YAML, ext: 'yaml')
+        default:
+          timeout: 300
+          memory_size: 512
+      YAML
+
+      configs = described_class.load_configs(environment: 'dev', config_dir: 'config/lambda')
+      expect(configs['worker']['timeout']).to eq(300)
+      expect(configs['worker']['memory_size']).to eq(512)
+    end
+
+    it 'prefers .yml over .yaml when both exist for the same name' do
+      create_config('api', <<~YAML, ext: 'yml')
+        default:
+          timeout: 30
+          memory_size: 256
+      YAML
+      create_config('api', <<~YAML, ext: 'yaml')
+        default:
+          timeout: 99
+          memory_size: 1024
+      YAML
+
+      configs = described_class.load_configs(environment: 'dev', config_dir: 'config/lambda')
+      expect(configs['api']['timeout']).to eq(30)
+      expect(configs['api']['memory_size']).to eq(256)
+    end
+
+    it 'loads a mix of .yml and .yaml files' do
+      create_config('api', <<~YAML, ext: 'yml')
+        default:
+          timeout: 30
+      YAML
+      create_config('worker', <<~YAML, ext: 'yaml')
+        default:
+          timeout: 300
+      YAML
+
+      configs = described_class.load_configs(environment: 'dev', config_dir: 'config/lambda')
+      expect(configs.keys.sort).to eq(%w[api worker])
+      expect(configs['api']['timeout']).to eq(30)
+      expect(configs['worker']['timeout']).to eq(300)
     end
   end
 

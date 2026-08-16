@@ -106,7 +106,7 @@ RSpec.describe Belt::CLI::FrontendEnvCommand do
       stub_tf_output('api_url' => 'https://dev.example.com')
 
       expect { described_class.run(%w[env dev]) }
-        .to output(%r{No frontend/env.yml found.*default map}m).to_stdout
+        .to output(%r{No frontend/env.yml \(or .yaml\) found.*default map}m).to_stdout
 
       content = File.read('frontend/.env')
       expect(content).to include('VITE_API_URL=https://dev.example.com')

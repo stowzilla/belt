@@ -51,6 +51,28 @@ RSpec.describe Belt::CLI::FrontendEnvMap do
       create_file('.belt/frontend_env.yml', "VITE_API_URL: api_url\n")
       expect(described_class.find_map_path).to eq('.belt/frontend_env.yml')
     end
+
+    it 'finds frontend/env.yaml' do
+      create_file('frontend/env.yaml', "VITE_API_URL: api_url\n")
+      expect(described_class.find_map_path).to eq('frontend/env.yaml')
+    end
+
+    it 'finds .belt/frontend_env.yaml' do
+      create_file('.belt/frontend_env.yaml', "VITE_API_URL: api_url\n")
+      expect(described_class.find_map_path).to eq('.belt/frontend_env.yaml')
+    end
+
+    it 'prefers .yml over .yaml in the same directory' do
+      create_file('frontend/env.yml', "VITE_API_URL: api_url\n")
+      create_file('frontend/env.yaml', "VITE_API_URL: other\n")
+      expect(described_class.find_map_path).to eq('frontend/env.yml')
+    end
+
+    it 'prefers frontend/ over .belt/ regardless of extension' do
+      create_file('frontend/env.yaml', "VITE_API_URL: api_url\n")
+      create_file('.belt/frontend_env.yml', "VITE_API_URL: other\n")
+      expect(described_class.find_map_path).to eq('frontend/env.yaml')
+    end
   end
 
   describe '#initialize' do
@@ -70,6 +92,20 @@ RSpec.describe Belt::CLI::FrontendEnvMap do
       expect(map.map).to eq({
                               'VITE_API_URL' => 'api_url',
                               'VITE_COGNITO_POOL' => 'cognito_user_pool_id'
+                            })
+      expect(map.using_default_map?).to be false
+    end
+
+    it 'loads a custom map from frontend/env.yaml' do
+      create_file('frontend/env.yaml', <<~YAML)
+        VITE_API_URL: api_url
+        VITE_REGION: aws_region
+      YAML
+
+      map = described_class.new('dev')
+      expect(map.map).to eq({
+                              'VITE_API_URL' => 'api_url',
+                              'VITE_REGION' => 'aws_region'
                             })
       expect(map.using_default_map?).to be false
     end
