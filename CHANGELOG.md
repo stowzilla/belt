@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.4
+
+### Enhancement
+
+- **Flexible config file extensions**: Lambda config files (`config/lambda/*.yml`) and frontend env maps (`frontend/env.yml`, `.belt/frontend_env.yml`) now also accept `.yaml` as a file extension. (#1124)
+
 ## 0.3.2
 
 ### Bug fix

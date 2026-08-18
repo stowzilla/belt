@@ -36,7 +36,7 @@ module Belt
           puts 'Usage: belt frontend env <environment>'
           puts "\nWrites frontend/.env from terraform outputs using the env map."
           puts 'You can also set BELT_ENV to skip the environment argument.'
-          puts "\nMap file (optional): frontend/env.yml or .belt/frontend_env.yml"
+          puts "\nMap file (optional): frontend/env.{yml,yaml} or .belt/frontend_env.{yml,yaml}"
           puts 'Default without map: VITE_API_URL ← api_url'
           puts "\nExamples:"
           puts '  belt frontend env dev'
