@@ -4,7 +4,7 @@
 
 ### Enhancement
 
-- **Accept both `.yml` and `.yaml` file extensions**: Lambda config files (`config/lambda/*.yml`) and frontend env maps (`frontend/env.yml`, `.belt/frontend_env.yml`) now accept either extension. When both exist for the same name, `.yml` takes precedence. (#1124)
+- **Flexible config file extensions**: Lambda config files (`config/lambda/*.yml`) and frontend env maps (`frontend/env.yml`, `.belt/frontend_env.yml`) now also accept `.yaml` as a file extension. (#1124)
 
 ## 0.3.2
 

@@ -10,9 +10,7 @@ module Belt
     #
     # Map file (optional), first match wins:
     #   frontend/env.yml
-    #   frontend/env.yaml
     #   .belt/frontend_env.yml
-    #   .belt/frontend_env.yaml
     #
     # Example:
     #   VITE_API_URL: api_url

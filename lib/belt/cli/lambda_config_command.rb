@@ -64,13 +64,12 @@ module Belt
 
       def self.help_text
         <<~HELP
-          Read lambda config from config/lambda/*.{yml,yaml} files.
+          Read lambda config from config/lambda/*.yml files.
 
           Usage: belt lambda-config [options]
 
           Reads YAML config files and produces a merged configuration hash for the
-          specified environment (like database.yml in Rails). Both .yml and .yaml
-          extensions are accepted.
+          specified environment (like database.yml in Rails).
 
           Options:
             -e, --environment ENV    Target environment (default: dev)
@@ -83,7 +82,7 @@ module Belt
             belt lambda-config -e dev --format terraform
             belt lambda-config --lambda customer -e prod
 
-          Config files live at config/lambda/<name>.yml (or .yaml). Each file can define
+          Config files live at config/lambda/<name>.yml. Each file can define
           environment-specific overrides using YAML anchors:
 
             # config/lambda/customer.yml
@@ -134,7 +133,7 @@ module Belt
           if @lambda_filter
             abort "Error: No config found for lambda '#{@lambda_filter}' in #{@config_dir}/"
           else
-            abort "Error: No .yml/.yaml files found in #{@config_dir}/"
+            abort "Error: No .yml files found in #{@config_dir}/"
           end
         end
 
@@ -148,11 +147,11 @@ module Belt
 
         configs = {}
         files = Dir.glob(File.join(config_dir, '*.{yml,yaml}'))
-        # Sort so .yml comes before .yaml for the same basename (yml wins)
+        # Sort so .yml comes before .yaml for the same basename (yml wins if both exist)
         files.sort_by! { |f| [File.basename(f).sub(/\.ya?ml\z/, ''), f.end_with?('.yml') ? 0 : 1] }
         files.each do |file|
           name = File.basename(file).sub(/\.ya?ml\z/, '')
-          next if configs.key?(name) # .yml takes precedence over .yaml
+          next if configs.key?(name) # .yml takes precedence
 
           raw = YAML.safe_load_file(file, aliases: true) || {}
           configs[name] = resolve_environment(raw, environment)
