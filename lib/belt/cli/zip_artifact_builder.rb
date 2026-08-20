@@ -27,6 +27,8 @@ module Belt
         @infra_dir = File.expand_path(infra_dir, @project_root)
       end
 
+      Artifact = Struct.new(:zip_path, :source_dir, keyword_init: true)
+
       def build!
         artifacts = discover_artifacts
         return if artifacts.empty?
@@ -35,8 +37,6 @@ module Belt
       end
 
       private
-
-      Artifact = Struct.new(:zip_path, :source_dir, keyword_init: true)
 
       def discover_artifacts
         return [] unless Dir.exist?(@infra_dir)
@@ -118,11 +118,12 @@ module Belt
       end
 
       def js_zip_entries(dir)
-        Dir.children(dir).select { |name| name.match?(/\.(mjs|js|cjs)\z/) }.sort
+        Dir.children(dir).grep(/\.(mjs|js|cjs)\z/).sort
       end
 
       def install_node_modules!(source_dir)
-        install = File.file?(File.join(source_dir, 'package-lock.json')) ? 'npm ci --omit=dev' : 'npm install --omit=dev'
+        lockfile = File.join(source_dir, 'package-lock.json')
+        install = File.file?(lockfile) ? 'npm ci --omit=dev' : 'npm install --omit=dev'
         uid = Process.uid
         gid = Process.gid
 
