@@ -48,6 +48,10 @@ also auto-detects `build/` after `npm run build`). Terraform output names defaul
 to `frontend_*` for the `frontend` app and `{name}_frontend_*` for others — override
 them when existing infrastructure uses different names.
 
+If terraform exports a CloudFront **domain** instead of a distribution ID, set
+`cloudfront_domain_output` and skip `distribution_output`. Belt looks the ID up
+via AWS and will not probe `{name}_frontend_distribution_id`.
+
 ```bash
 belt frontend list
 belt generate frontend react --name ops --path ops-app

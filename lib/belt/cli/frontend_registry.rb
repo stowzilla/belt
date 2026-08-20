@@ -23,7 +23,8 @@ module Belt
         @dist = dist
         @default = default
         @bucket_output = bucket_output || default_output('bucket_name')
-        @distribution_output = distribution_output || default_output('distribution_id')
+        @distribution_output_explicit = present_output?(distribution_output)
+        @distribution_output = @distribution_output_explicit ? distribution_output : default_output('distribution_id')
         @url_output = url_output || default_output('url')
         @cloudfront_domain_output = cloudfront_domain_output
       end
@@ -31,6 +32,10 @@ module Belt
 
       def default?
         @default
+      end
+
+      def distribution_output_explicit?
+        @distribution_output_explicit
       end
 
       def slug
@@ -100,7 +105,11 @@ module Belt
         slug == 'frontend' ? "frontend_#{suffix}" : "#{slug}_frontend_#{suffix}"
       end
       alias default_output inferred_output
-      private :inferred_output, :default_output
+
+      def present_output?(value)
+        !(value.nil? || value.to_s.empty?)
+      end
+      private :inferred_output, :default_output, :present_output?
     end
 
     # Discovers and resolves frontends for CLI commands.

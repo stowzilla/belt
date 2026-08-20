@@ -19,6 +19,13 @@
   so native addons match Lambda. Missing zips are built automatically; unchanged
   sources skip the rebuild.
 
+### Bug fix
+
+- **Frontend CloudFront invalidation**: `belt deploy frontend` no longer prints
+  terraform's "output not found" error when a named frontend sets
+  `cloudfront_domain_output` instead of a distribution-id output. Missing
+  terraform outputs are read with stderr silenced.
+
 ## 0.3.4
 
 ### Enhancement

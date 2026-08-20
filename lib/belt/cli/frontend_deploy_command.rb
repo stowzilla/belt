@@ -146,12 +146,21 @@ module Belt
       end
 
       def fetch_distribution_id
-        id = fetch_tf_output(@frontend.distribution_output)
-        return id if id
+        if probe_distribution_output?
+          id = fetch_tf_output(@frontend.distribution_output)
+          return id if id
+        end
 
         domain = fetch_tf_output(@frontend.cloudfront_domain_output) if @frontend.cloudfront_domain_output
         domain ||= domain_from_url(fetch_frontend_url)
         lookup_distribution_id(domain)
+      end
+
+      # Belt-generated terraform exports `{name}_frontend_distribution_id`.
+      # Stowzilla-style configs only export a CloudFront domain — skip the
+      # inferred ID output so terraform doesn't print "output not found".
+      def probe_distribution_output?
+        @frontend.distribution_output_explicit? || @frontend.cloudfront_domain_output.to_s.empty?
       end
 
       def fetch_frontend_url
@@ -185,12 +194,19 @@ module Belt
 
       def fetch_tf_output(name)
         return nil if name.nil? || name.to_s.empty?
+        return nil unless Dir.exist?(@env_dir)
 
-        output, status = Open3.capture2('terraform', 'output', '-raw', name, chdir: @env_dir)
+        output, status = Open3.capture2(
+          'terraform', 'output', '-raw', name,
+          chdir: @env_dir,
+          err: File::NULL
+        )
         return nil unless status.success?
 
         value = output.strip
         value.empty? || value == 'null' ? nil : value
+      rescue Errno::ENOENT
+        nil
       end
 
       def run!(*args, **)
