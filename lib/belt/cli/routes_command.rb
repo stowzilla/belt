@@ -7,12 +7,14 @@ require_relative '../route_dsl'
 require_relative '../table_inference'
 require_relative 'routes_command/schema_loader'
 require_relative 'routes_command/route_inference'
+require_relative 'routes_command/request_model_inference'
 
 module Belt
   module CLI
     class RoutesCommand
       include SchemaLoader
       include RouteInference
+      include RequestModelInference
 
       def self.run(args)
         new(args).run
@@ -33,6 +35,11 @@ module Belt
         dsl = load_routes(routes_file)
         @table_inference = TableInference.new(@options[:tables_file])
         routes = collect_routes(dsl)
+
+        # Convention-based request_model inference from contracts
+        contracts_file = resolve_contracts_file(routes_file)
+        infer_request_models!(routes, contracts_file) if contracts_file
+
         routes = apply_grep(routes) if @options[:grep]
 
         warn 'Warning: --output-dir has no effect without --namespace' if @options[:output_dir] && !@options[:namespace]
