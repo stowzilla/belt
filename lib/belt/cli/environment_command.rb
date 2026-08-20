@@ -3,6 +3,8 @@
 require 'fileutils'
 require 'erb'
 require_relative 'app_detection'
+require_relative 'frontend_registry'
+require_relative 'frontend_setup_command'
 
 module Belt
   module CLI
@@ -52,6 +54,8 @@ module Belt
           puts "  create  #{dest_path}" unless @quiet
         end
 
+        append_extra_frontend_outputs(File.join(dest_dir, 'outputs.tf'))
+
         return if @quiet || !@announce
 
         puts "\n✓ Environment '#{@env_name}' created!"
@@ -80,6 +84,14 @@ module Belt
         template_path = File.join(TEMPLATE_DIR, template_name)
         content = ERB.new(File.read(template_path), trim_mode: '-').result(binding)
         File.write(dest_path, content)
+      end
+
+      def append_extra_frontend_outputs(outputs_file)
+        FrontendRegistry.new.all.each do |frontend|
+          next if frontend.tf_name == 'frontend'
+
+          FrontendSetupCommand.append_env_outputs_for(frontend, outputs_file)
+        end
       end
 
       # Resolve the state bucket name to use in backend.tf.

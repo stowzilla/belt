@@ -100,18 +100,19 @@ module Belt
         Commands:
           new <app_name> [--frontend react]           Create a new Belt application
           generate <scaffold|model|controller> <name> Generate components
-          generate frontend <react|vue|svelte>        Scaffold a frontend app
-          generate views <resource> [fields...]       Generate React pages for REST actions
+          generate frontend <react|vue|svelte>        Scaffold a frontend app [--name --path]
+          generate views <resource> [fields...]       Generate React pages [--frontend NAME]
           generate environment <name>                 Create a new environment
           destroy <scaffold|model|controller> <name>  Remove generated components
-          destroy frontend                            Remove the frontend/ directory
+          destroy frontend [--frontend NAME]          Remove a frontend directory
           destroy views <resource>                    Remove React pages for a resource
           destroy environment <name>                  Remove an environment directory
-          server                                      Start local dev server (frontend)
+          server [--frontend NAME]                    Start local dev server (frontend)
           s                                           Alias for server
           deploy [environment]                        Deploy to AWS (init → plan → apply)
-          deploy frontend <env>                       Build and deploy frontend to AWS
-          frontend env <env>                          Write frontend/.env from terraform outputs
+          deploy frontend <env> [--frontend NAME]     Build and deploy frontend(s) to AWS
+          frontend env <env> [--frontend NAME]        Write <frontend>/.env from terraform outputs
+          frontend list                               List configured frontends
           routes [-g PATTERN] [-f json]               Show route definitions
           contracts [-g PATTERN] [-f json]            Show API request/response contracts
           lambda-config [-e ENV] [-f json|terraform]  Show merged lambda configuration
@@ -123,7 +124,7 @@ module Belt
           -T [-g PATTERN] [-a]                        Alias for tasks
           setup state                                 Create/select S3 state bucket
           setup tables <env>                          Generate DynamoDB tables from schema
-          setup frontend <env>                        Generate S3 + CloudFront infrastructure
+          setup frontend [--name NAME]                Generate S3 + CloudFront infrastructure
           doctor                                      Check system dependencies and AWS config
           plugin new <name>                           Scaffold a new Belt plugin gem
           explain <topic>                             Explain a Belt concept (routing, models, …)
@@ -150,11 +151,14 @@ module Belt
           belt generate scaffold post title:string content:text status:string
           belt destroy scaffold post
           belt generate frontend react
+          belt generate frontend react --name ops --path ops-app
           belt server                   # Start local frontend server
+          belt server --frontend ops
           belt deploy                   # Deploy dev to AWS
           belt deploy prod --auto       # Deploy prod without confirmation
           belt deploy frontend wups
-          belt frontend env wups        # Smart-merge TF outputs into frontend/.env
+          belt deploy frontend wups --frontend ops
+          belt frontend env wups        # Smart-merge TF outputs into <frontend>/.env
           belt setup frontend wups
           belt apply wups
           belt tasks                    # list all rake tasks

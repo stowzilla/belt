@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+## 0.3.5
+
+### Enhancement
+
+- **Multiple frontends**: Frontend directory is no longer hardcoded to `frontend/`.
+  Declare named SPAs in `config/frontends.yml` (path, dist dir, terraform output names).
+  `belt generate frontend react --name ops --path ops-app` scaffolds an additional app.
+  Generators, `belt server`, `belt frontend env`, and `belt deploy frontend` accept
+  `--frontend NAME`. `belt deploy frontend <env>` deploys all configured frontends;
+  pass `--frontend` to target one. Existing single-`frontend/` apps keep working
+  with no config file.
+- **Sidecar Lambda zips**: `belt deploy` / `belt plan` / `belt apply` build zip
+  artifacts that Terraform `filebase64sha256` needs at plan time (e.g. Stowzilla's
+  Node `image-processor`). Node packages are installed in Docker on linux/amd64
+  so native addons match Lambda. Missing zips are built automatically; unchanged
+  sources skip the rebuild.
+
+### Bug fix
+
+- **Frontend CloudFront invalidation**: `belt deploy frontend` no longer prints
+  terraform's "output not found" error when a named frontend sets
+  `cloudfront_domain_output` instead of a distribution-id output. Missing
+  terraform outputs are read with stderr silenced.
+
 ## 0.3.4
 
 ### Enhancement

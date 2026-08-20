@@ -3,6 +3,7 @@
 require 'fileutils'
 require 'erb'
 require_relative '../inflector'
+require_relative 'frontend_registry'
 
 module Belt
   module CLI
@@ -11,16 +12,19 @@ module Belt
 
       def self.run(args)
         force = args.delete('--force') || args.delete('-f')
+        frontend_name = FrontendRegistry.extract_flag!(args, '--frontend')
 
         name = args.shift
         if name.nil? || name.empty?
           puts 'Usage: belt generate views <resource> [field:type ...] [options]'
           puts "\nGenerates React pages for all REST actions (index, show, new, edit)."
           puts "\nOptions:"
-          puts '  --force, -f    Overwrite existing files without prompting'
+          puts '  --force, -f         Overwrite existing files without prompting'
+          puts '  --frontend NAME     Target frontend when several exist'
           puts "\nExamples:"
           puts '  belt generate views post title:string content:text status:string'
           puts '  belt generate views comment body:text author:string'
+          puts '  belt generate views bag --frontend ops'
           exit 1
         end
 
@@ -32,7 +36,8 @@ module Belt
         # If no fields provided, try to read from contracts.rb
         fields = read_schema_fields(name) if fields.empty?
 
-        new(name, fields, force: force).generate
+        frontend = FrontendRegistry.new.resolve!(frontend_name)
+        new(name, fields, force: force, frontend: frontend).generate
       end
 
       def self.read_schema_fields(name)
@@ -75,7 +80,7 @@ module Belt
         end
       end
 
-      def initialize(name, fields, force: false, quiet: false)
+      def initialize(name, fields, force: false, quiet: false, frontend: nil)
         @name = name.downcase.gsub(/[^a-z0-9_]/, '_')
         @fields = fields
         @force = force
@@ -84,15 +89,16 @@ module Belt
         @singular_name = Belt::Inflector.singularize(@name)
         @resource_name = Belt::Inflector.pluralize(@singular_name)
         @class_name = Belt::Inflector.classify(@singular_name)
+        @frontend = frontend || FrontendRegistry.new.resolve!
       end
 
       def generate
-        unless Dir.exist?('frontend/src')
-          puts '✗ No frontend/ directory found. Run `belt generate frontend react` first.'
+        unless Dir.exist?(@frontend.src_dir)
+          puts "✗ No #{@frontend.src_dir}/ directory found. Run `belt generate frontend react` first."
           exit 1
         end
 
-        pages_dir = "frontend/src/pages/#{@resource_name}"
+        pages_dir = "#{@frontend.src_dir}/pages/#{@resource_name}"
         @plural_class_name = Belt::Inflector.camelize(@resource_name)
         FileUtils.mkdir_p(pages_dir)
 
@@ -170,7 +176,7 @@ module Belt
       end
 
       def inject_routes
-        app_jsx = 'frontend/src/App.jsx'
+        app_jsx = @frontend.app_jsx
         return unless File.exist?(app_jsx)
 
         content = File.read(app_jsx)

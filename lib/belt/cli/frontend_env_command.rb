@@ -3,14 +3,15 @@
 require_relative 'app_detection'
 require_relative 'env_resolver'
 require_relative 'frontend_env_map'
+require_relative 'frontend_registry'
 
 module Belt
   module CLI
-    # belt frontend env <environment>
+    # belt frontend env <environment> [--frontend NAME]
+    # belt frontend list
     #
-    # Smart-merges terraform outputs into frontend/.env using the declarative map
-    # (frontend/env.yml or .belt/frontend_env.yml). Only mapped keys are written;
-    # custom local keys are preserved.
+    # Smart-merges terraform outputs into <frontend>/.env using the declarative map
+    # (<frontend>/env.yml or .belt/frontend_env.yml for the default frontend).
     class FrontendEnvCommand
       include AppDetection
 
@@ -20,6 +21,8 @@ module Belt
         case subcommand
         when 'env'
           run_env(args)
+        when 'list', 'ls'
+          run_list
         when nil, '-h', '--help', 'help'
           puts usage
           exit(subcommand.nil? ? 1 : 0)
@@ -29,22 +32,51 @@ module Belt
         end
       end
 
+      def self.run_list
+        registry = FrontendRegistry.new
+        if registry.empty?
+          puts 'No frontends configured.'
+          puts 'Run `belt generate frontend react` or add config/frontends.yml.'
+          return
+        end
+
+        puts 'Frontends:'
+        registry.all.each do |fe|
+          marker = fe.default? ? '  (default)' : ''
+          status = fe.exists? ? '' : '  missing'
+          puts "  #{fe.name.ljust(16)} #{fe.path}/#{marker}#{status}"
+        end
+      end
+
       def self.run_env(args)
+        frontend_name = FrontendRegistry.extract_flag!(args, '--frontend')
         env = EnvResolver.resolve(args)
 
         if env.nil?
-          puts 'Usage: belt frontend env <environment>'
-          puts "\nWrites frontend/.env from terraform outputs using the env map."
+          puts 'Usage: belt frontend env <environment> [--frontend NAME]'
+          puts "\nWrites <frontend>/.env from terraform outputs using the env map."
           puts 'You can also set BELT_ENV to skip the environment argument.'
-          puts "\nMap file (optional): frontend/env.{yml,yaml} or .belt/frontend_env.{yml,yaml}"
+          puts "\nMap file (optional): <frontend>/env.{yml,yaml} or .belt/frontend_env.{yml,yaml}"
           puts 'Default without map: VITE_API_URL ← api_url'
           puts "\nExamples:"
           puts '  belt frontend env dev'
+          puts '  belt frontend env dev --frontend ops'
           puts '  BELT_ENV=dev belt frontend env'
           exit 1
         end
 
-        new(env).run
+        leftover = args.reject { |a| a.start_with?('-') }
+        frontend_name ||= leftover.shift
+
+        if frontend_name
+          frontend = FrontendRegistry.new.resolve!(frontend_name)
+          new(env, frontend: frontend).run
+        else
+          frontends = FrontendRegistry.new.all
+          abort FrontendRegistry.new.empty_message if frontends.empty?
+
+          frontends.each { |fe| new(env, frontend: fe).run }
+        end
       end
 
       def self.usage
@@ -52,12 +84,15 @@ module Belt
           Frontend helpers.
 
           Usage:
-            belt frontend env <environment>   Write frontend/.env from terraform outputs
+            belt frontend env <environment> [--frontend NAME]
+            belt frontend list
             belt frontend --help
 
-          Env map (optional):
-            frontend/env.yml
-            .belt/frontend_env.yml
+          Env map (optional, per frontend):
+            <frontend>/env.yml
+            .belt/frontend_env.yml   (default `frontend/` only)
+
+          Multiple frontends: config/frontends.yml (see `belt explain frontend`).
 
           Example map:
             VITE_API_URL: api_url
@@ -73,27 +108,29 @@ module Belt
         USAGE
       end
 
-      def initialize(env)
+      def initialize(env, frontend: nil)
         @env = env
         @app_name = detect_app_name
         @env_dir = "infrastructure/#{@env}"
+        @frontend = frontend || FrontendRegistry.new.resolve!
       end
 
       def run
-        unless Dir.exist?('frontend')
-          abort 'Error: No frontend/ directory found. Run `belt generate frontend react` first.'
+        unless Dir.exist?(@frontend.path)
+          abort "Error: No #{@frontend.path}/ directory found. Run `belt generate frontend react` first."
         end
 
         unless Dir.exist?(@env_dir)
           abort "Error: infrastructure/#{@env} not found. Run `belt generate environment #{@env}` first."
         end
 
-        map = FrontendEnvMap.new(@env, env_dir: @env_dir)
+        map = FrontendEnvMap.new(@env, env_dir: @env_dir, frontend_path: @frontend.path)
 
+        prefix = @frontend.name == 'frontend' ? '' : "[#{@frontend.name}] "
         if map.using_default_map?
-          puts '📋 No frontend/env.yml found — using default map (VITE_API_URL ← api_url)'
+          puts "📋 #{prefix}No #{@frontend.path}/env.yml found — using default map (VITE_API_URL ← api_url)"
         else
-          puts "📋 Loading env map from #{map.map_path}"
+          puts "📋 #{prefix}Loading env map from #{map.map_path}"
         end
 
         result = map.write_dotenv!

@@ -55,6 +55,7 @@ module Belt
       def run
         validate!
         apply_env_config!
+        build_zip_artifacts! if %w[plan apply].include?(@action)
         env_dir = File.join(@infra_dir, @env)
         args = ['terraform', @action, *@extra_args]
         puts "belt → #{args.join(' ')}  (in #{env_dir}/)"
@@ -67,6 +68,14 @@ module Belt
         env_config = EnvironmentConfig.load(@env, infra_dir: @infra_dir)
         env_config.apply!
         puts "  🔑 Using AWS profile: #{env_config.aws_profile}" if env_config.aws_profile?
+      end
+
+      def build_zip_artifacts!
+        require_relative 'zip_artifact_builder'
+        ZipArtifactBuilder.build!(
+          project_root: File.expand_path('..', @infra_dir),
+          infra_dir: @infra_dir
+        )
       end
 
       def validate!

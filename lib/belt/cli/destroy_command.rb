@@ -3,6 +3,7 @@
 require 'fileutils'
 require_relative 'app_detection'
 require_relative 'auth_command'
+require_relative 'frontend_registry'
 require_relative 'generator_registry'
 require_relative 'tables_command'
 require_relative '../inflector'
@@ -51,25 +52,28 @@ module Belt
           flags = parse_environment_flags(args)
           new(generator, name, [], **flags).destroy
         when 'frontend'
-          new(generator, nil, []).destroy
+          frontend_name = FrontendRegistry.extract_flag!(args, '--frontend')
+          new(generator, nil, [], frontend_name: frontend_name).destroy
         when 'auth'
           Belt::CLI::AuthCommand.destroy(args)
         when 'views'
+          frontend_name = FrontendRegistry.extract_flag!(args, '--frontend')
           name = args.shift
           if name.nil? || name.empty?
-            puts 'Usage: belt destroy views <name>'
+            puts 'Usage: belt destroy views <name> [--frontend NAME]'
             exit 1
           end
-          new(generator, name, args.map { |a| parse_field(a) }).destroy
+          new(generator, name, args.map { |a| parse_field(a) }, frontend_name: frontend_name).destroy
         when 'index'
           Belt::CLI::IndexCommand.run(['remove'] + args)
         else
+          frontend_name = FrontendRegistry.extract_flag!(args, '--frontend')
           name = args.shift
           if name.nil? || name.empty?
             puts "Usage: belt destroy #{generator} <name>"
             exit 1
           end
-          new(generator, name, args.map { |a| parse_field(a) }).destroy
+          new(generator, name, args.map { |a| parse_field(a) }, frontend_name: frontend_name).destroy
         end
       end
 
@@ -105,7 +109,7 @@ module Belt
             controller    Remove a controller
             auth          Remove Cognito user pool infrastructure
             environment   Remove a deployment environment and tear down infrastructure
-            frontend      Remove the frontend/ directory
+            frontend      Remove a frontend directory (use --frontend NAME when several exist)
             views         Remove React pages for a resource
 
           Environment options:
@@ -120,7 +124,9 @@ module Belt
             belt d environment dev --skip-terraform
             belt d environment dev --force
             belt d frontend
+            belt d frontend --frontend ops
             belt d views post
+            belt d views post --frontend ops
 
           ⚠ This is destructive. Files will be permanently deleted.
 
@@ -129,12 +135,14 @@ module Belt
         HELP
       end
 
-      def initialize(generator, name, fields, force: false, skip_terraform: false)
+      # rubocop:disable Metrics/ParameterLists -- keyword options for destroy flags
+      def initialize(generator, name, fields, force: false, skip_terraform: false, frontend_name: nil)
         @generator = generator
         @name = name&.downcase&.gsub(/[^a-z0-9_]/, '_')
         @fields = fields
         @force = force
         @skip_terraform = skip_terraform
+        @frontend_name = frontend_name
         @app_name = detect_namespace
         @singular_name = @name ? Belt::Inflector.singularize(@name) : nil
         @resource_name = @singular_name ? Belt::Inflector.pluralize(@singular_name) : nil
@@ -142,6 +150,7 @@ module Belt
         @removed = []
         @updated = []
       end
+      # rubocop:enable Metrics/ParameterLists
 
       def destroy
         case @generator
@@ -350,39 +359,62 @@ module Belt
       end
 
       def destroy_frontend
-        dir = 'frontend'
+        frontend = FrontendRegistry.new.resolve!(@frontend_name)
+        dir = frontend.path
         if Dir.exist?(dir)
           FileUtils.rm_rf(dir)
           @removed << dir
           puts "  remove  #{dir}/"
 
-          # Remove frontend.tf from the module
-          module_frontend = 'infrastructure/modules/app/frontend.tf'
-          if File.exist?(module_frontend)
-            FileUtils.rm_f(module_frontend)
-            @removed << module_frontend
-            puts "  remove  #{module_frontend}"
+          tf_file = File.join('infrastructure/modules/app', "#{frontend.tf_name}.tf")
+          if File.exist?(tf_file)
+            FileUtils.rm_f(tf_file)
+            @removed << tf_file
+            puts "  remove  #{tf_file}"
           end
 
-          puts "\n✓ Frontend removed!"
+          puts "\n✓ #{frontend.label.capitalize} removed!"
         else
-          puts '✗ No frontend/ directory found.'
+          puts "✗ No #{dir}/ directory found."
           exit 1
+        end
+      end
+
+      def target_frontends
+        registry = FrontendRegistry.new
+        return [] if registry.empty?
+
+        if @frontend_name
+          [registry.resolve!(@frontend_name)]
+        else
+          registry.all
         end
       end
 
       def destroy_views
         return unless @resource_name
 
-        pages_dir = "frontend/src/pages/#{@resource_name}"
-
-        if Dir.exist?(pages_dir)
-          FileUtils.rm_rf(pages_dir)
-          @removed << pages_dir
-          puts "  remove  #{pages_dir}/"
+        targets = target_frontends
+        if targets.empty?
+          pages_dir = "frontend/src/pages/#{@resource_name}"
+          if Dir.exist?(pages_dir)
+            FileUtils.rm_rf(pages_dir)
+            @removed << pages_dir
+            puts "  remove  #{pages_dir}/"
+          end
+          remove_view_routes_from('frontend/src/App.jsx')
+          return
         end
 
-        remove_view_routes
+        targets.each do |frontend|
+          pages_dir = "#{frontend.src_dir}/pages/#{@resource_name}"
+          if Dir.exist?(pages_dir)
+            FileUtils.rm_rf(pages_dir)
+            @removed << pages_dir
+            puts "  remove  #{pages_dir}/"
+          end
+          remove_view_routes_from(frontend.app_jsx)
+        end
       end
 
       def remove_file(path)
@@ -467,8 +499,7 @@ module Belt
         Belt::CLI::TablesCommand.sync_all_environments
       end
 
-      def remove_view_routes
-        app_jsx = 'frontend/src/App.jsx'
+      def remove_view_routes_from(app_jsx)
         return unless File.exist?(app_jsx)
 
         content = File.read(app_jsx)

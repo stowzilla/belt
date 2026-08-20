@@ -6,6 +6,7 @@ require_relative 'app_detection'
 require_relative 'auth_command'
 require_relative 'environment_command'
 require_relative 'frontend_command'
+require_relative 'frontend_registry'
 require_relative 'tables_command'
 require_relative 'views_command'
 require_relative 'generator_registry'
@@ -28,12 +29,14 @@ module Belt
           usage: 'belt generate scaffold <name> [field:type ...] [options]',
           options: [
             ['--skip-views', 'Skip generating frontend view pages'],
+            ['--frontend NAME', 'Target frontend when several exist'],
             ['--force, -f', 'Overwrite existing resource files (skip collision check)']
           ],
           examples: [
             ['belt g scaffold post title body:text'],
             ['belt g scaffold comment post:references body:text'],
             ['belt g scaffold task --skip-views'],
+            ['belt g scaffold bag --frontend ops'],
             ['belt g scaffold post title body:text --force']
           ],
           notes: <<~NOTES
@@ -44,7 +47,7 @@ module Belt
               config/contracts.rb                                API response contract added
               lambda/lib/routes/<app>_routes.rb                  Route manifest updated
               infrastructure/modules/app/dynamodb.tf             DynamoDB table generated
-              frontend/src/pages/<names>/                        React pages (if frontend exists)
+              <frontend>/src/pages/<names>/                      React pages (if a frontend exists)
 
             Nested Resources:
               Use `<parent>:references` to create a nested resource. This will:
@@ -142,8 +145,10 @@ module Belt
 
         force = args.delete('--force') || args.delete('-f')
         skip_views = args.delete('--skip-views')
+        frontend_name = FrontendRegistry.extract_flag!(args, '--frontend')
         fields = args.map { |arg| parse_field(arg) }
-        new(generator, name, fields, skip_views: skip_views, force: force).generate
+        new(generator, name, fields, skip_views: skip_views, force: force,
+                                     frontend_name: frontend_name).generate
       end
 
       def self.parse_field(arg)
@@ -200,7 +205,7 @@ module Belt
             controller    Generate a controller
             auth          Generate Cognito user pool infrastructure
             environment   Create a new deployment environment
-            frontend      Scaffold a frontend app (react, vue, svelte)
+            frontend      Scaffold a frontend app (react, vue, svelte; --name / --path for extras)
             views         Generate React pages for a resource
 
           Aliases:
@@ -228,7 +233,9 @@ module Belt
             belt g controller comments
             belt g environment staging
             belt g frontend react
+            belt g frontend react --name ops --path ops-app
             belt g views post title body:text
+            belt g views bag --frontend ops
 
           Run 'belt generate <generator> --help' for detailed help on a specific generator.
         HELP
@@ -271,12 +278,14 @@ module Belt
         puts "\n#{info[:notes]}" if info[:notes]
       end
 
-      def initialize(generator, name, fields, skip_views: false, force: false)
+      # rubocop:disable Metrics/ParameterLists -- keyword options for generator flags
+      def initialize(generator, name, fields, skip_views: false, force: false, frontend_name: nil)
         @generator = generator
         @name = name.downcase.gsub(/[^a-z0-9_]/, '_')
         @fields = fields
         @skip_views = skip_views
         @force = force
+        @frontend_name = frontend_name
         @app_name = detect_namespace
         @module_name = @app_name.split(/[-_]/).map(&:capitalize).join
         @singular_name = Belt::Inflector.singularize(@name)
@@ -284,6 +293,7 @@ module Belt
         @class_name = Belt::Inflector.classify(@singular_name)
         @references, @regular_fields = @fields.partition { |f| f[:type] == 'references' }
       end
+      # rubocop:enable Metrics/ParameterLists
 
       def generate
         case @generator
@@ -629,10 +639,15 @@ module Belt
       end
 
       def generate_views_if_frontend
-        return unless Dir.exist?('frontend/src')
         return if @skip_views
 
-        Belt::CLI::ViewsCommand.new(@name, @fields, force: @force, quiet: true).generate
+        registry = FrontendRegistry.new
+        return if registry.empty?
+
+        frontend = registry.resolve!(@frontend_name)
+        return unless Dir.exist?(frontend.src_dir)
+
+        Belt::CLI::ViewsCommand.new(@name, @fields, force: @force, quiet: true, frontend: frontend).generate
       end
     end
   end

@@ -51,7 +51,11 @@ Adds a frontend framework to the project:
 belt generate frontend react
 belt generate frontend vue
 belt generate frontend svelte
+belt generate frontend react --name ops --path ops-app
 ```
+
+`--name` and `--path` scaffold an additional SPA and register it in
+`config/frontends.yml`. See `belt explain frontend`.
 
 ### Views
 
@@ -60,7 +64,11 @@ Generates React pages for a resource's REST actions:
 ```bash
 belt generate views post title:string body:text status:string
 belt g views comment body:text author:string
+belt g views bag --frontend ops
 ```
+
+When the app has multiple frontends, pass `--frontend <name>` (or mark one
+`default: true` in `config/frontends.yml`).
 
 ### Auth
 
@@ -94,6 +102,7 @@ belt destroy model comment
 belt destroy controller admin/users
 belt destroy environment staging
 belt destroy frontend
+belt destroy frontend --frontend ops
 belt destroy views post
 ```
 

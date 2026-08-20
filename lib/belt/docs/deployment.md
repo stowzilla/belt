@@ -85,6 +85,25 @@ belt routes --namespace api
 
 This is typically done automatically by `belt deploy`.
 
+## Sidecar Lambda Zips
+
+Conveyor Belt packages Ruby lambdas. Some apps also have standalone
+`aws_lambda_function` resources (Node image processors, Cognito triggers)
+whose Terraform uses `filename` + `filebase64sha256` pointing at a zip on disk.
+
+`belt deploy`, `belt plan`, and `belt apply` scan `infrastructure/**/*.tf` for
+those zip paths and build any that are missing (or whose source hash changed):
+
+- Directory with `package.json` — `npm ci` in Docker (`linux/amd64`, Lambda
+  Node image) so native addons like `sharp` match Lambda, then zip
+- Plain JS directory — zip the `.js` / `.mjs` files
+
+The zip lives next to the source (`image-processor/image-processor.zip`). This
+is the same pre-terraform step Stowzilla's `scripts/deploy.sh` does for the
+image processor. Existing zips with no hash file are left alone.
+
+Docker must be running for Node packages.
+
 ## Terraform Commands
 
 Belt wraps Terraform with environment awareness:
@@ -130,9 +149,15 @@ belt deploy prod      # explicit arg wins
 For apps with a frontend:
 
 ```bash
-belt deploy frontend <env>    # build + deploy to S3/CloudFront
-belt frontend env <env>       # generate .env from Terraform outputs
+belt deploy frontend <env>                  # build + deploy all frontends
+belt deploy frontend <env> --frontend ops   # deploy one named frontend
+belt frontend env <env>                     # generate .env from Terraform outputs
+belt frontend list                          # show configured frontends
 ```
+
+The directory is `frontend/` by default. Multiple SPAs are declared in
+`config/frontends.yml` — see `belt explain frontend`. Full `belt deploy <env>`
+deploys every configured frontend after terraform apply.
 
 ## See Also
 
