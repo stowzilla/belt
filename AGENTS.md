@@ -107,7 +107,7 @@ Docs live in `lib/belt/docs/*.md`. These are the single source of truth for:
 
 **When to update docs:** Any PR that changes CLI behavior, controller lifecycle, routing DSL, deployment flow, or observability features MUST update the corresponding `lib/belt/docs/*.md` file. If adding a new feature category, add a new doc file and register the topic alias in `cli/explain_command.rb`.
 
-Current topics: `routing`, `controllers`, `models`, `deployment`, `generators`, `lambda_handler`, `observability`, `console`, `backups`, `plugins`, `structure`.
+Current topics: `routing`, `controllers`, `models`, `deployment`, `generators`, `lambda_handler`, `observability`, `console`, `backups`, `plugins`, `structure`, `frontend`.
 
 ## Plugin / GeneratorRegistry contract
 

@@ -43,6 +43,7 @@ my-app/
 │   └── prod/
 │       └── ...
 ├── frontend/                      # Optional frontend (React/Vue/Svelte)
+├── config/frontends.yml           # Optional: multiple named frontends
 ├── Gemfile                        # Project-level dependencies (CLI, dev tools)
 ├── Rakefile                       # Rake tasks
 ├── AGENTS.md                      # AI agent guide
@@ -85,6 +86,8 @@ Terraform resources.
   `lambda/Gemfile` is what gets packaged into the Lambda.
 - **Config over code**: Lambda configuration (timeout, memory, env vars) goes in
   YAML files, not hardcoded in Terraform.
+- **Frontends**: Default directory is `frontend/`. Multiple SPAs (customer + ops,
+  etc.) are declared in `config/frontends.yml`. See `belt explain frontend`.
 
 ## See Also
 

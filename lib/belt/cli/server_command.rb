@@ -4,6 +4,7 @@ require 'base64'
 require 'json'
 require_relative 'app_detection'
 require_relative 'frontend_env_map'
+require_relative 'frontend_registry'
 require_relative 'terraform_command'
 
 module Belt
@@ -16,6 +17,7 @@ module Belt
       def self.run(args)
         port = DEFAULT_PORT
         open_browser = false
+        frontend_name = FrontendRegistry.extract_flag!(args, '--frontend')
 
         i = 0
         while i < args.length
@@ -34,7 +36,7 @@ module Belt
           i += 1
         end
 
-        new(port: port, open_browser: open_browser).run
+        new(port: port, open_browser: open_browser, frontend_name: frontend_name).run
       end
 
       def self.help_text
@@ -45,37 +47,41 @@ module Belt
                  belt s [options]
 
           Options:
-            -p, --port PORT    Port to serve on (default: #{DEFAULT_PORT})
-            -o, --open         Open browser after starting
-            -h, --help         Show this help
+            -p, --port PORT          Port to serve on (default: #{DEFAULT_PORT})
+            --frontend NAME          Which frontend to start (when several exist)
+            -o, --open               Open browser after starting
+            -h, --help               Show this help
 
           Behavior:
-            • If frontend/ exists → runs the frontend dev server (npm run dev)
-              Injects env from frontend/env.yml (or default VITE_API_URL) using
+            • If a frontend exists → runs its dev server (npx vite)
+              Injects env from <frontend>/env.yml (or default VITE_API_URL) using
               terraform outputs when available.
             • If no frontend → serves the welcome page via a local HTTP server
               After deploy, shows live API URL and deployment status.
 
           Note: The backend is serverless (AWS Lambda). Use `belt deploy` to deploy
           your backend to AWS. Local frontend development reads the env map (or
-          frontend/.env via `belt frontend env <env>`).
+          <frontend>/.env via `belt frontend env <env>`).
 
           Examples:
-            belt server                 # Start on port #{DEFAULT_PORT}
-            belt s -p 4000             # Start on port 4000
-            belt s --open              # Start and open browser
+            belt server                      # Start on port #{DEFAULT_PORT}
+            belt s -p 4000                   # Start on port 4000
+            belt s --frontend ops            # Start the ops frontend
+            belt s --open                    # Start and open browser
         HELP
       end
 
-      def initialize(port:, open_browser: false)
+      def initialize(port:, open_browser: false, frontend_name: nil)
         @port = port
         @open_browser = open_browser
+        @frontend_name = frontend_name
         @app_name = detect_app_name
         @api_url = detect_api_url
+        @frontend = resolve_frontend
       end
 
       def run
-        if Dir.exist?('frontend') && File.exist?('frontend/package.json')
+        if @frontend&.exists?
           run_frontend_dev_server
         else
           run_welcome_server
@@ -84,8 +90,15 @@ module Belt
 
       private
 
+      def resolve_frontend
+        registry = FrontendRegistry.new
+        return nil if registry.empty? && @frontend_name.nil?
+
+        registry.resolve!(@frontend_name)
+      end
+
       def run_frontend_dev_server
-        puts "🚀 Starting frontend dev server on port #{@port}..."
+        puts "🚀 Starting #{@frontend.label} dev server on port #{@port}..."
         build_env = frontend_process_env
         api_url = build_env['VITE_API_URL'] || build_env['REACT_APP_API_URL'] ||
                   build_env['NEXT_PUBLIC_API_URL'] || @api_url
@@ -102,7 +115,7 @@ module Belt
         env = { 'PORT' => @port.to_s }.merge(build_env)
 
         # Prefer the dev script with the port flag for Vite-based setups
-        Dir.chdir('frontend') do
+        Dir.chdir(@frontend.path) do
           exec(env, 'npx', 'vite', '--port', @port.to_s)
         end
       end
@@ -112,7 +125,7 @@ module Belt
         env_name = @deploy_env || ENV.fetch('BELT_ENV', nil) || TerraformCommand.list_environments.first
         return {} unless env_name
 
-        FrontendEnvMap.new(env_name).process_env
+        FrontendEnvMap.new(env_name, frontend_path: @frontend.path).process_env
       rescue StandardError
         # Fall back to legacy api_url detection if map resolution fails
         @api_url ? { 'VITE_API_URL' => @api_url } : {}

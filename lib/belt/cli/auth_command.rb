@@ -3,6 +3,7 @@
 require 'fileutils'
 require 'erb'
 require_relative 'app_detection'
+require_relative 'frontend_registry'
 
 module Belt
   module CLI
@@ -20,13 +21,14 @@ module Belt
 
         force = args.delete('--force') || args.delete('-f')
         signup = args.delete('--signup')
+        frontend_name = FrontendRegistry.extract_flag!(args, '--frontend')
         pools = parse_pools(args)
 
-        new(pools: pools, force: force, signup: signup).generate
+        new(pools: pools, force: force, signup: signup, frontend_name: frontend_name).generate
       end
 
       def self.destroy(_args)
-        new(pools: [], force: false).remove
+        new(pools: [], force: false, skip_frontend_resolve: true).remove
       end
 
       def self.print_help
@@ -36,8 +38,9 @@ module Belt
           Usage: belt generate auth [pool_names...] [options]
 
           Options:
-            --signup        Allow public user registration (generates frontend views)
-            --force, -f     Overwrite existing cognito.tf (skip collision check)
+            --signup           Allow public user registration (generates frontend views)
+            --frontend NAME    Target frontend when several exist
+            --force, -f        Overwrite existing cognito.tf (skip collision check)
 
           Arguments:
             pool_names      Optional pool names for multiple user pools.
@@ -86,12 +89,13 @@ module Belt
         names.map(&:downcase).map { |n| n.gsub(/[^a-z0-9_]/, '_') }
       end
 
-      def initialize(pools:, force: false, signup: false)
+      def initialize(pools:, force: false, signup: false, frontend_name: nil, skip_frontend_resolve: false)
         @pool_names = pools
         @force = force
         @signup = signup
         @app_name = detect_app_name
         @pools = build_pool_metadata
+        @frontend = skip_frontend_resolve ? nil : resolve_frontend(frontend_name)
       end
 
       def generate
@@ -117,7 +121,7 @@ module Belt
         puts '       end'
         puts ''
         if frontend?
-          puts '  2. Wire auth into your frontend/src/App.jsx:'
+          puts "  2. Wire auth into your #{@frontend.src_dir}/App.jsx:"
           puts ''
           puts "       import Login from './pages/auth/Login'"
           puts "       import ProtectedRoute from './components/ProtectedRoute'"
@@ -185,20 +189,30 @@ module Belt
         end
       end
 
+      def resolve_frontend(name)
+        registry = FrontendRegistry.new
+        return nil if registry.empty? && name.nil?
+
+        return registry.resolve!(name) if name
+
+        registry.default
+      end
+
       def frontend?
-        Dir.exist?('frontend/src')
+        @frontend && Dir.exist?(@frontend.src_dir)
       end
 
       def generate_frontend_auth
         frontend_template_dir = File.join(TEMPLATE_DIR, 'frontend')
+        src = @frontend.src_dir
 
         # Generate auth lib files
-        lib_dir = 'frontend/src/lib'
+        lib_dir = File.join(src, 'lib')
         FileUtils.mkdir_p(lib_dir)
         copy_frontend_file(frontend_template_dir, 'auth.js', File.join(lib_dir, 'auth.js'))
         copy_frontend_file(frontend_template_dir, 'apiClient.js', File.join(lib_dir, 'apiClient.js'))
 
-        pages_dir = 'frontend/src/pages/auth'
+        pages_dir = File.join(src, 'pages/auth')
         FileUtils.mkdir_p(pages_dir)
         copy_frontend_file(frontend_template_dir, 'Login.jsx', File.join(pages_dir, 'Login.jsx'))
         copy_frontend_file(frontend_template_dir, 'auth.css', File.join(pages_dir, 'auth.css'))
@@ -209,7 +223,7 @@ module Belt
         end
 
         # Generate ProtectedRoute component
-        components_dir = 'frontend/src/components'
+        components_dir = File.join(src, 'components')
         FileUtils.mkdir_p(components_dir)
         copy_frontend_file(frontend_template_dir, 'ProtectedRoute.jsx',
                            File.join(components_dir, 'ProtectedRoute.jsx'))
@@ -226,11 +240,12 @@ module Belt
       def install_cognito_sdk
         puts "\n  Installing @aws-sdk/client-cognito-identity-provider..."
         success = system('npm', 'install', '@aws-sdk/client-cognito-identity-provider',
-                         '--prefix', 'frontend', '--no-fund', '--no-audit', '--silent')
+                         '--prefix', @frontend.path, '--no-fund', '--no-audit', '--silent')
         if success
           puts '  ✓      npm dependency installed'
         else
-          puts '  ⚠      npm install failed — run: cd frontend && npm install @aws-sdk/client-cognito-identity-provider'
+          puts "  ⚠      npm install failed — run: cd #{@frontend.path} && " \
+               'npm install @aws-sdk/client-cognito-identity-provider'
         end
       end
 

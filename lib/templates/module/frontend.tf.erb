@@ -1,15 +1,17 @@
-# Frontend hosting — S3 + CloudFront
+# Frontend hosting — S3 + CloudFront<% if @include_dns %>
 # Custom domain attached when var.domain is set
-
-resource "random_string" "frontend_suffix" {
+<% else %>
+# Additional frontend '<%= @frontend.name %>' — CloudFront default domain (no Route53)
+<% end %>
+resource "random_string" "<%= @tf_name %>_suffix" {
   length  = 8
   special = false
   upper   = false
 }
 
 # S3 bucket for frontend static assets
-resource "aws_s3_bucket" "frontend" {
-  bucket        = "${var.app_name}-frontend-${var.environment}-${random_string.frontend_suffix.result}"
+resource "aws_s3_bucket" "<%= @tf_name %>" {
+  bucket        = "${var.app_name}-<%= @bucket_slug %>-${var.environment}-${random_string.<%= @tf_name %>_suffix.result}"
   force_destroy = true
 
   lifecycle {
@@ -17,8 +19,8 @@ resource "aws_s3_bucket" "frontend" {
   }
 }
 
-resource "aws_s3_bucket_public_access_block" "frontend" {
-  bucket = aws_s3_bucket.frontend.id
+resource "aws_s3_bucket_public_access_block" "<%= @tf_name %>" {
+  bucket = aws_s3_bucket.<%= @tf_name %>.id
 
   block_public_acls       = true
   block_public_policy     = true
@@ -26,8 +28,8 @@ resource "aws_s3_bucket_public_access_block" "frontend" {
   restrict_public_buckets = true
 }
 
-resource "aws_s3_bucket_server_side_encryption_configuration" "frontend" {
-  bucket = aws_s3_bucket.frontend.id
+resource "aws_s3_bucket_server_side_encryption_configuration" "<%= @tf_name %>" {
+  bucket = aws_s3_bucket.<%= @tf_name %>.id
 
   rule {
     apply_server_side_encryption_by_default {
@@ -38,36 +40,36 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "frontend" {
 }
 
 # CloudFront OAC
-resource "aws_cloudfront_origin_access_control" "frontend" {
-  name                              = "${var.app_name}-${var.environment}-frontend-oac"
-  description                       = "OAC for frontend bucket"
+resource "aws_cloudfront_origin_access_control" "<%= @tf_name %>" {
+  name                              = "${var.app_name}-${var.environment}-<%= @bucket_slug %>-oac"
+  description                       = "OAC for <%= @bucket_slug %> bucket"
   origin_access_control_origin_type = "s3"
   signing_behavior                  = "always"
   signing_protocol                  = "sigv4"
 }
 
 # CloudFront distribution
-resource "aws_cloudfront_distribution" "frontend" {
+resource "aws_cloudfront_distribution" "<%= @tf_name %>" {
   origin {
-    domain_name              = aws_s3_bucket.frontend.bucket_regional_domain_name
-    origin_id                = "S3-${aws_s3_bucket.frontend.id}"
-    origin_access_control_id = aws_cloudfront_origin_access_control.frontend.id
+    domain_name              = aws_s3_bucket.<%= @tf_name %>.bucket_regional_domain_name
+    origin_id                = "S3-${aws_s3_bucket.<%= @tf_name %>.id}"
+    origin_access_control_id = aws_cloudfront_origin_access_control.<%= @tf_name %>.id
   }
 
   enabled             = true
   is_ipv6_enabled     = true
   default_root_object = "index.html"
-
+<% if @include_dns %>
   # Custom domain aliases (if DNS configured)
   aliases = local.dns_enabled ? compact([
     local.app_domain,
     var.environment == "prod" ? "www.${var.domain}" : ""
   ]) : []
-
+<% end %>
   default_cache_behavior {
     allowed_methods        = ["GET", "HEAD", "OPTIONS"]
     cached_methods         = ["GET", "HEAD"]
-    target_origin_id       = "S3-${aws_s3_bucket.frontend.id}"
+    target_origin_id       = "S3-${aws_s3_bucket.<%= @tf_name %>.id}"
     compress               = true
     viewer_protocol_policy = "redirect-to-https"
 
@@ -99,22 +101,22 @@ resource "aws_cloudfront_distribution" "frontend" {
   }
 
   viewer_certificate {
-    cloudfront_default_certificate = !local.dns_enabled
-    acm_certificate_arn            = local.dns_enabled ? aws_acm_certificate_validation.app[0].certificate_arn : null
-    ssl_support_method             = local.dns_enabled ? "sni-only" : null
-    minimum_protocol_version       = local.dns_enabled ? "TLSv1.2_2021" : null
+    cloudfront_default_certificate = <%= @include_dns ? '!local.dns_enabled' : 'true' %>
+    acm_certificate_arn            = <%= @include_dns ? 'local.dns_enabled ? aws_acm_certificate_validation.app[0].certificate_arn : null' : 'null' %>
+    ssl_support_method             = <%= @include_dns ? 'local.dns_enabled ? "sni-only" : null' : 'null' %>
+    minimum_protocol_version       = <%= @include_dns ? 'local.dns_enabled ? "TLSv1.2_2021" : null' : 'null' %>
   }
 
   tags = {
-    Name        = "${var.app_name}-${var.environment}-frontend"
+    Name        = "${var.app_name}-${var.environment}-<%= @bucket_slug %>"
     Environment = var.environment
     ManagedBy   = "Terraform"
   }
 }
 
 # S3 bucket policy — CloudFront OAC access only
-resource "aws_s3_bucket_policy" "frontend" {
-  bucket = aws_s3_bucket.frontend.id
+resource "aws_s3_bucket_policy" "<%= @tf_name %>" {
+  bucket = aws_s3_bucket.<%= @tf_name %>.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -126,55 +128,59 @@ resource "aws_s3_bucket_policy" "frontend" {
           Service = "cloudfront.amazonaws.com"
         }
         Action   = "s3:GetObject"
-        Resource = "${aws_s3_bucket.frontend.arn}/*"
+        Resource = "${aws_s3_bucket.<%= @tf_name %>.arn}/*"
         Condition = {
           StringEquals = {
-            "AWS:SourceArn" = aws_cloudfront_distribution.frontend.arn
+            "AWS:SourceArn" = aws_cloudfront_distribution.<%= @tf_name %>.arn
           }
         }
       }
     ]
   })
 
-  depends_on = [aws_s3_bucket_public_access_block.frontend]
+  depends_on = [aws_s3_bucket_public_access_block.<%= @tf_name %>]
 }
-
+<% if @include_dns %>
 # Route53 record for frontend (app domain → CloudFront)
-resource "aws_route53_record" "frontend" {
+resource "aws_route53_record" "<%= @tf_name %>" {
   count   = local.dns_enabled ? 1 : 0
   zone_id = aws_route53_zone.app[0].zone_id
   name    = local.app_domain
   type    = "A"
 
   alias {
-    name                   = aws_cloudfront_distribution.frontend.domain_name
-    zone_id                = aws_cloudfront_distribution.frontend.hosted_zone_id
+    name                   = aws_cloudfront_distribution.<%= @tf_name %>.domain_name
+    zone_id                = aws_cloudfront_distribution.<%= @tf_name %>.hosted_zone_id
     evaluate_target_health = false
   }
 }
 
 # www record for prod only
-resource "aws_route53_record" "frontend_www" {
+resource "aws_route53_record" "<%= @tf_name %>_www" {
   count   = local.dns_enabled && var.environment == "prod" ? 1 : 0
   zone_id = aws_route53_zone.app[0].zone_id
   name    = "www.${var.domain}"
   type    = "A"
 
   alias {
-    name                   = aws_cloudfront_distribution.frontend.domain_name
-    zone_id                = aws_cloudfront_distribution.frontend.hosted_zone_id
+    name                   = aws_cloudfront_distribution.<%= @tf_name %>.domain_name
+    zone_id                = aws_cloudfront_distribution.<%= @tf_name %>.hosted_zone_id
     evaluate_target_health = false
   }
 }
-
-output "frontend_bucket_name" {
-  value = aws_s3_bucket.frontend.id
+<% end %>
+output "<%= @output_prefix %>_bucket_name" {
+  value = aws_s3_bucket.<%= @tf_name %>.id
 }
 
-output "frontend_distribution_id" {
-  value = aws_cloudfront_distribution.frontend.id
+output "<%= @output_prefix %>_distribution_id" {
+  value = aws_cloudfront_distribution.<%= @tf_name %>.id
 }
 
-output "frontend_url" {
-  value = local.dns_enabled ? "https://${local.app_domain}" : "https://${aws_cloudfront_distribution.frontend.domain_name}"
+output "<%= @output_prefix %>_url" {
+<% if @include_dns -%>
+  value = local.dns_enabled ? "https://${local.app_domain}" : "https://${aws_cloudfront_distribution.<%= @tf_name %>.domain_name}"
+<% else -%>
+  value = "https://${aws_cloudfront_distribution.<%= @tf_name %>.domain_name}"
+<% end -%>
 }

@@ -130,9 +130,15 @@ belt deploy prod      # explicit arg wins
 For apps with a frontend:
 
 ```bash
-belt deploy frontend <env>    # build + deploy to S3/CloudFront
-belt frontend env <env>       # generate .env from Terraform outputs
+belt deploy frontend <env>                  # build + deploy all frontends
+belt deploy frontend <env> --frontend ops   # deploy one named frontend
+belt frontend env <env>                     # generate .env from Terraform outputs
+belt frontend list                          # show configured frontends
 ```
+
+The directory is `frontend/` by default. Multiple SPAs are declared in
+`config/frontends.yml` — see `belt explain frontend`. Full `belt deploy <env>`
+deploys every configured frontend after terraform apply.
 
 ## See Also
 

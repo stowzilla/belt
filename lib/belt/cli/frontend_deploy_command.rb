@@ -5,6 +5,7 @@ require 'open3'
 require_relative 'app_detection'
 require_relative 'env_resolver'
 require_relative 'frontend_env_map'
+require_relative 'frontend_registry'
 
 module Belt
   module CLI
@@ -12,12 +13,16 @@ module Belt
       include AppDetection
 
       def self.run(args)
+        frontend_name = FrontendRegistry.extract_flag!(args, '--frontend')
         env = EnvResolver.resolve(args)
 
         if env.nil?
-          puts 'Usage: belt deploy frontend <environment>'
-          puts "\nBuilds the frontend app and deploys to S3 + invalidates CloudFront."
+          puts 'Usage: belt deploy frontend <environment> [--frontend NAME]'
+          puts "\nBuilds frontend app(s) and deploys to S3 + invalidates CloudFront."
           puts 'You can also set BELT_ENV to skip the environment argument.'
+          puts "\nWith multiple frontends (config/frontends.yml):"
+          puts '  belt deploy frontend wups                  # deploy all'
+          puts '  belt deploy frontend wups --frontend ops   # deploy one'
           puts "\nExamples:"
           puts '  belt deploy frontend wups'
           puts '  belt deploy frontend dev01'
@@ -25,65 +30,101 @@ module Belt
           exit 1
         end
 
-        new(env).run
+        leftover = args.reject { |a| a.start_with?('-') }
+        frontend_name ||= leftover.shift
+
+        if frontend_name
+          frontend = FrontendRegistry.new.resolve!(frontend_name)
+          new(env, frontend: frontend).run
+        else
+          deploy_all(env)
+        end
       end
 
-      def initialize(env)
+      def self.deploy_all(env)
+        frontends = FrontendRegistry.new.existing
+        abort FrontendRegistry.new.empty_message if frontends.empty?
+
+        frontends.each_with_index do |frontend, index|
+          puts if index.positive?
+          new(env, frontend: frontend).run
+        end
+      end
+
+      def initialize(env, frontend: nil)
         @env = env
         @app_name = detect_app_name
         @env_dir = "infrastructure/#{@env}"
+        @frontend = frontend || FrontendRegistry.new.resolve!
       end
 
       def run
         validate!
+        puts "━━━ #{@frontend.label} (#{@frontend.path}/) ━━━"
         build_frontend
         sync_to_s3
         invalidate_cloudfront
         url = fetch_frontend_url
-        puts "\n✅ Frontend deployed to #{@env}!"
+        puts "\n✅ #{@frontend.label.capitalize} deployed to #{@env}!"
         puts "   #{url}" if url
       end
 
       private
 
       def validate!
-        unless Dir.exist?('frontend')
-          abort 'Error: No frontend/ directory found. Run `belt generate frontend react` first.'
+        unless Dir.exist?(@frontend.path)
+          abort "Error: No #{@frontend.path}/ directory found. " \
+                'Run `belt generate frontend react --name ' \
+                "#{@frontend.name} --path #{@frontend.path}` first."
         end
-        return if File.exist?('frontend/package.json')
+        return if File.exist?(@frontend.package_json)
 
-        abort 'Error: frontend/package.json not found.'
+        abort "Error: #{@frontend.package_json} not found."
       end
 
       def build_frontend
         puts '📦 Installing dependencies...'
-        install_cmd = File.exist?('frontend/package-lock.json') ? %w[npm ci] : %w[npm install]
-        run!(*install_cmd, chdir: 'frontend')
+        install_cmd = File.exist?(File.join(@frontend.path, 'package-lock.json')) ? %w[npm ci] : %w[npm install]
+        run!(*install_cmd, chdir: @frontend.path)
 
-        puts '🏗️  Building frontend...'
+        puts "🏗️  Building #{@frontend.label}..."
         env = frontend_build_env
         puts "   Injecting env: #{env.keys.sort.join(', ')}" if env.any?
-        run!(env, 'npm', 'run', 'build', chdir: 'frontend')
+        run!(env, 'npm', 'run', 'build', chdir: @frontend.path)
       end
 
-      # Resolve build env from frontend/env.yml map (or default VITE_API_URL ← api_url).
       def frontend_build_env
-        FrontendEnvMap.new(@env, env_dir: @env_dir).process_env
+        FrontendEnvMap.new(
+          @env,
+          env_dir: @env_dir,
+          frontend_path: @frontend.path
+        ).process_env
       end
 
       def sync_to_s3
         bucket = fetch_bucket_name
         abort "Error: Could not determine S3 bucket. Run `belt apply #{@env}` first." unless bucket
 
+        dist = @frontend.dist_dir
+        unless Dir.exist?(dist)
+          abort "Error: Build output not found at #{dist}/. " \
+                'Set `dist:` in config/frontends.yml if the app uses a non-default outDir.'
+        end
+
         puts "☁️  Deploying to S3... (#{bucket})"
 
+        dist_prefix = dist.end_with?('/') ? dist : "#{dist}/"
+
         # Hashed assets get immutable cache headers
-        run!('aws', 's3', 'sync', 'frontend/dist/', "s3://#{bucket}", '--delete',
+        run!('aws', 's3', 'sync', dist_prefix, "s3://#{bucket}", '--delete',
              '--size-only', '--cache-control', 'public, max-age=31536000, immutable',
              '--exclude', 'index.html')
 
+        index = File.join(dist, 'index.html')
+        abort "Error: #{index} not found after build." unless File.exist?(index)
+
         # index.html always revalidates
-        run!('aws', 's3', 'cp', 'frontend/dist/index.html', "s3://#{bucket}/index.html",
+        run!('aws', 's3', 'cp', index, "s3://#{bucket}/index.html",
              '--cache-control', 'no-cache')
       end
 
@@ -101,18 +142,50 @@ module Belt
       end
 
       def fetch_bucket_name
-        fetch_tf_output('frontend_bucket_name')
+        fetch_tf_output(@frontend.bucket_output)
       end
 
       def fetch_distribution_id
-        fetch_tf_output('frontend_distribution_id')
+        id = fetch_tf_output(@frontend.distribution_output)
+        return id if id
+
+        domain = fetch_tf_output(@frontend.cloudfront_domain_output) if @frontend.cloudfront_domain_output
+        domain ||= domain_from_url(fetch_frontend_url)
+        lookup_distribution_id(domain)
       end
 
       def fetch_frontend_url
-        fetch_tf_output('frontend_url')
+        fetch_tf_output(@frontend.url_output)
+      end
+
+      def domain_from_url(url)
+        return nil if url.nil? || url.empty?
+
+        url.sub(%r{\Ahttps?://}i, '').split('/').first
+      end
+
+      # Stowzilla-style fallback: terraform may export a CloudFront domain
+      # instead of a distribution ID.
+      def lookup_distribution_id(domain)
+        return nil if domain.nil? || domain.empty?
+
+        query = "DistributionList.Items[?DomainName=='#{domain}'].Id"
+        output, status = Open3.capture2(
+          'aws', 'cloudfront', 'list-distributions',
+          '--query', query, '--output', 'text',
+          err: File::NULL
+        )
+        return nil unless status.success?
+
+        value = output.strip
+        value.empty? || value == 'None' ? nil : value.split(/\s+/).first
+      rescue Errno::ENOENT
+        nil
       end
 
       def fetch_tf_output(name)
+        return nil if name.nil? || name.to_s.empty?
+
         output, status = Open3.capture2('terraform', 'output', '-raw', name, chdir: @env_dir)
         return nil unless status.success?
 

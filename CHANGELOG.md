@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Enhancement
+
+- **Multiple frontends**: Frontend directory is no longer hardcoded to `frontend/`.
+  Declare named SPAs in `config/frontends.yml` (path, dist dir, terraform output names).
+  `belt generate frontend react --name ops --path ops-app` scaffolds an additional app.
+  Generators, `belt server`, `belt frontend env`, and `belt deploy frontend` accept
+  `--frontend NAME`. `belt deploy frontend <env>` deploys all configured frontends;
+  pass `--frontend` to target one. Existing single-`frontend/` apps keep working
+  with no config file.
+
 ## 0.3.4
 
 ### Enhancement

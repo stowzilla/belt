@@ -9,8 +9,10 @@ module Belt
     # Resolves frontend env vars from a declarative map (env name → terraform output).
     #
     # Map file (optional), first match wins:
-    #   frontend/env.yml
-    #   .belt/frontend_env.yml
+    #   <frontend-path>/env.yml
+    #   <frontend-path>/env.yaml
+    #   .belt/frontend_env.yml          (only for the default `frontend/` dir)
+    #   .belt/frontend_env.yaml
     #
     # Example:
     #   VITE_API_URL: api_url
@@ -30,18 +32,33 @@ module Belt
 
       DOTENV_PATH = File.join('frontend', '.env')
 
-      attr_reader :env_name, :env_dir, :map_path, :map
+      attr_reader :env_name, :env_dir, :map_path, :map, :frontend_path
 
-      def initialize(env_name, env_dir: nil, map_path: nil)
+      def initialize(env_name, env_dir: nil, map_path: nil, frontend_path: 'frontend')
         @env_name = env_name
         @env_dir = env_dir || File.join('infrastructure', env_name)
-        @map_path = map_path || self.class.find_map_path
+        @frontend_path = frontend_path
+        @map_path = map_path || self.class.find_map_path(frontend_path)
         @map = load_map
         @tf_cache = {}
       end
 
-      def self.find_map_path
-        MAP_CANDIDATES.find { |path| File.file?(path) }
+      def self.find_map_path(dir = 'frontend')
+        candidates_for(dir).find { |path| File.file?(path) }
+      end
+
+      def self.candidates_for(dir)
+        list = [
+          File.join(dir, 'env.yml'),
+          File.join(dir, 'env.yaml')
+        ]
+        if dir == 'frontend'
+          list += [
+            File.join('.belt', 'frontend_env.yml'),
+            File.join('.belt', 'frontend_env.yaml')
+          ]
+        end
+        list
       end
 
       # Hash of env_var => value suitable for process env (npm run build / vite).
@@ -54,11 +71,12 @@ module Belt
         resolved
       end
 
-      # Smart-merge mapped keys into frontend/.env.
+      # Smart-merge mapped keys into <frontend>/.env.
       # - Only overwrites keys present in the map
       # - Preserves unknown keys, comments, and blank lines
       # - Missing TF output → warn, do not clobber an existing value
-      def write_dotenv!(path: DOTENV_PATH)
+      def write_dotenv!(path: nil)
+        path ||= File.join(@frontend_path, '.env')
         FileUtils.mkdir_p(File.dirname(path))
 
         existing_lines = File.file?(path) ? File.readlines(path, chomp: true) : []

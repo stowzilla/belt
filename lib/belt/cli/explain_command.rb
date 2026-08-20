@@ -36,7 +36,9 @@ module Belt
         'backup' => 'backups',
         'plugin' => 'plugins',
         'irb' => 'console',
-        'repl' => 'console'
+        'repl' => 'console',
+        'frontends' => 'frontend',
+        'spa' => 'frontend'
       }.freeze
 
       def self.run(args)

@@ -66,7 +66,8 @@ module Belt
             puts '  belt deploy prod           # Deploy to prod'
             puts '  belt deploy dev --auto     # Deploy without confirmation'
             puts '  belt deploy --rebuild      # Fast code push (no infra changes)'
-            puts '  belt deploy frontend dev   # Deploy frontend only'
+            puts '  belt deploy frontend dev              # Deploy frontend(s)'
+            puts '  belt deploy frontend dev --frontend ops'
             puts "\nNo environments found. Run `belt generate environment dev` first."
             exit 1
           end
@@ -130,7 +131,8 @@ module Belt
             belt deploy prod --rebuild # Fast code push to prod
             belt deploy prod --skip-backup  # Skip backups for this deploy
             belt deploy prod --backup-only  # Run backups without deploying
-            belt deploy frontend dev   # Deploy frontend assets only
+            belt deploy frontend dev              # Deploy frontend asset(s)
+            belt deploy frontend dev --frontend ops
         HELP
       end
 
@@ -706,15 +708,19 @@ module Belt
       end
 
       def deploy_frontend_if_exists
-        frontend_dir = File.join(@project_root, 'frontend')
-        return unless Dir.exist?(frontend_dir) && File.exist?(File.join(frontend_dir, 'package.json'))
-
-        puts "\n━━━ frontend deploy ━━━"
+        require_relative 'frontend_registry'
         require_relative 'frontend_deploy_command'
-        Belt::CLI::FrontendDeployCommand.new(@env).run
-      rescue StandardError => e
-        puts "\n  ⚠ Frontend deploy failed: #{e.message}"
-        puts "    Run `belt deploy frontend #{@env}` manually to retry."
+
+        frontends = FrontendRegistry.new.existing
+        return if frontends.empty?
+
+        frontends.each do |frontend|
+          puts "\n━━━ #{frontend.label} deploy ━━━"
+          Belt::CLI::FrontendDeployCommand.new(@env, frontend: frontend).run
+        rescue StandardError => e
+          puts "\n  ⚠ #{frontend.label.capitalize} deploy failed: #{e.message}"
+          puts "    Run `belt deploy frontend #{@env} --frontend #{frontend.name}` manually to retry."
+        end
       end
 
       def print_outputs(env_dir)
