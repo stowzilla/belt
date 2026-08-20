@@ -3,14 +3,19 @@
 module Belt
   module CLI
     class RoutesCommand
-      # Infers request_model from contracts using naming conventions.
+      # Infers request_model and response_model from contracts using naming conventions.
       #
-      # Convention cascade (first match wins):
+      # Request model convention cascade (first match wins):
       #   1. :<verb>_<gateway>_<singular_resource>  (e.g. :create_customer_item)
       #   2. :<verb>_<singular_resource>            (e.g. :create_item)
       #
-      # Only applies to body-accepting verbs (POST/PUT/PATCH) on resource routes.
-      # Explicit request_model always wins — inference only fills in blanks.
+      # Response model convention:
+      #   Singular of the resource name matches a `model` in contracts.
+      #   e.g. `resources :items` → looks for `model :item` in contracts.rb
+      #
+      # Only request_model inference applies to body-accepting verbs (POST/PUT/PATCH).
+      # Response model inference applies to all verbs on resource routes.
+      # Explicit values always win — inference only fills in blanks.
       module RequestModelInference
         private
 
@@ -18,19 +23,17 @@ module Belt
         # Requires the set of known contract names from contracts.rb.
         def infer_request_models!(routes, contracts_file)
           contract_names = load_contract_names(contracts_file)
-          return if contract_names.empty?
+          return if contract_names[:request].empty? && contract_names[:response].empty?
 
           routes.each do |route|
-            next unless route[:request_model].to_s.empty?
-            next unless body_accepting_verb?(route[:verb])
-
-            inferred = infer_request_model_for_route(route, contract_names)
-            route[:request_model] = inferred if inferred
+            infer_request_model_for!(route, contract_names[:request])
+            infer_response_model_for!(route, contract_names[:response])
           end
         end
 
         def load_contract_names(contracts_file)
-          return Set.new unless contracts_file && File.exist?(contracts_file)
+          empty_result = { request: Set.new, response: Set.new }
+          return empty_result unless contracts_file && File.exist?(contracts_file)
 
           # Reset application state for clean contract loading
           Belt.instance_variable_set(:@application, nil)
@@ -38,13 +41,32 @@ module Belt
             eval(File.read(contracts_file), binding, contracts_file) # rubocop:disable Security/Eval
           rescue StandardError => e
             warn "Warning: Failed to load contracts for inference: #{e.message}"
-            return Set.new
+            return empty_result
           end
 
           schema = Belt.application.schema.to_h
-          names = Set.new
-          (schema[:request_models] || {}).each_key { |name| names << name.to_s }
-          names
+          request_names = Set.new
+          response_names = Set.new
+          (schema[:request_models] || {}).each_key { |name| request_names << name.to_s }
+          (schema[:response_models] || {}).each_key { |name| response_names << name.to_s }
+          { request: request_names, response: response_names }
+        end
+
+        def infer_request_model_for!(route, request_contracts)
+          return if request_contracts.empty?
+          return unless route[:request_model].to_s.empty?
+          return unless body_accepting_verb?(route[:verb])
+
+          inferred = infer_request_model_for_route(route, request_contracts)
+          route[:request_model] = inferred if inferred
+        end
+
+        def infer_response_model_for!(route, response_contracts)
+          return if response_contracts.empty?
+          return unless route[:response_model].to_s.empty?
+
+          inferred = infer_response_model_for_route(route, response_contracts)
+          route[:response_model] = inferred if inferred
         end
 
         def infer_request_model_for_route(route, contract_names)
@@ -63,6 +85,16 @@ module Belt
           ]
 
           candidates.find { |candidate| contract_names.include?(candidate) }
+        end
+
+        def infer_response_model_for_route(route, response_contracts)
+          resource_name = extract_singular_resource(route)
+          return nil unless resource_name
+
+          # Convention: singular resource name matches a response model
+          return resource_name if response_contracts.include?(resource_name)
+
+          nil
         end
 
         def infer_verb_prefix(verb, action)

@@ -10,8 +10,8 @@ RSpec.describe Belt::CLI::RoutesCommand::RequestModelInference do
       include Belt::CLI::RoutesCommand::RequestModelInference
 
       # Expose private methods for testing
-      public :infer_request_models!, :infer_request_model_for_route, :extract_singular_resource,
-             :infer_verb_prefix, :load_contract_names
+      public :infer_request_models!, :infer_request_model_for_route, :infer_response_model_for_route,
+             :extract_singular_resource, :infer_verb_prefix, :load_contract_names
     end.new
   end
 
@@ -90,13 +90,54 @@ RSpec.describe Belt::CLI::RoutesCommand::RequestModelInference do
     end
   end
 
-  describe '#infer_request_models!' do
+  describe '#infer_response_model_for_route' do
+    let(:response_contracts) { Set.new(%w[item customer pickup container]) }
+
+    it 'infers response model from singular resource name' do
+      route = { path: '/items', gateway: 'api' }
+      result = test_class.infer_response_model_for_route(route, response_contracts)
+      expect(result).to eq('item')
+    end
+
+    it 'works for member paths' do
+      route = { path: '/items/{item_id}', gateway: 'api' }
+      result = test_class.infer_response_model_for_route(route, response_contracts)
+      expect(result).to eq('item')
+    end
+
+    it 'works for nested resource paths' do
+      route = { path: '/posts/{post_id}/comments', gateway: 'api' }
+      result = test_class.infer_response_model_for_route(route, response_contracts)
+      expect(result).to be_nil # no 'comment' model defined
+    end
+
+    it 'returns nil when no matching model exists' do
+      route = { path: '/widgets', gateway: 'api' }
+      result = test_class.infer_response_model_for_route(route, response_contracts)
+      expect(result).to be_nil
+    end
+
+    it 'singularizes plural resource names' do
+      route = { path: '/customers', gateway: 'api' }
+      result = test_class.infer_response_model_for_route(route, response_contracts)
+      expect(result).to eq('customer')
+    end
+
+    it 'handles hyphenated paths' do
+      response_contracts_with_zone = Set.new(%w[coverage_zone])
+      route = { path: '/coverage-zones', gateway: 'api' }
+      result = test_class.infer_response_model_for_route(route, response_contracts_with_zone)
+      expect(result).to eq('coverage_zone')
+    end
+  end
+
+  describe '#infer_request_models! (integration)' do
     it 'does not override explicitly set request_model' do
       routes = [
-        { verb: 'POST', path: '/items', action: 'create', gateway: 'api', request_model: 'custom_create' }
+        { verb: 'POST', path: '/items', action: 'create', gateway: 'api',
+          request_model: 'custom_create', response_model: '' }
       ]
 
-      # Create a temp contracts file
       contracts = <<~RUBY
         Belt.application.schema.define do
           request :create_item do
@@ -117,8 +158,10 @@ RSpec.describe Belt::CLI::RoutesCommand::RequestModelInference do
 
     it 'fills in missing request_model from contracts' do
       routes = [
-        { verb: 'POST', path: '/items', action: 'create', gateway: 'api', request_model: '' },
-        { verb: 'PUT', path: '/items/{item_id}', action: 'update', gateway: 'api', request_model: '' }
+        { verb: 'POST', path: '/items', action: 'create', gateway: 'api',
+          request_model: '', response_model: '' },
+        { verb: 'PUT', path: '/items/{item_id}', action: 'update', gateway: 'api',
+          request_model: '', response_model: '' }
       ]
 
       contracts = <<~RUBY
@@ -145,9 +188,106 @@ RSpec.describe Belt::CLI::RoutesCommand::RequestModelInference do
       tmpfile.unlink
     end
 
-    it 'prefers gateway-scoped contracts' do
+    it 'fills in missing response_model from contracts' do
       routes = [
-        { verb: 'POST', path: '/items', action: 'create', gateway: 'customer', request_model: '' }
+        { verb: 'GET', path: '/items', action: 'index', gateway: 'api',
+          request_model: '', response_model: '' },
+        { verb: 'GET', path: '/items/{item_id}', action: 'show', gateway: 'api',
+          request_model: '', response_model: '' },
+        { verb: 'POST', path: '/items', action: 'create', gateway: 'api',
+          request_model: '', response_model: '' }
+      ]
+
+      contracts = <<~RUBY
+        Belt.application.schema.define do
+          model :item do
+            context :api do
+              string :id
+              string :name
+            end
+          end
+        end
+      RUBY
+
+      tmpfile = Tempfile.new(['contracts', '.rb'])
+      tmpfile.write(contracts)
+      tmpfile.close
+
+      Belt.instance_variable_set(:@application, nil)
+      test_class.infer_request_models!(routes, tmpfile.path)
+
+      expect(routes[0][:response_model]).to eq('item')
+      expect(routes[1][:response_model]).to eq('item')
+      expect(routes[2][:response_model]).to eq('item')
+    ensure
+      tmpfile.unlink
+    end
+
+    it 'does not override explicitly set response_model' do
+      routes = [
+        { verb: 'GET', path: '/items', action: 'index', gateway: 'api',
+          request_model: '', response_model: 'custom_response' }
+      ]
+
+      contracts = <<~RUBY
+        Belt.application.schema.define do
+          model :item do
+            context :api do
+              string :id
+            end
+          end
+        end
+      RUBY
+
+      tmpfile = Tempfile.new(['contracts', '.rb'])
+      tmpfile.write(contracts)
+      tmpfile.close
+
+      Belt.instance_variable_set(:@application, nil)
+      test_class.infer_request_models!(routes, tmpfile.path)
+
+      expect(routes.first[:response_model]).to eq('custom_response')
+    ensure
+      tmpfile.unlink
+    end
+
+    it 'infers both request_model and response_model together' do
+      routes = [
+        { verb: 'POST', path: '/items', action: 'create', gateway: 'api',
+          request_model: '', response_model: '' }
+      ]
+
+      contracts = <<~RUBY
+        Belt.application.schema.define do
+          request :create_item do
+            string :name
+          end
+          model :item do
+            context :api do
+              string :id
+              string :name
+            end
+          end
+        end
+      RUBY
+
+      tmpfile = Tempfile.new(['contracts', '.rb'])
+      tmpfile.write(contracts)
+      tmpfile.close
+
+      Belt.instance_variable_set(:@application, nil)
+      test_class.infer_request_models!(routes, tmpfile.path)
+
+      expect(routes.first[:request_model]).to eq('create_item')
+      expect(routes.first[:response_model]).to eq('item')
+    ensure
+      tmpfile.unlink
+    end
+
+    it 'prefers gateway-scoped request contracts' do
+      routes = [
+        { verb: 'POST', path: '/items', action: 'create', gateway: 'customer',
+          request_model: '', response_model: '' }
       ]
 
       contracts = <<~RUBY
@@ -173,10 +313,12 @@ RSpec.describe Belt::CLI::RoutesCommand::RequestModelInference do
       tmpfile.unlink
     end
 
-    it 'skips non-body verbs' do
+    it 'skips non-body verbs for request_model' do
       routes = [
-        { verb: 'GET', path: '/items', action: 'index', gateway: 'api', request_model: '' },
-        { verb: 'DELETE', path: '/items/{item_id}', action: 'destroy', gateway: 'api', request_model: '' }
+        { verb: 'GET', path: '/items', action: 'index', gateway: 'api',
+          request_model: '', response_model: '' },
+        { verb: 'DELETE', path: '/items/{item_id}', action: 'destroy', gateway: 'api',
+          request_model: '', response_model: '' }
       ]
 
       contracts = <<~RUBY
@@ -202,11 +344,13 @@ RSpec.describe Belt::CLI::RoutesCommand::RequestModelInference do
 
     it 'handles missing contracts file gracefully' do
       routes = [
-        { verb: 'POST', path: '/items', action: 'create', gateway: 'api', request_model: '' }
+        { verb: 'POST', path: '/items', action: 'create', gateway: 'api',
+          request_model: '', response_model: '' }
       ]
 
       test_class.infer_request_models!(routes, '/nonexistent/contracts.rb')
       expect(routes.first[:request_model]).to eq('')
+      expect(routes.first[:response_model]).to eq('')
     end
   end
 

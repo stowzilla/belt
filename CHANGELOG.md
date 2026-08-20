@@ -22,6 +22,12 @@
   Only applies to body-accepting verbs (POST/PUT/PATCH). Explicit `request_model:`
   always takes priority. No matching contract = no validation (same as before).
 
+- **Convention-based response_model inference**: When no explicit `response_model` is
+  set on a resource route, `belt routes` auto-discovers a matching response model
+  from `contracts.rb` using the singular resource name.
+  e.g. `resources :items` → looks for `model :item` → auto-wires `response_model: :item`.
+  Applies to all verbs. Explicit `response_model:` always takes priority.
+
 ## 0.3.5
 
 ### Enhancement

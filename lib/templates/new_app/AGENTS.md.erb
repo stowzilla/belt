@@ -170,6 +170,16 @@ Belt auto-wires request validation from `config/contracts.rb` using conventions:
 
 **No `request_model:` declaration needed** if your contract names follow this pattern. Belt infers it.
 
+### Response Model Wiring (Documentation)
+
+Belt auto-wires response models the same way:
+
+- `resources :items` → looks for `model :item` in contracts → auto-wires `response_model: :item`
+
+**No `response_model:` declaration needed** if your model name matches the singular resource name.
+
+### Overrides
+
 For per-action overrides when conventions don't fit:
 ```ruby
 resources :items, request_model: { create: :create_item, update: :update_item }

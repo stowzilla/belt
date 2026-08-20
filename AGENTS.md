@@ -191,8 +191,17 @@ When no explicit `request_model` is set, `belt routes` looks for a matching cont
 1. `:<verb>_<gateway>_<singular_resource>` → e.g. `:create_customer_item` (gateway = "customer", resource = "items")
 2. `:<verb>_<singular_resource>` → e.g. `:create_item`
 
-Only fires for POST/PUT/PATCH. No match = no validation. The inference module lives at
-`lib/belt/cli/routes_command/request_model_inference.rb`.
+Only fires for POST/PUT/PATCH. No match = no validation.
+
+### Response model inference
+
+When no explicit `response_model` is set, `belt routes` looks for a matching response model:
+
+- Singular of resource name → e.g. `resources :items` looks for `model :item` in contracts.rb
+
+Applies to all verbs. No match = no response model documented.
+
+The inference module lives at `lib/belt/cli/routes_command/request_model_inference.rb`.
 
 ## Do not
 
