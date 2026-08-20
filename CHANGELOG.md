@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.5
+
 ### Enhancement
 
 - **Multiple frontends**: Frontend directory is no longer hardcoded to `frontend/`.
