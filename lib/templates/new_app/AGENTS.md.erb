@@ -161,6 +161,25 @@ belt doctor                                            # Check dependencies
 
 4. `resources :things` generates: `GET /things`, `POST /things`, `GET /things/:id`, `PUT /things/:id`, `DELETE /things/:id`. **PUT, not PATCH.**
 
+### Request Model Wiring (Validation)
+
+Belt auto-wires request validation from `config/contracts.rb` using conventions:
+
+- `POST /items` → looks for `:create_item` (or `:create_<gateway>_item`)
+- `PUT /items/:id` → looks for `:update_item` (or `:update_<gateway>_item`)
+
+**No `request_model:` declaration needed** if your contract names follow this pattern. Belt infers it.
+
+For per-action overrides when conventions don't fit:
+```ruby
+resources :items, request_model: { create: :create_item, update: :update_item }
+```
+
+For non-CRUD custom actions, use explicit wiring:
+```ruby
+post '/schedule', request_model: :schedule_pickup
+```
+
 ## How Models Work
 
 Models use ActiveItem (DynamoDB ORM):
