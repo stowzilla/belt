@@ -10,6 +10,7 @@ require_relative 'backup_config'
 require_relative 'backup_runner'
 require_relative 'environment_config'
 require_relative 'path_gem_materializer'
+require_relative 'zip_artifact_builder'
 
 module Belt
   module CLI
@@ -93,10 +94,11 @@ module Belt
             1. Ensure Gemfile.lock is consistent (fix stale PATH refs)
             2. Regenerate route manifests
             3. Run pre-deploy backups (if configured in belt.rb)
-            4. terraform init    (initialize providers/modules)
-            5. terraform plan    (preview changes)
-            6. Prompt for confirmation (unless --auto)
-            7. terraform apply   (deploy changes)
+            4. Build sidecar Lambda zips Terraform needs at plan time
+            5. terraform init    (initialize providers/modules)
+            6. terraform plan    (preview changes)
+            7. Prompt for confirmation (unless --auto)
+            8. terraform apply   (deploy changes)
 
           Options:
             --auto, --yes, -y    Skip confirmation prompt (auto-approve)
@@ -157,6 +159,7 @@ module Belt
         warn_active_path_gems!
         generate_routes_if_needed
         run_backups unless @skip_backup
+        build_zip_artifacts!
 
         Dir.chdir(env_dir) do
           run_init
@@ -663,6 +666,10 @@ module Belt
           print '.'
         end
         puts ' (timed out waiting, but code was pushed)'
+      end
+
+      def build_zip_artifacts!
+        ZipArtifactBuilder.build!(project_root: @project_root, infra_dir: @infra_dir)
       end
 
       def run_init

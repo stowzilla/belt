@@ -13,6 +13,11 @@
   `--frontend NAME`. `belt deploy frontend <env>` deploys all configured frontends;
   pass `--frontend` to target one. Existing single-`frontend/` apps keep working
   with no config file.
+- **Sidecar Lambda zips**: `belt deploy` / `belt plan` / `belt apply` build zip
+  artifacts that Terraform `filebase64sha256` needs at plan time (e.g. Stowzilla's
+  Node `image-processor`). Node packages are installed in Docker on linux/amd64
+  so native addons match Lambda. Missing zips are built automatically; unchanged
+  sources skip the rebuild.
 
 ## 0.3.4
 
