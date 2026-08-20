@@ -173,6 +173,35 @@ Do not confuse app `AGENTS.md` guidance (routing, models, deploy) with this file
 | Controller / response behavior | `lib/belt_controller/` |
 | Lambda entry / CORS / errors | `lib/belt/lambda_handler.rb`, helpers under `lib/belt/helpers/` |
 | Path gem packaging on deploy | `cli/path_gem_materializer.rb`, `cli/deploy_command.rb` |
+| Request model inference | `cli/routes_command/request_model_inference.rb` |
+| Route DSL (resources, scope, etc.) | `lib/belt/route_dsl.rb` |
+
+## Request model wiring
+
+Belt supports three levels of `request_model` resolution (highest priority first):
+
+1. **Explicit per-route** — `put "/items/:id", request_model: :update_item` on individual routes
+2. **Hash-style per-action** — `resources :items, request_model: { create: :create_item, update: :update_item }`
+3. **Convention-based inference** — automatic discovery from `contracts.rb` using naming cascade
+
+### Convention naming cascade
+
+When no explicit `request_model` is set, `belt routes` looks for a matching contract:
+
+1. `:<verb>_<gateway>_<singular_resource>` → e.g. `:create_customer_item` (gateway = "customer", resource = "items")
+2. `:<verb>_<singular_resource>` → e.g. `:create_item`
+
+Only fires for POST/PUT/PATCH. No match = no validation.
+
+### Response model inference
+
+When no explicit `response_model` is set, `belt routes` looks for a matching response model:
+
+- Singular of resource name → e.g. `resources :items` looks for `model :item` in contracts.rb
+
+Applies to all verbs. No match = no response model documented.
+
+The inference module lives at `lib/belt/cli/routes_command/request_model_inference.rb`.
 
 ## Do not
 

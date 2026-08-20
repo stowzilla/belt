@@ -106,17 +106,37 @@ module Belt
     private
 
     def add_nested_resource_routes(resource_name, param_name, resource_options, actions)
-      @gateway.send(:add_route, :get, "#{@prefix}/#{resource_name}", resource_options) if actions.include?(:index)
-      @gateway.send(:add_route, :post, "#{@prefix}/#{resource_name}", resource_options) if actions.include?(:create)
+      if actions.include?(:index)
+        @gateway.send(:add_route, :get, "#{@prefix}/#{resource_name}",
+                      resolve_request_model_for(resource_options, :index))
+      end
+      if actions.include?(:create)
+        @gateway.send(:add_route, :post, "#{@prefix}/#{resource_name}",
+                      resolve_request_model_for(resource_options, :create))
+      end
       if actions.include?(:show)
-        @gateway.send(:add_route, :get, "#{@prefix}/#{resource_name}/{#{param_name}}", resource_options)
+        @gateway.send(:add_route, :get, "#{@prefix}/#{resource_name}/{#{param_name}}",
+                      resolve_request_model_for(resource_options, :show))
       end
       if actions.include?(:update)
-        @gateway.send(:add_route, :put, "#{@prefix}/#{resource_name}/{#{param_name}}", resource_options)
+        @gateway.send(:add_route, :put, "#{@prefix}/#{resource_name}/{#{param_name}}",
+                      resolve_request_model_for(resource_options, :update))
       end
       return unless actions.include?(:destroy)
 
-      @gateway.send(:add_route, :delete, "#{@prefix}/#{resource_name}/{#{param_name}}", resource_options)
+      @gateway.send(:add_route, :delete, "#{@prefix}/#{resource_name}/{#{param_name}}",
+                    resolve_request_model_for(resource_options, :destroy))
+    end
+
+    def resolve_request_model_for(options, action)
+      rm = options[:request_model]
+      case rm
+      when Hash
+        resolved = rm[action] || rm[action.to_s]
+        options.merge(request_model: resolved)
+      else
+        options
+      end
     end
 
     def merge_inherited_options(options)
@@ -200,11 +220,7 @@ module Belt
       resource_options = options.merge(route_type: :resources)
       actions = determine_actions(options)
 
-      add_route(:get, "/#{resource_name}", resource_options) if actions.include?(:index)
-      add_route(:post, "/#{resource_name}", resource_options) if actions.include?(:create)
-      add_route(:get, "/#{resource_name}/{#{param_name}}", resource_options) if actions.include?(:show)
-      add_route(:put, "/#{resource_name}/{#{param_name}}", resource_options) if actions.include?(:update)
-      add_route(:delete, "/#{resource_name}/{#{param_name}}", resource_options) if actions.include?(:destroy)
+      add_resource_routes(resource_name, param_name, resource_options, actions)
 
       return unless block_given?
 
@@ -226,10 +242,22 @@ module Belt
       actions = determine_actions(options, default: %i[show update destroy])
       resource_options = options.merge(route_type: :resource)
 
-      add_route(:get, "/#{resource_name}", resource_options) if actions.include?(:show)
-      add_route(:put, "/#{resource_name}", resource_options) if actions.include?(:update)
-      add_route(:delete, "/#{resource_name}", resource_options) if actions.include?(:destroy)
-      add_route(:post, "/#{resource_name}", resource_options) if actions.include?(:create)
+      if actions.include?(:show)
+        add_route(:get, "/#{resource_name}",
+                  resolve_request_model_for(resource_options, :show))
+      end
+      if actions.include?(:update)
+        add_route(:put, "/#{resource_name}",
+                  resolve_request_model_for(resource_options, :update))
+      end
+      if actions.include?(:destroy)
+        add_route(:delete, "/#{resource_name}",
+                  resolve_request_model_for(resource_options, :destroy))
+      end
+      return unless actions.include?(:create)
+
+      add_route(:post, "/#{resource_name}",
+                resolve_request_model_for(resource_options, :create))
     end
 
     private
@@ -269,6 +297,39 @@ module Belt
       return options if options.key?(:tables)
 
       options.merge(tables: [resource_name.to_sym])
+    end
+
+    def add_resource_routes(resource_name, param_name, resource_options, actions)
+      if actions.include?(:index)
+        add_route(:get, "/#{resource_name}",
+                  resolve_request_model_for(resource_options, :index))
+      end
+      if actions.include?(:create)
+        add_route(:post, "/#{resource_name}",
+                  resolve_request_model_for(resource_options, :create))
+      end
+      if actions.include?(:show)
+        add_route(:get, "/#{resource_name}/{#{param_name}}",
+                  resolve_request_model_for(resource_options, :show))
+      end
+      if actions.include?(:update)
+        add_route(:put, "/#{resource_name}/{#{param_name}}",
+                  resolve_request_model_for(resource_options, :update))
+      end
+      return unless actions.include?(:destroy)
+
+      add_route(:delete, "/#{resource_name}/{#{param_name}}", resolve_request_model_for(resource_options, :destroy))
+    end
+
+    def resolve_request_model_for(options, action)
+      rm = options[:request_model]
+      case rm
+      when Hash
+        resolved = rm[action] || rm[action.to_s]
+        options.merge(request_model: resolved)
+      else
+        options
+      end
     end
 
     def determine_actions(options, default: %i[index create show update destroy])
@@ -540,17 +601,37 @@ module Belt
       end
 
       def add_scoped_resource_routes(resource_name, param_name, resource_options, actions)
-        @gateway.send(:add_route, :get, build_path("/#{resource_name}"), resource_options) if actions.include?(:index)
-        @gateway.send(:add_route, :post, build_path("/#{resource_name}"), resource_options) if actions.include?(:create)
+        if actions.include?(:index)
+          @gateway.send(:add_route, :get, build_path("/#{resource_name}"),
+                        resolve_request_model_for(resource_options, :index))
+        end
+        if actions.include?(:create)
+          @gateway.send(:add_route, :post, build_path("/#{resource_name}"),
+                        resolve_request_model_for(resource_options, :create))
+        end
         if actions.include?(:show)
-          @gateway.send(:add_route, :get, build_path("/#{resource_name}/{#{param_name}}"), resource_options)
+          @gateway.send(:add_route, :get, build_path("/#{resource_name}/{#{param_name}}"),
+                        resolve_request_model_for(resource_options, :show))
         end
         if actions.include?(:update)
-          @gateway.send(:add_route, :put, build_path("/#{resource_name}/{#{param_name}}"), resource_options)
+          @gateway.send(:add_route, :put, build_path("/#{resource_name}/{#{param_name}}"),
+                        resolve_request_model_for(resource_options, :update))
         end
         return unless actions.include?(:destroy)
 
-        @gateway.send(:add_route, :delete, build_path("/#{resource_name}/{#{param_name}}"), resource_options)
+        @gateway.send(:add_route, :delete, build_path("/#{resource_name}/{#{param_name}}"),
+                      resolve_request_model_for(resource_options, :destroy))
+      end
+
+      def resolve_request_model_for(options, action)
+        rm = options[:request_model]
+        case rm
+        when Hash
+          resolved = rm[action] || rm[action.to_s]
+          options.merge(request_model: resolved)
+        else
+          options
+        end
       end
 
       def build_scoped_resources(name, options, &block)
@@ -585,13 +666,22 @@ module Belt
         resource_options = options.merge(route_type: :resource, controller: controller)
         actions = determine_scoped_actions(options, default: %i[show update destroy create])
 
-        @gateway.send(:add_route, :get, build_path("/#{resource_name}"), resource_options) if actions.include?(:show)
-        @gateway.send(:add_route, :put, build_path("/#{resource_name}"), resource_options) if actions.include?(:update)
+        if actions.include?(:show)
+          @gateway.send(:add_route, :get, build_path("/#{resource_name}"),
+                        resolve_request_model_for(resource_options, :show))
+        end
+        if actions.include?(:update)
+          @gateway.send(:add_route, :put, build_path("/#{resource_name}"),
+                        resolve_request_model_for(resource_options, :update))
+        end
         if actions.include?(:destroy)
           @gateway.send(:add_route, :delete, build_path("/#{resource_name}"),
-                        resource_options)
+                        resolve_request_model_for(resource_options, :destroy))
         end
-        @gateway.send(:add_route, :post, build_path("/#{resource_name}"), resource_options) if actions.include?(:create)
+        return unless actions.include?(:create)
+
+        @gateway.send(:add_route, :post, build_path("/#{resource_name}"),
+                      resolve_request_model_for(resource_options, :create))
       end
 
       def apply_scope_to_route(options)

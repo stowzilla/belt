@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+## 0.3.6
+
+### Enhancement
+
+- **Per-action request_model**: `request_model` on `resources` now accepts a Hash
+  to specify different validation schemas per action:
+  ```ruby
+  resources :items, request_model: { create: :create_item, update: :update_item }
+  ```
+  Symbol style (uniform for all body verbs) still works unchanged.
+
+- **Convention-based request_model inference**: When no explicit `request_model` is
+  set on a resource route, `belt routes` auto-discovers matching contracts from
+  `contracts.rb` using a naming cascade:
+  1. `:<verb>_<gateway>_<singular_resource>` (e.g. `:create_customer_item`)
+  2. `:<verb>_<singular_resource>` (e.g. `:create_item`)
+
+  Only applies to body-accepting verbs (POST/PUT/PATCH). Explicit `request_model:`
+  always takes priority. No matching contract = no validation (same as before).
+
+- **Convention-based response_model inference**: When no explicit `response_model` is
+  set on a resource route, `belt routes` auto-discovers a matching response model
+  from `contracts.rb` using the singular resource name.
+  e.g. `resources :items` → looks for `model :item` → auto-wires `response_model: :item`.
+  Applies to all verbs. Explicit `response_model:` always takes priority.
+
 ## 0.3.5
 
 ### Enhancement
