@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.8
+
+### Bug Fix
+
+- **S3 bucket naming with underscored app names**: The module template now sanitizes
+  `var.app_name` for S3 bucket names by replacing underscores with hyphens. Apps named
+  with underscores (e.g. `feature_parity`) previously generated invalid bucket names
+  since S3 follows DNS naming rules which prohibit underscores.
+
 ## 0.3.7
 
 ### Bug Fix
