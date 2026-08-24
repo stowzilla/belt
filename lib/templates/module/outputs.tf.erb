@@ -1,6 +1,6 @@
 output "api_url" {
   description = "API Gateway base URL (custom domain if configured, otherwise default)"
-  value       = var.domain != "" ? "https://${local.api_domain}" : values(conveyor_belt.main.api_gateway_urls)[0]
+  value       = var.domain != "" ? "https://${local.api_domain}/${keys(conveyor_belt.main.api_gateway_urls)[0]}" : values(conveyor_belt.main.api_gateway_urls)[0]
 }
 
 output "api_urls" {
