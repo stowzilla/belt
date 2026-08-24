@@ -11,7 +11,7 @@ resource "random_string" "<%= @tf_name %>_suffix" {
 
 # S3 bucket for frontend static assets
 resource "aws_s3_bucket" "<%= @tf_name %>" {
-  bucket        = "${var.app_name}-<%= @bucket_slug %>-${var.environment}-${random_string.<%= @tf_name %>_suffix.result}"
+  bucket        = "${local.s3_app_name}-<%= @bucket_slug %>-${var.environment}-${random_string.<%= @tf_name %>_suffix.result}"
   force_destroy = true
 
   lifecycle {

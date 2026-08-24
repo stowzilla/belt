@@ -3,6 +3,12 @@ variable "app_name" {
   type        = string
 }
 
+locals {
+  # S3 bucket names must follow DNS rules — underscores are not allowed.
+  # App names may use underscores (Ruby conventions), so we dasherize for S3/CloudFront naming.
+  s3_app_name = replace(var.app_name, "_", "-")
+}
+
 variable "environment" {
   description = "Environment name (e.g., dev, prod, staging)"
   type        = string
