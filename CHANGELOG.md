@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.10
+
+### Bug Fix
+
+- **`api_url` output missing base path for custom domains**: When a custom domain is
+  configured (e.g. `api.dev.example.com`), the `api_url` terraform output was missing
+  the gateway's base path segment. Conveyor-belt maps each gateway to a base path
+  (gateway "api" → path `/api`), so the correct URL is
+  `https://api.dev.example.com/api` not `https://api.dev.example.com`. The frontend
+  would get the wrong `VITE_API_URL` and hit a 403 on the custom domain root.
+
 ## 0.3.9
 
 ### Bug Fix
