@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.3.7
+
+### Bug Fix
+
+- **App name detection in worktrees**: `detect_app_name` now checks
+  `infrastructure/*/variables.tf` for `variable "app_name" { default = "..." }`
+  before falling back to the directory name. Fixes incorrect Lambda function
+  lookups (e.g. `belt logs`) when running from a git worktree whose directory
+  name doesn't match the actual app name.
 
 ## 0.3.6
 

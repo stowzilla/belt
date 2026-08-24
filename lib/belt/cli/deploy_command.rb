@@ -321,6 +321,19 @@ module Belt
           return match[1] if match
         end
 
+        # Try variables.tf for a default app_name value
+        vars_file = File.join(@infra_dir, @env, 'variables.tf')
+        if File.exist?(vars_file)
+          content = File.read(vars_file)
+          if content.match?(/variable\s+"app_name"/)
+            block_match = content.match(/variable\s+"app_name"\s*\{([^}]*)\}/m)
+            if block_match
+              default_match = block_match[1].match(/default\s*=\s*"([^"]+)"/)
+              return default_match[1] if default_match
+            end
+          end
+        end
+
         # Fall back to directory name
         File.basename(@project_root)
       end
