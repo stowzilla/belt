@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.9
+
+### Bug Fix
+
+- **`belt setup frontend` with underscored app names**: The 0.3.8 fix placed
+  `local.s3_safe_name` in `dns.tf` but `belt setup frontend` only regenerates
+  `frontend.tf`, causing an "undeclared local value" error on existing apps.
+  The bucket name now uses inline `replace(var.app_name, "_", "-")` directly in
+  `frontend.tf`, making it fully self-contained with no cross-file dependency.
+
 ## 0.3.8
 
 ### Bug Fix

@@ -2,10 +2,6 @@
 # Convention: prod → mydomain.com, other envs → <env>.mydomain.com
 
 locals {
-  # S3 bucket names follow DNS rules — underscores are not allowed.
-  # App names often use underscores (Ruby conventions); replace for S3/resource naming.
-  s3_safe_name = replace(var.app_name, "_", "-")
-
   # Determine the domain for this environment
   app_domain = var.domain != "" ? (
     var.environment == "prod" ? var.domain : "${var.environment}.${var.domain}"
