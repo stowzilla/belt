@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.11
+
+### Bug Fix
+
+- **`belt deploy` skips route generation on first deploy**: The `generate_routes`
+  method would silently bail if `lambda/lib/routes/` didn't already exist on disk.
+  Since this directory is gitignored (it's a generated build artifact), a fresh clone
+  or first deploy would package the Lambda without route manifests, causing a
+  `LoadError` at cold start. Now creates the directory with `mkdir_p` before running
+  route generation.
+
 ## 0.3.10
 
 ### Bug Fix

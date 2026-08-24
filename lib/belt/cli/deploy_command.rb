@@ -428,7 +428,7 @@ module Belt
 
       def generate_routes(lambda_dir)
         routes_dir = File.join(lambda_dir, 'lib', 'routes')
-        return unless Dir.exist?(routes_dir)
+        FileUtils.mkdir_p(routes_dir)
 
         puts '  🗺️  Regenerating route manifests...'
         success = system('belt', 'routes', '--namespace', 'all', '--output-dir', routes_dir)
