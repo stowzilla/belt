@@ -97,7 +97,7 @@ module Belt
           Example map:
             VITE_API_URL: api_url
             VITE_COGNITO_USER_POOL_ID: cognito_user_pool_id
-            VITE_COGNITO_CLIENT_ID: cognito_user_pool_client_id
+            VITE_COGNITO_CLIENT_ID: cognito_client_id
             VITE_AWS_REGION: cognito_region
 
           Without a map, belt injects only VITE_API_URL from api_url.
