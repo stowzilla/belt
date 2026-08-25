@@ -78,7 +78,7 @@ outputs:
 # app/env.yml
 VITE_API_URL: api_url
 VITE_COGNITO_USER_POOL_ID: cognito_user_pool_id
-VITE_COGNITO_CLIENT_ID: cognito_user_pool_client_id
+VITE_COGNITO_CLIENT_ID: cognito_client_id
 ```
 
 The default `frontend/` directory also accepts `.belt/frontend_env.yml` as a

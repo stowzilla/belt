@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.12
+
+### Bug Fix
+
+- **`env.yml.example` Cognito client ID typo**: The example env map referenced
+  `cognito_user_pool_client_id` as the terraform output name for
+  `VITE_COGNITO_CLIENT_ID`, but the correct output name is `cognito_client_id`.
+  Users following the tutorial would uncomment the line and get a missing-output
+  warning on deploy. Fixed in the template, CLI help text, and docs.
+
 ## 0.3.11
 
 ### Bug Fix
