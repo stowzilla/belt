@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.15
+
+### Bug Fix
+
+- **`belt generate auth` NEW_PASSWORD_REQUIRED challenge sent `email` even when
+  the user already had it**: The 0.3.14 fix always passed `{ email }` to
+  `completeNewPasswordChallenge`. That fixed pools where `email` was missing, but
+  broke the common case where the user already has `email` set (e.g. created via
+  `admin-create-user` with an email) — Cognito rejects that with a 400
+  `NotAuthorizedException: Cannot modify an already provided email`. The template
+  now reads the `requiredAttributes` list Cognito provides in the
+  `newPasswordRequired` callback and supplies `email` **only when Cognito actually
+  requires it**. Users with email already set complete the challenge without
+  re-sending it; users missing email still get it supplied. Handles both cases.
+
 ## 0.3.14
 
 ### Bug Fix
