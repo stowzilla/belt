@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.3.13
+
+### Security Fix
+
+- **`belt generate auth` sent passwords in plaintext**: The generated `auth.js`
+  used the raw `@aws-sdk/client-cognito-identity-provider` with
+  `AuthFlow: 'USER_PASSWORD_AUTH'`, which puts the user's cleartext `PASSWORD` in
+  the `InitiateAuth` request payload (visible in devtools, proxies, and any request
+  logging). The template now uses `amazon-cognito-identity-js`, which authenticates
+  via SRP (Secure Remote Password) — the password never leaves the browser, only the
+  `SRP_A` proof is transmitted. `signIn` and the `NEW_PASSWORD_REQUIRED` challenge now
+  run over SRP; `signUp`/`confirmSignUp` are unchanged in behavior but route through the
+  same library.
+- The generator now installs `amazon-cognito-identity-js` instead of
+  `@aws-sdk/client-cognito-identity-provider`.
+- SRP requires the User Pool ID client-side, so `auth.js` now reads
+  `VITE_COGNITO_USER_POOL_ID` (already emitted by the auth generator's terraform
+  outputs and present in `env.yml.example`).
+
 ## 0.3.12
 
 ### Bug Fix

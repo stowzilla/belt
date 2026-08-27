@@ -238,14 +238,14 @@ module Belt
       end
 
       def install_cognito_sdk
-        puts "\n  Installing @aws-sdk/client-cognito-identity-provider..."
-        success = system('npm', 'install', '@aws-sdk/client-cognito-identity-provider',
+        puts "\n  Installing amazon-cognito-identity-js..."
+        success = system('npm', 'install', 'amazon-cognito-identity-js',
                          '--prefix', @frontend.path, '--no-fund', '--no-audit', '--silent')
         if success
           puts '  ✓      npm dependency installed'
         else
           puts "  ⚠      npm install failed — run: cd #{@frontend.path} && " \
-               'npm install @aws-sdk/client-cognito-identity-provider'
+               'npm install amazon-cognito-identity-js'
         end
       end
 
