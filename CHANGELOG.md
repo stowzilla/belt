@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.14
+
+### Bug Fix
+
+- **`belt generate auth` NEW_PASSWORD_REQUIRED challenge dropped the email
+  attribute**: The generated `auth.js` `completeNewPassword` passed an empty
+  attributes object (`{}`) to `completeNewPasswordChallenge`. On user pools that
+  require `email`, admin-created users completing the `NEW_PASSWORD_REQUIRED`
+  challenge (which don't have `email` set yet) got a 400 `Invalid attributes
+  given, email is missing`. The template now supplies `{ email }` (the username
+  is the email) so the challenge completes. `Login.jsx` already passed the email
+  in, so no change was needed there.
+
 ## 0.3.13
 
 ### Security Fix
