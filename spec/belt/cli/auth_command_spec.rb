@@ -161,12 +161,29 @@ RSpec.describe Belt::CLI::AuthCommand do
       expect(content).to include('from_email_address     = var.cognito_from_email')
     end
 
-    it 'patches environment tfvars with SES variable examples' do
+    it 'patches environment tfvars with commented SES variables when no domain' do
       expect { described_class.run(['--ses-email']) }.to output(/update.*terraform\.tfvars.*SES/).to_stdout
 
       tfvars = File.read(File.join(tmpdir, 'infrastructure/dev/terraform.tfvars'))
-      expect(tfvars).to include('cognito_ses_email_arn')
-      expect(tfvars).to include('cognito_from_email')
+      expect(tfvars).to include('# cognito_ses_email_arn')
+      expect(tfvars).to include('# cognito_from_email')
+      expect(tfvars).to include('yourdomain.com')
+    end
+
+    context 'when domain is configured in tfvars' do
+      before do
+        tfvars_path = File.join(tmpdir, 'infrastructure/dev/terraform.tfvars')
+        File.write(tfvars_path, %(app_name = "myapp"\ndomain   = "coolapp.io"\n))
+      end
+
+      it 'generates uncommented SES variables with domain-based defaults' do
+        expect { described_class.run(['--ses-email']) }.to output(/update.*terraform\.tfvars.*SES/).to_stdout
+
+        tfvars = File.read(File.join(tmpdir, 'infrastructure/dev/terraform.tfvars'))
+        expect(tfvars).to include('cognito_ses_email_arn  = "arn:aws:ses:REGION:ACCOUNT:identity/coolapp.io"')
+        expect(tfvars).to include('cognito_from_email     = "noreply@coolapp.io"')
+        expect(tfvars).to include('# cognito_reply_to_email = "support@coolapp.io"')
+      end
     end
   end
 
