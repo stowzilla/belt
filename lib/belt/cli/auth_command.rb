@@ -21,10 +21,11 @@ module Belt
 
         force = args.delete('--force') || args.delete('-f')
         signup = args.delete('--signup')
+        ses_email = args.delete('--ses-email')
         frontend_name = FrontendRegistry.extract_flag!(args, '--frontend')
         pools = parse_pools(args)
 
-        new(pools: pools, force: force, signup: signup, frontend_name: frontend_name).generate
+        new(pools: pools, force: force, signup: signup, ses_email: ses_email, frontend_name: frontend_name).generate
       end
 
       def self.destroy(_args)
@@ -39,6 +40,7 @@ module Belt
 
           Options:
             --signup           Allow public user registration (generates frontend views)
+            --ses-email        Use Amazon SES for emails (custom from address/domain)
             --frontend NAME    Target frontend when several exist
             --force, -f        Overwrite existing cognito.tf (skip collision check)
 
@@ -49,6 +51,7 @@ module Belt
           Examples:
             belt g auth                        # Admin-only, single pool
             belt g auth --signup               # Public signup with frontend views
+            belt g auth --ses-email            # Custom email domain via SES
             belt g auth web                    # Named pool: "web"
             belt g auth web mobile             # Two pools
             belt g auth --force                # Overwrite existing
@@ -71,6 +74,19 @@ module Belt
             frontend/src/pages/auth/Login.jsx              Login page
             frontend/src/components/ProtectedRoute.jsx     Route guard component
 
+          With --ses-email:
+            Uses Amazon SES instead of Cognito's default email service. Allows sending
+            from your custom domain (e.g., noreply@yourapp.com) instead of verificationemail.com.
+
+            Prerequisites:
+              1. Verify your domain or email address in Amazon SES
+              2. Request production access (move out of SES sandbox) for production use
+
+            After generation, set these variables in your tfvars:
+              cognito_ses_email_arn  = "arn:aws:ses:us-east-1:123456789:identity/yourapp.com"
+              cognito_from_email     = "noreply@yourapp.com"
+              cognito_reply_to_email = "support@yourapp.com"  # optional
+
           It also patches:
             infrastructure/modules/app/main.tf             Adds cognito_user_pool_arns to conveyor_belt
 
@@ -89,10 +105,12 @@ module Belt
         names.map(&:downcase).map { |n| n.gsub(/[^a-z0-9_]/, '_') }
       end
 
-      def initialize(pools:, force: false, signup: false, frontend_name: nil, skip_frontend_resolve: false)
+      def initialize(pools:, force: false, signup: false, ses_email: false, frontend_name: nil,
+                     skip_frontend_resolve: false)
         @pool_names = pools
         @force = force
         @signup = signup
+        @ses_email = ses_email
         @app_name = detect_app_name
         @pools = build_pool_metadata
         @frontend = skip_frontend_resolve ? nil : resolve_frontend(frontend_name)
@@ -104,6 +122,7 @@ module Belt
 
         write_cognito_tf
         write_cognito_outputs_tf
+        write_cognito_variables_tf if @ses_email
         patch_main_tf
         patch_env_outputs
         generate_frontend_auth if frontend?
@@ -114,14 +133,29 @@ module Belt
 
       def print_next_steps
         puts "\nNext steps:"
-        puts '  1. Add auth: :cognito to your routes namespace:'
+        step = 1
+
+        if @ses_email
+          puts "  #{step}. Configure SES email variables in your tfvars files:"
+          puts ''
+          puts '       # Verify your domain in SES first, then add:'
+          puts '       cognito_ses_email_arn  = "arn:aws:ses:REGION:ACCOUNT:identity/yourdomain.com"'
+          puts '       cognito_from_email     = "noreply@yourdomain.com"'
+          puts '       cognito_reply_to_email = "support@yourdomain.com"  # optional'
+          puts ''
+          step += 1
+        end
+
+        puts "  #{step}. Add auth: :cognito to your routes namespace:"
         puts ''
         puts '       namespace :api, auth: :cognito do'
         puts '         # your resources...'
         puts '       end'
         puts ''
+        step += 1
+
         if frontend?
-          puts "  2. Wire auth into your #{@frontend.src_dir}/App.jsx:"
+          puts "  #{step}. Wire auth into your #{@frontend.src_dir}/App.jsx:"
           puts ''
           puts "       import Login from './pages/auth/Login'"
           puts "       import ProtectedRoute from './components/ProtectedRoute'"
@@ -132,12 +166,11 @@ module Belt
           puts '       // Wrap protected routes:'
           puts '       <Route path="/*" element={<ProtectedRoute><YourApp /></ProtectedRoute>} />'
           puts ''
-          puts '  3. Deploy: belt deploy'
-          print_create_user_step(4) unless @signup
-        else
-          puts '  2. Deploy: belt deploy'
-          print_create_user_step(3) unless @signup
+          step += 1
         end
+        puts "  #{step}. Deploy: belt deploy"
+        step += 1
+        print_create_user_step(step) unless @signup
       end
 
       def print_create_user_step(step_num)
@@ -154,6 +187,7 @@ module Belt
 
         cognito_tf = File.join(MODULE_DIR, 'cognito.tf')
         cognito_outputs_tf = File.join(MODULE_DIR, 'cognito_outputs.tf')
+        cognito_variables_tf = File.join(MODULE_DIR, 'cognito_variables.tf')
 
         if File.exist?(cognito_tf)
           FileUtils.rm(cognito_tf)
@@ -165,6 +199,12 @@ module Belt
           FileUtils.rm(cognito_outputs_tf)
           removed << cognito_outputs_tf
           puts "  remove  #{cognito_outputs_tf}"
+        end
+
+        if File.exist?(cognito_variables_tf)
+          FileUtils.rm(cognito_variables_tf)
+          removed << cognito_variables_tf
+          puts "  remove  #{cognito_variables_tf}"
         end
 
         unpatch_main_tf
@@ -273,6 +313,92 @@ module Belt
         dest = File.join(MODULE_DIR, 'cognito_outputs.tf')
         write_template('cognito_outputs.tf.erb', dest)
         puts "  create  #{dest}"
+      end
+
+      def write_cognito_variables_tf
+        dest = File.join(MODULE_DIR, 'cognito_variables.tf')
+        content = <<~HCL
+          # Cognito SES email configuration variables
+          # Generated by: belt generate auth --ses-email
+          #
+          # Set these in your environment tfvars (e.g., infrastructure/dev/terraform.tfvars):
+          #   cognito_ses_email_arn  = "arn:aws:ses:us-east-1:123456789:identity/yourapp.com"
+          #   cognito_from_email     = "noreply@yourapp.com"
+          #   cognito_reply_to_email = "support@yourapp.com"  # optional
+
+          variable "cognito_ses_email_arn" {
+            description = "ARN of verified SES email address or domain for Cognito emails"
+            type        = string
+          }
+
+          variable "cognito_from_email" {
+            description = "From email address for Cognito emails (e.g., noreply@yourapp.com)"
+            type        = string
+          }
+
+          variable "cognito_reply_to_email" {
+            description = "Reply-to email address for Cognito emails (optional)"
+            type        = string
+            default     = ""
+          }
+        HCL
+
+        File.write(dest, content)
+        puts "  create  #{dest}"
+
+        # Also patch the environment tfvars examples
+        patch_env_vars_for_ses
+      end
+
+      def patch_env_vars_for_ses
+        # Find environment directories (e.g., infrastructure/dev/, infrastructure/prod/)
+        env_dirs = Dir.glob('infrastructure/*/terraform.tfvars')
+                      .reject { |f| f.include?('modules') }
+
+        env_dirs.each do |tfvars_file|
+          content = File.read(tfvars_file)
+          next if content.include?('cognito_ses_email_arn')
+
+          domain = detect_domain_from_tfvars(tfvars_file)
+          ses_vars = build_ses_vars_block(domain)
+
+          File.write(tfvars_file, content + ses_vars)
+          env_name = File.basename(File.dirname(tfvars_file))
+          puts "  update  #{tfvars_file} (added SES email variables for #{env_name})"
+        end
+      end
+
+      def detect_domain_from_tfvars(tfvars_file)
+        return nil unless File.exist?(tfvars_file)
+
+        match = File.read(tfvars_file).match(/^\s*domain\s*=\s*"([^"]+)"/)
+        match[1] if match
+      end
+
+      def build_ses_vars_block(domain)
+        if domain
+          # User has a domain configured — provide smart defaults
+          <<~HCL
+
+            # Cognito SES email configuration (generated by: belt g auth --ses-email)
+            # Sends emails from your domain instead of verificationemail.com
+            # Prerequisites: 1) Verify domain in SES  2) Request SES production access for prod
+            cognito_ses_email_arn  = "arn:aws:ses:REGION:ACCOUNT:identity/#{domain}"
+            cognito_from_email     = "noreply@#{domain}"
+            # cognito_reply_to_email = "support@#{domain}"
+          HCL
+        else
+          # No domain configured — provide placeholder examples
+          <<~HCL
+
+            # Cognito SES email configuration (generated by: belt g auth --ses-email)
+            # Uncomment and configure to send emails from your domain instead of verificationemail.com
+            # Prerequisites: 1) Verify domain in SES  2) Request SES production access for prod
+            # cognito_ses_email_arn  = "arn:aws:ses:REGION:ACCOUNT:identity/yourdomain.com"
+            # cognito_from_email     = "noreply@yourdomain.com"
+            # cognito_reply_to_email = "support@yourdomain.com"
+          HCL
+        end
       end
 
       def patch_main_tf

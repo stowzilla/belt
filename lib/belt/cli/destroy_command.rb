@@ -135,7 +135,7 @@ module Belt
         HELP
       end
 
-      # rubocop:disable Metrics/ParameterLists -- keyword options for destroy flags
+      # -- keyword options for destroy flags
       def initialize(generator, name, fields, force: false, skip_terraform: false, frontend_name: nil)
         @generator = generator
         @name = name&.downcase&.gsub(/[^a-z0-9_]/, '_')
@@ -150,7 +150,6 @@ module Belt
         @removed = []
         @updated = []
       end
-      # rubocop:enable Metrics/ParameterLists
 
       def destroy
         case @generator

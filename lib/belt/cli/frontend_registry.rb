@@ -15,7 +15,7 @@ module Belt
                   :url_output, :cloudfront_domain_output
       attr_accessor :default, :path
 
-      # rubocop:disable Metrics/ParameterLists -- keyword options from YAML config
+      # -- keyword options from YAML config
       def initialize(name:, path:, dist: nil, bucket_output: nil, distribution_output: nil,
                      url_output: nil, cloudfront_domain_output: nil, default: false)
         @name = name.to_s
@@ -28,7 +28,6 @@ module Belt
         @url_output = url_output || default_output('url')
         @cloudfront_domain_output = cloudfront_domain_output
       end
-      # rubocop:enable Metrics/ParameterLists
 
       def default?
         @default
