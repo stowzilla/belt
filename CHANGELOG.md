@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.3.16
+
+### Enhancement
+
+- **`belt generate auth --ses-email` for custom email domains**: By default,
+  Cognito sends verification emails from `no-reply@verificationemail.com`.
+  The new `--ses-email` flag configures Cognito to use Amazon SES instead,
+  allowing you to send from your own domain (e.g., `noreply@yourapp.com`).
+  
+  The generator creates:
+  - `cognito_variables.tf` with variables for SES email ARN, from address, and
+    optional reply-to address
+  - `email_configuration` block in `cognito.tf` with `DEVELOPER` sending mode
+  - Example variable values in environment tfvars files
+  
+  Prerequisites:
+  1. Verify your domain or email address in Amazon SES
+  2. Move out of SES sandbox for production use
+  
+  Usage: `belt g auth --ses-email`
+
 ## 0.3.15
 
 ### Bug Fix

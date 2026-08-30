@@ -82,7 +82,7 @@ module Belt
         ).generate
       end
 
-      # rubocop:disable Metrics/ParameterLists -- keyword options for generator flags
+      # -- keyword options for generator flags
       def initialize(app_name, frontend: nil, bucket: nil, environments: nil, domain: nil, verbose: false)
         @app_name = app_name.gsub(/[^a-z0-9_-]/i, '_').downcase
         @module_name = @app_name.split(/[-_]/).map(&:capitalize).join
@@ -94,7 +94,6 @@ module Belt
         @resolved_bucket = nil
         @state_setup_succeeded = false
       end
-      # rubocop:enable Metrics/ParameterLists
 
       def generate
         if Dir.exist?(@app_name)

@@ -30,6 +30,17 @@ resource "aws_cognito_user_pool" "<%= pool[:name] %>" {
     }
   }
 
+<% if @ses_email -%>
+  # SES email configuration — sends from your verified domain
+  # Requires: verified domain or email in SES, out of sandbox for prod
+  email_configuration {
+    email_sending_account  = "DEVELOPER"
+    source_arn             = var.cognito_ses_email_arn
+    from_email_address     = var.cognito_from_email
+    reply_to_email_address = var.cognito_reply_to_email != "" ? var.cognito_reply_to_email : null
+  }
+
+<% end -%>
   schema {
     name                = "email"
     attribute_data_type = "String"

@@ -278,7 +278,7 @@ module Belt
         puts "\n#{info[:notes]}" if info[:notes]
       end
 
-      # rubocop:disable Metrics/ParameterLists -- keyword options for generator flags
+      # -- keyword options for generator flags
       def initialize(generator, name, fields, skip_views: false, force: false, frontend_name: nil)
         @generator = generator
         @name = name.downcase.gsub(/[^a-z0-9_]/, '_')
@@ -293,7 +293,6 @@ module Belt
         @class_name = Belt::Inflector.classify(@singular_name)
         @references, @regular_fields = @fields.partition { |f| f[:type] == 'references' }
       end
-      # rubocop:enable Metrics/ParameterLists
 
       def generate
         case @generator

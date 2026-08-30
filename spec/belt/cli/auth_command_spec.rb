@@ -138,6 +138,51 @@ RSpec.describe Belt::CLI::AuthCommand do
     end
   end
 
+  describe '.run with --ses-email' do
+    it 'creates cognito_variables.tf with SES variables' do
+      expect { described_class.run(['--ses-email']) }.to output(/create.*cognito_variables\.tf/).to_stdout
+
+      variables_tf = File.join(module_dir, 'cognito_variables.tf')
+      expect(File.exist?(variables_tf)).to be true
+
+      content = File.read(variables_tf)
+      expect(content).to include('variable "cognito_ses_email_arn"')
+      expect(content).to include('variable "cognito_from_email"')
+      expect(content).to include('variable "cognito_reply_to_email"')
+    end
+
+    it 'adds email_configuration block to cognito.tf' do
+      capture_output { described_class.run(['--ses-email']) }
+
+      content = File.read(File.join(module_dir, 'cognito.tf'))
+      expect(content).to include('email_configuration')
+      expect(content).to include('email_sending_account  = "DEVELOPER"')
+      expect(content).to include('source_arn             = var.cognito_ses_email_arn')
+      expect(content).to include('from_email_address     = var.cognito_from_email')
+    end
+
+    it 'patches environment tfvars with SES variable examples' do
+      expect { described_class.run(['--ses-email']) }.to output(/update.*terraform\.tfvars.*SES/).to_stdout
+
+      tfvars = File.read(File.join(tmpdir, 'infrastructure/dev/terraform.tfvars'))
+      expect(tfvars).to include('cognito_ses_email_arn')
+      expect(tfvars).to include('cognito_from_email')
+    end
+  end
+
+  describe '.destroy with SES email' do
+    before do
+      # Generate with SES email first
+      capture_output { described_class.run(['--ses-email']) }
+    end
+
+    it 'removes cognito_variables.tf' do
+      expect { described_class.destroy([]) }.to output(/remove.*cognito_variables\.tf/).to_stdout
+
+      expect(File.exist?(File.join(module_dir, 'cognito_variables.tf'))).to be false
+    end
+  end
+
   private
 
   def capture_output(&block)
