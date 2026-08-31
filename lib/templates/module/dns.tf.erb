@@ -35,9 +35,12 @@ resource "aws_acm_certificate" "app" {
 }
 
 # DNS validation record for the certificate
+# Key by resource_record_name (not domain_name) because ACM uses the same
+# validation CNAME for both base domain and wildcard — keying by domain_name
+# creates duplicate records that Route 53 rejects.
 resource "aws_route53_record" "cert_validation" {
   for_each = local.dns_enabled ? {
-    for dvo in aws_acm_certificate.app[0].domain_validation_options : dvo.domain_name => {
+    for dvo in aws_acm_certificate.app[0].domain_validation_options : dvo.resource_record_name => {
       name   = dvo.resource_record_name
       type   = dvo.resource_record_type
       record = dvo.resource_record_value
