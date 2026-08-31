@@ -127,11 +127,11 @@ RSpec.describe Belt::CLI::SetupCommand do
         # Stub bucket operations
         allow(setup_command).to receive(:bucket_exists?).and_return(true)
         allow(setup_command).to receive(:audit_bucket_security).and_return({
-          versioning: true,
-          encryption: true,
-          public_access_block: true,
-          tls_policy: true
-        })
+                                                                             versioning: true,
+                                                                             encryption: true,
+                                                                             public_access_block: true,
+                                                                             tls_policy: true
+                                                                           })
         allow(setup_command).to receive(:apply_lifecycle)
       end
 
@@ -160,11 +160,11 @@ RSpec.describe Belt::CLI::SetupCommand do
         setup_command.instance_variable_set(:@aws_account_id, '999999999999')
         allow(setup_command).to receive(:bucket_exists?).and_return(true)
         allow(setup_command).to receive(:audit_bucket_security).and_return({
-          versioning: true,
-          encryption: true,
-          public_access_block: true,
-          tls_policy: true
-        })
+                                                                             versioning: true,
+                                                                             encryption: true,
+                                                                             public_access_block: true,
+                                                                             tls_policy: true
+                                                                           })
         allow(setup_command).to receive(:apply_lifecycle)
       end
 
@@ -190,11 +190,11 @@ RSpec.describe Belt::CLI::SetupCommand do
         setup_command.instance_variable_set(:@aws_account_id, '888888888888')
         allow(setup_command).to receive(:bucket_exists?).and_return(true)
         allow(setup_command).to receive(:audit_bucket_security).and_return({
-          versioning: true,
-          encryption: true,
-          public_access_block: true,
-          tls_policy: true
-        })
+                                                                             versioning: true,
+                                                                             encryption: true,
+                                                                             public_access_block: true,
+                                                                             tls_policy: true
+                                                                           })
         allow(setup_command).to receive(:apply_lifecycle)
       end
 
