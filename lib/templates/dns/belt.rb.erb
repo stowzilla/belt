@@ -1,0 +1,15 @@
+# frozen_string_literal: true
+
+Belt.configure do |config|
+  # Set the AWS profile to use for DNS infrastructure.
+  # This can be a shared account for cross-environment DNS management,
+  # or the same profile as your environments for single-account setups.
+  #
+  # Example (shared DNS account):
+  #   config.aws_profile = "sharedzilla"
+  #
+  # Example (same as environments):
+  #   config.aws_profile = "myapp-dev"
+  #
+  # config.aws_profile = ""
+end

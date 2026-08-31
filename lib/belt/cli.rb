@@ -2,6 +2,7 @@
 
 require_relative 'version'
 require_relative 'root'
+require_relative 'cli/dns_command'
 require_relative 'cli/env_resolver'
 require_relative 'cli/new_command'
 require_relative 'cli/generate_command'
@@ -45,6 +46,7 @@ module Belt
       'plugin' => Belt::CLI::PluginCommand,
       'explain' => Belt::CLI::ExplainCommand,
       'deploy' => Belt::CLI::DeployCommand,
+      'dns' => Belt::CLI::DnsCommand,
       'frontend' => Belt::CLI::FrontendEnvCommand,
       %w[server s] => Belt::CLI::ServerCommand,
       %w[version --version -v] => ->(_args) { puts "Belt #{Belt::VERSION}" }
@@ -103,6 +105,7 @@ module Belt
           generate frontend <react|vue|svelte>        Scaffold a frontend app [--name --path]
           generate views <resource> [fields...]       Generate React pages [--frontend NAME]
           generate environment <name>                 Create a new environment
+          generate dns                                Generate root DNS zone infrastructure
           destroy <scaffold|model|controller> <name>  Remove generated components
           destroy frontend [--frontend NAME]          Remove a frontend directory
           destroy views <resource>                    Remove React pages for a resource
@@ -111,6 +114,8 @@ module Belt
           s                                           Alias for server
           deploy [environment]                        Deploy to AWS (init → plan → apply)
           deploy frontend <env> [--frontend NAME]     Build and deploy frontend(s) to AWS
+          dns deploy                                  Deploy root DNS zone (init → plan → apply)
+          dns add <env>                               Add environment NS records to dns/terraform.tfvars
           frontend env <env> [--frontend NAME]        Write <frontend>/.env from terraform outputs
           frontend list                               List configured frontends
           routes [-g PATTERN] [-f json]               Show route definitions

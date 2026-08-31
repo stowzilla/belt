@@ -1,0 +1,22 @@
+domain = ""  # Your root domain (e.g., "myapp.com")
+
+# NS records from each environment's hosted zone.
+# After deploying an environment, get its NS records:
+#   cd infrastructure/<env> && terraform output name_servers
+#
+# Then add them here:
+# environment_zones = {
+#   dev = [
+#     "ns-xxx.awsdns-xx.org",
+#     "ns-xxx.awsdns-xx.co.uk",
+#     "ns-xxx.awsdns-xx.com",
+#     "ns-xxx.awsdns-xx.net"
+#   ]
+#   staging = [
+#     "ns-yyy.awsdns-yy.org",
+#     "ns-yyy.awsdns-yy.co.uk",
+#     "ns-yyy.awsdns-yy.com",
+#     "ns-yyy.awsdns-yy.net"
+#   ]
+# }
+environment_zones = {}

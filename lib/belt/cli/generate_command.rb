@@ -4,6 +4,7 @@ require 'fileutils'
 require 'erb'
 require_relative 'app_detection'
 require_relative 'auth_command'
+require_relative 'dns_command'
 require_relative 'environment_command'
 require_relative 'frontend_command'
 require_relative 'frontend_registry'
@@ -17,7 +18,7 @@ module Belt
     class GenerateCommand
       TEMPLATE_DIR = File.expand_path('../../templates/generate', __dir__)
 
-      GENERATORS = %w[scaffold resource model controller environment frontend views index auth].freeze
+      GENERATORS = %w[scaffold resource model controller environment frontend views index auth dns].freeze
 
       include AppDetection
 
@@ -91,6 +92,32 @@ module Belt
             Creates:
               lambda/controllers/<app>/<name>_controller.rb    Controller class
           NOTES
+        },
+        'dns' => {
+          description: 'Generate infrastructure for managing root domain DNS with multi-environment delegation.',
+          usage: 'belt generate dns',
+          options: [],
+          examples: [
+            ['belt g dns']
+          ],
+          notes: <<~NOTES
+            Creates:
+              infrastructure/dns/                              Root DNS zone infrastructure
+              infrastructure/dns/belt.rb                       AWS profile configuration
+
+            This enables multiple environments (dev, staging, prod) to each have their own
+            hosted zone while sharing a single domain. The root zone delegates subdomains
+            to per-environment zones.
+
+            Workflow:
+              1. Deploy environments first: belt deploy dev, belt deploy staging
+              2. Add NS records: belt dns add dev, belt dns add staging
+              3. Deploy: belt dns deploy
+              4. Update your registrar's NS records to the root_name_servers output
+
+            For multi-account setups where DNS lives in a shared account:
+              Edit infrastructure/dns/belt.rb to set the AWS profile.
+          NOTES
         }
       }.freeze
 
@@ -126,6 +153,8 @@ module Belt
         end
 
         return Belt::CLI::EnvironmentCommand.run(args) if generator == 'environment'
+
+        return Belt::CLI::DnsCommand.new.generate if generator == 'dns'
 
         return Belt::CLI::FrontendCommand.run(args) if generator == 'frontend'
 
@@ -205,6 +234,7 @@ module Belt
             controller    Generate a controller
             auth          Generate Cognito user pool infrastructure
             environment   Create a new deployment environment
+            dns           Generate root DNS zone with multi-environment delegation
             frontend      Scaffold a frontend app (react, vue, svelte; --name / --path for extras)
             views         Generate React pages for a resource
 
