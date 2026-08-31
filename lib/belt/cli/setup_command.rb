@@ -85,9 +85,7 @@ module Belt
         end
 
         # Show which profile we're using
-        if @aws_profile && !@quiet
-          puts "Using AWS profile: #{@aws_profile}"
-        end
+        puts "Using AWS profile: #{@aws_profile}" if @aws_profile && !@quiet
 
         # Resolve final bucket name now that we have credentials
         @bucket_name = @custom_bucket || resolve_bucket_name
@@ -238,7 +236,7 @@ module Belt
       # --- AWS operations ---
 
       def aws_configured?
-        cmd = ['aws', 'sts', 'get-caller-identity']
+        cmd = %w[aws sts get-caller-identity]
         cmd += ['--profile', @aws_profile] if @aws_profile
         output, status = Open3.capture2e(*cmd)
         if status.success?
