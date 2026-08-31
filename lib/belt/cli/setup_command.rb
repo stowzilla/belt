@@ -94,7 +94,11 @@ module Belt
         setup_or_verify_bucket
         apply_lifecycle(@bucket_name)
         say '  ensure  lifecycle rules (90-day noncurrent expiration)'
-        update_backend_config
+
+        # Only update backend configs when we know the target scope.
+        # If --aws-profile is set but no env_name, we're creating a bucket for a specific
+        # account (e.g., DNS infrastructure) — don't touch other environments' backends.
+        update_backend_config unless @aws_profile && @env_name.nil?
         print_success_message
       end
 
