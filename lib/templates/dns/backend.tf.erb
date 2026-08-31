@@ -1,7 +1,7 @@
 terraform {
   backend "s3" {
     bucket  = "<%= @state_bucket %>"
-    key     = "<%= @app_name %>/dns-root/terraform.tfstate"
+    key     = "<%= @app_name %>/dns/terraform.tfstate"
     region  = "us-east-1"
     encrypt = true
   }
