@@ -1,6 +1,10 @@
 # frozen_string_literal: true
 
 Belt.configure do |config|
+<% if @aws_profile -%>
+  # AWS profile for DNS infrastructure
+  config.aws_profile = "<%= @aws_profile %>"
+<% else -%>
   # Set the AWS profile to use for DNS infrastructure.
   # This can be a shared account for cross-environment DNS management,
   # or the same profile as your environments for single-account setups.
@@ -12,4 +16,5 @@ Belt.configure do |config|
   #   config.aws_profile = "myapp-dev"
   #
   # config.aws_profile = ""
+<% end -%>
 end
