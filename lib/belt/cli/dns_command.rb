@@ -192,19 +192,19 @@ module Belt
       end
 
       def load_dns_config
-        belt_rb = File.join(DNS_DIR, 'belt.rb')
-        return {} unless File.exist?(belt_rb)
-
-        EnvironmentConfig.load(belt_rb)
+        # Load config from infrastructure/dns/belt.rb
+        # EnvironmentConfig.load expects (env_name, infra_dir:) where the path
+        # is infra_dir/env_name/belt.rb. We pass 'dns' as env_name.
+        EnvironmentConfig.load('dns')
       end
 
       def run_terraform(action, env_config, *extra_args)
         cmd = ['terraform', action] + extra_args
         env = {}
 
-        if env_config[:aws_profile]
-          env['AWS_PROFILE'] = env_config[:aws_profile]
-          puts "Using AWS profile: #{env_config[:aws_profile]}" if action == 'init'
+        if env_config.aws_profile?
+          env['AWS_PROFILE'] = env_config.aws_profile
+          puts "Using AWS profile: #{env_config.aws_profile}" if action == 'init'
         end
 
         system(env, *cmd) || begin
