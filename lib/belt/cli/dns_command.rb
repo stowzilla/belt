@@ -5,6 +5,7 @@ require 'erb'
 require 'json'
 require_relative 'app_detection'
 require_relative 'environment_config'
+require_relative 'setup_command'
 
 module Belt
   module CLI
@@ -99,6 +100,9 @@ module Belt
 
         # Resolve state bucket using the specified profile (or current credentials)
         @state_bucket = resolve_state_bucket_for_profile(@aws_profile)
+
+        # Ensure the state bucket exists (convention over configuration)
+        ensure_state_bucket_exists(@state_bucket)
 
         puts 'Creating dns infrastructure...' unless @quiet
         if @aws_profile && !@quiet
@@ -345,6 +349,26 @@ module Belt
         return nil unless data&.dig('Account')
 
         "belt-terraform-state-#{data['Account']}"
+      end
+
+      # Ensure the state bucket exists, creating it if necessary.
+      # Uses belt setup state --aws-profile for convention over configuration.
+      def ensure_state_bucket_exists(bucket)
+        return if bucket == 'belt-terraform-state' # Placeholder means no credentials
+        return if bucket_exists?(bucket)
+
+        puts "State bucket #{bucket} not found. Creating it..." unless @quiet
+        args = []
+        args += ['--aws-profile', @aws_profile] if @aws_profile
+        SetupCommand.new(args, quiet: @quiet, aws_profile: @aws_profile).run_state_setup
+      end
+
+      def bucket_exists?(bucket)
+        require 'open3'
+        cmd = ['aws', 's3api', 'head-bucket', '--bucket', bucket]
+        cmd += ['--profile', @aws_profile] if @aws_profile
+        _, status = Open3.capture2e(*cmd)
+        status.success?
       end
     end
   end

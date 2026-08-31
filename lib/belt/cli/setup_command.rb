@@ -29,26 +29,48 @@ module Belt
         when 'frontend'
           Belt::CLI::FrontendSetupCommand.run(args)
         else
-          puts 'Usage: belt setup <state|tables|frontend> [options]'
-          puts "\nSubcommands:"
-          puts '  state     Set up S3 bucket for Terraform state'
-          puts '  tables    Generate DynamoDB table definitions from contracts.rb'
-          puts '  frontend  Generate S3 + CloudFront infrastructure for frontend hosting'
+          print_usage
           exit 1
         end
       end
 
-      def initialize(args = [], quiet: false)
+      def self.print_usage
+        puts <<~USAGE
+          Usage: belt setup <state|tables|frontend> [options]
+
+          Subcommands:
+            state       Set up S3 bucket for Terraform state
+            tables      Generate DynamoDB table definitions from contracts.rb
+            frontend    Generate S3 + CloudFront infrastructure for frontend hosting
+
+          Options for state:
+            --aws-profile NAME  Use a specific AWS profile (for multi-account setups)
+            --bucket NAME       Use a custom bucket name instead of belt-terraform-state-<account>
+            --select            Interactively select from existing buckets
+
+          Examples:
+            belt setup state                        # Create/verify bucket using current credentials
+            belt setup state --aws-profile fpshared # Create bucket in a specific AWS account
+            belt setup state --select               # Choose from existing buckets
+            belt setup state --bucket my-bucket     # Use a custom bucket name
+
+          The state bucket stores Terraform state for all Belt applications in an AWS account.
+          By default, Belt uses `belt-terraform-state-<account_id>` as the bucket name.
+        USAGE
+      end
+
+      def initialize(args = [], quiet: false, aws_profile: nil)
         @app_name = detect_app_name
         @env_name = nil
         @custom_bucket = nil
         @select_mode = false
         @quiet = quiet
+        @aws_profile = aws_profile
 
         parse_args(args)
 
         @region = detect_region
-        @bucket_name = resolve_bucket_name
+        @bucket_name = nil # Resolved after credentials check
       end
 
       def run_state_setup
@@ -62,8 +84,11 @@ module Belt
           exit 1
         end
 
+        # Show which profile we're using
+        puts "Using AWS profile: #{@aws_profile}" if @aws_profile && !@quiet
+
         # Resolve final bucket name now that we have credentials
-        @bucket_name = resolve_bucket_name unless @custom_bucket
+        @bucket_name = @custom_bucket || resolve_bucket_name
 
         @bucket_name = interactive_bucket_selection if @select_mode
         setup_or_verify_bucket
@@ -140,10 +165,14 @@ module Belt
           when '--bucket'
             @custom_bucket = args.shift
             abort '✗ --bucket requires a value' unless @custom_bucket
+          when '--aws-profile'
+            @aws_profile = args.shift
+            abort '✗ --aws-profile requires a value' unless @aws_profile
           when '--select'
             @select_mode = true
           when '--help', '-h'
-            self.class.run([])
+            self.class.print_usage
+            exit 0
           else
             @env_name = arg unless arg.start_with?('-')
           end
@@ -194,7 +223,9 @@ module Belt
       end
 
       def list_buckets
-        output = safe_capture('aws', 's3api', 'list-buckets', '--query', 'Buckets[].Name', '--output', 'json')
+        cmd = ['aws', 's3api', 'list-buckets', '--query', 'Buckets[].Name', '--output', 'json']
+        cmd += ['--profile', @aws_profile] if @aws_profile
+        output = safe_capture(*cmd)
         return [] unless output
 
         JSON.parse(output)
@@ -205,7 +236,9 @@ module Belt
       # --- AWS operations ---
 
       def aws_configured?
-        output, status = Open3.capture2e('aws', 'sts', 'get-caller-identity')
+        cmd = %w[aws sts get-caller-identity]
+        cmd += ['--profile', @aws_profile] if @aws_profile
+        output, status = Open3.capture2e(*cmd)
         if status.success?
           data = begin
             JSON.parse(output)
@@ -223,7 +256,9 @@ module Belt
       attr_reader :aws_account_id
 
       def bucket_exists?(bucket)
-        output, status = Open3.capture2e('aws', 's3api', 'head-bucket', '--bucket', bucket)
+        cmd = ['aws', 's3api', 'head-bucket', '--bucket', bucket]
+        cmd += ['--profile', @aws_profile] if @aws_profile
+        output, status = Open3.capture2e(*cmd)
         return true if status.success?
 
         # 403 = bucket exists but owned by someone else; 404 = doesn't exist
@@ -239,6 +274,7 @@ module Belt
       def create_bucket(bucket)
         args = ['aws', 's3api', 'create-bucket', '--bucket', bucket, '--region', @region]
         args.push('--create-bucket-configuration', "LocationConstraint=#{@region}") unless @region == 'us-east-1'
+        args += ['--profile', @aws_profile] if @aws_profile
         run!(*args)
       end
 
@@ -252,11 +288,14 @@ module Belt
             AbortIncompleteMultipartUpload: { DaysAfterInitiation: 7 }
           }]
         }
-        run!('aws', 's3api', 'put-bucket-lifecycle-configuration', '--bucket', bucket,
-             '--lifecycle-configuration', JSON.generate(lifecycle))
+        cmd = ['aws', 's3api', 'put-bucket-lifecycle-configuration', '--bucket', bucket,
+               '--lifecycle-configuration', JSON.generate(lifecycle)]
+        cmd += ['--profile', @aws_profile] if @aws_profile
+        run!(*cmd)
       end
 
       def run!(*args)
+        args = inject_profile(args)
         output, status = Open3.capture2e(*args)
         return if status.success?
 
@@ -265,9 +304,21 @@ module Belt
         exit 1
       end
 
-      def safe_capture(*)
-        output, status = Open3.capture2(*, err: File::NULL)
+      def safe_capture(*args)
+        args = inject_profile(args)
+        output, status = Open3.capture2(*args, err: File::NULL)
         status.success? ? output : nil
+      end
+
+      # Inject --profile flag for AWS CLI commands if @aws_profile is set
+      def inject_profile(args)
+        return args unless @aws_profile
+        return args unless args.first == 'aws'
+
+        # Already has a profile flag
+        return args if args.include?('--profile')
+
+        args + ['--profile', @aws_profile]
       end
 
       def say(message)
