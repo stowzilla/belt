@@ -252,19 +252,23 @@ module Belt
         ns_list = ns_records.map { |ns| "    \"#{ns}\"" }.join(",\n")
         new_entry = "  #{env_name} = [\n#{ns_list}\n  ]"
 
-        # Check if environment_zones already has entries
-        if content =~ /environment_zones\s*=\s*\{([^}]*)\}/m
+        # Match the actual HCL block, not commented examples.
+        # Look for environment_zones = { at the start of a line (not preceded by #)
+        hcl_block_pattern = /^environment_zones\s*=\s*\{([^}]*)\}/m
+
+        if content =~ hcl_block_pattern
           existing = ::Regexp.last_match(1).strip
 
           if existing.empty?
             # Empty block - replace with our entry
-            content.sub!(/environment_zones\s*=\s*\{\s*\}/, "environment_zones = {\n#{new_entry}\n}")
+            content.sub!(/^environment_zones\s*=\s*\{\s*\}/m, "environment_zones = {\n#{new_entry}\n}")
           elsif existing.include?("#{env_name} =")
             # Environment already exists - update it
-            content.sub!(/#{env_name}\s*=\s*\[[^\]]*\]/m, "#{env_name} = [\n#{ns_list}\n  ]")
+            # Match env name at start of line (with optional leading whitespace) to avoid comment matches
+            content.sub!(/^(\s*)#{env_name}\s*=\s*\[[^\]]*\]/m, "\\1#{env_name} = [\n#{ns_list}\n  ]")
           else
-            # Add to existing entries
-            content.sub!(/environment_zones\s*=\s*\{/m, "environment_zones = {\n#{new_entry}")
+            # Add to existing entries (insert after opening brace)
+            content.sub!(/^environment_zones\s*=\s*\{/m, "environment_zones = {\n#{new_entry}")
           end
         end
 
