@@ -21,7 +21,7 @@ module Belt
         when 'deploy', nil
           new.deploy(args)
         when 'generate', 'init'
-          new.generate
+          new.generate(args)
         when 'add'
           new.add_environment(args)
         when '--help', '-h', 'help'
@@ -42,9 +42,14 @@ module Belt
             add <env>           Add an environment's NS records to dns/terraform.tfvars
             help                Show this help
 
+          Options for generate:
+            --aws-profile NAME  AWS profile to use for DNS infrastructure
+                               Sets belt.rb config and derives state bucket from account ID
+
           Examples:
             belt dns deploy                 # Deploy the root zone
-            belt dns generate               # Scaffold infrastructure/dns
+            belt dns generate               # Scaffold infrastructure/dns (prompts for profile)
+            belt dns generate --aws-profile fpshared  # Non-interactive with profile
             belt dns add staging            # Add staging's NS records to tfvars
 
           The dns directory manages your root domain and delegates subdomains to
@@ -60,14 +65,23 @@ module Belt
         HELP
       end
 
-      def initialize(quiet: false)
+      def initialize(quiet: false, aws_profile: nil)
         @app_name = detect_app_name
         @quiet = quiet
-        @state_bucket = resolve_state_bucket
+        @aws_profile = aws_profile
+        @state_bucket = nil # Resolved during generate with profile context
       end
 
       # --- Generate ---
-      def generate
+      def generate(args = [])
+        # Parse --aws-profile flag
+        profile_index = args.index('--aws-profile')
+        if profile_index
+          @aws_profile = args[profile_index + 1]
+          args.delete_at(profile_index + 1)
+          args.delete_at(profile_index)
+        end
+
         if Dir.exist?(DNS_DIR)
           puts "dns infrastructure already exists at #{DNS_DIR}/"
           puts "\nTo configure it:"
@@ -76,7 +90,21 @@ module Belt
           exit 1
         end
 
+        # Prompt for AWS profile if not provided and not quiet mode
+        if @aws_profile.nil? && !@quiet && $stdin.tty?
+          print 'AWS profile for DNS infrastructure (leave blank to use current credentials): '
+          input = $stdin.gets&.strip
+          @aws_profile = input unless input.nil? || input.empty?
+        end
+
+        # Resolve state bucket using the specified profile (or current credentials)
+        @state_bucket = resolve_state_bucket_for_profile(@aws_profile)
+
         puts 'Creating dns infrastructure...' unless @quiet
+        if @aws_profile && !@quiet
+          puts "  Using AWS profile: #{@aws_profile}"
+          puts "  State bucket: #{@state_bucket}"
+        end
         FileUtils.mkdir_p(DNS_DIR)
 
         templates.each do |template_name, dest_file|
@@ -281,6 +309,13 @@ module Belt
         bucket_from_sibling || bucket_from_aws || 'belt-terraform-state'
       end
 
+      # Resolve state bucket for a specific AWS profile.
+      # If profile is provided, uses that profile's account ID.
+      # Otherwise falls back to existing sibling backend.tf or current credentials.
+      def resolve_state_bucket_for_profile(profile)
+        bucket_from_sibling || bucket_from_aws_profile(profile) || 'belt-terraform-state'
+      end
+
       def bucket_from_sibling
         Dir.glob('infrastructure/*/backend.tf').each do |f|
           match = File.read(f).match(/bucket\s*=\s*"([^"]+)"/)
@@ -292,8 +327,14 @@ module Belt
       end
 
       def bucket_from_aws
+        bucket_from_aws_profile(nil)
+      end
+
+      def bucket_from_aws_profile(profile)
         require 'open3'
-        output, status = Open3.capture2e('aws', 'sts', 'get-caller-identity')
+        cmd = %w[aws sts get-caller-identity]
+        cmd += ['--profile', profile] if profile
+        output, status = Open3.capture2e(*cmd)
         return nil unless status.success?
 
         data = begin
