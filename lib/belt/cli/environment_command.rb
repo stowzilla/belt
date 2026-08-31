@@ -65,7 +65,7 @@ module Belt
         puts "\nThen deploy:"
         puts "  belt deploy #{@env_name}"
         puts "\nIf using multiple environments with a custom domain, run:"
-        puts '  belt generate dns-root'
+        puts '  belt dns generate'
         puts 'to manage root domain delegation to per-environment zones.'
       end
 
