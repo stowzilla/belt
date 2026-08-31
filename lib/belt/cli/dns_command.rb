@@ -314,10 +314,17 @@ module Belt
       end
 
       # Resolve state bucket for a specific AWS profile.
-      # If profile is provided, uses that profile's account ID.
+      # If profile is explicitly provided, uses that profile's account ID directly.
       # Otherwise falls back to existing sibling backend.tf or current credentials.
       def resolve_state_bucket_for_profile(profile)
-        bucket_from_sibling || bucket_from_aws_profile(profile) || 'belt-terraform-state'
+        if profile
+          # Explicit profile = derive bucket from that profile's account ID
+          # Do NOT fall back to sibling backends — they're likely different accounts
+          bucket_from_aws_profile(profile) || 'belt-terraform-state'
+        else
+          # No profile = use existing sibling or current credentials
+          bucket_from_sibling || bucket_from_aws_profile(nil) || 'belt-terraform-state'
+        end
       end
 
       def bucket_from_sibling
