@@ -3,49 +3,36 @@
 require 'fileutils'
 require 'erb'
 require_relative 'app_detection'
-require_relative 'frontend_registry'
-require_relative 'frontend_setup_command'
 
 module Belt
   module CLI
-    class EnvironmentCommand
-      TEMPLATE_DIR = File.expand_path('../../templates/environment', __dir__)
+    class DnsRootCommand
+      TEMPLATE_DIR = File.expand_path('../../templates/dns_root', __dir__)
 
       include AppDetection
 
       def self.run(args)
-        env_name = args.shift
-
-        if env_name.nil? || env_name.empty?
-          puts 'Usage: belt generate environment <name>'
-          puts "\nExamples:"
-          puts '  belt generate environment dev01'
-          puts '  belt generate environment staging'
-          puts '  belt generate environment prod'
-          exit 1
-        end
-
-        new(env_name).generate
+        new.generate
       end
 
-      def initialize(env_name, quiet: false, domain: nil, announce: true)
-        @env_name = env_name.downcase.gsub(/[^a-z0-9_-]/, '')
+      def initialize(quiet: false)
         @app_name = detect_app_name
-        @domain = domain
         @quiet = quiet
-        @announce = announce
         @state_bucket = resolve_state_bucket
       end
 
       def generate
-        dest_dir = "infrastructure/#{@env_name}"
+        dest_dir = 'infrastructure/dns-root'
 
         if Dir.exist?(dest_dir)
-          puts "Environment '#{@env_name}' already exists at #{dest_dir}/"
+          puts "dns-root already exists at #{dest_dir}/"
+          puts "\nTo configure it:"
+          puts "  1. Edit #{dest_dir}/terraform.tfvars with your domain and environment NS records"
+          puts '  2. Run: cd infrastructure/dns-root && terraform init && terraform apply'
           exit 1
         end
 
-        puts "Creating environment: #{@env_name}" unless @quiet
+        puts 'Creating dns-root infrastructure...' unless @quiet
         FileUtils.mkdir_p(dest_dir)
 
         templates.each do |template_name, dest_file|
@@ -54,19 +41,29 @@ module Belt
           puts "  create  #{dest_path}" unless @quiet
         end
 
-        append_extra_frontend_outputs(File.join(dest_dir, 'outputs.tf'))
+        return if @quiet
 
-        return if @quiet || !@announce
-
-        puts "\n✓ Environment '#{@env_name}' created!"
-        puts "\nReview your settings in #{dest_dir}/terraform.tfvars:"
-        puts '  environment = "..."   # environment name (defaults to directory name)'
-        puts '  domain      = "..."   # your domain (e.g., "myapp.com")'
-        puts "\nThen deploy:"
-        puts "  belt deploy #{@env_name}"
-        puts "\nIf using multiple environments with a custom domain, run:"
-        puts '  belt generate dns-root'
-        puts 'to manage root domain delegation to per-environment zones.'
+        puts "\n✓ dns-root infrastructure created!"
+        puts "\nThis manages your root domain and delegates subdomains to per-environment zones."
+        puts "\nNext steps:"
+        puts '  1. Deploy your environments first (if not already deployed):'
+        puts '       belt deploy dev'
+        puts '       belt deploy staging'
+        puts ''
+        puts '  2. Get each environment\'s NS records:'
+        puts '       cd infrastructure/dev && terraform output name_servers'
+        puts '       cd infrastructure/staging && terraform output name_servers'
+        puts ''
+        puts "  3. Edit #{dest_dir}/terraform.tfvars:"
+        puts '       - Set your domain'
+        puts '       - Add each environment\'s NS records to environment_zones'
+        puts ''
+        puts '  4. Deploy the dns-root:'
+        puts "       cd #{dest_dir}"
+        puts '       terraform init'
+        puts '       terraform apply'
+        puts ''
+        puts '  5. Update your registrar\'s NS records to the root_name_servers output'
       end
 
       private
@@ -85,14 +82,6 @@ module Belt
         template_path = File.join(TEMPLATE_DIR, template_name)
         content = ERB.new(File.read(template_path), trim_mode: '-').result(binding)
         File.write(dest_path, content)
-      end
-
-      def append_extra_frontend_outputs(outputs_file)
-        FrontendRegistry.new.all.each do |frontend|
-          next if frontend.tf_name == 'frontend'
-
-          FrontendSetupCommand.append_env_outputs_for(frontend, outputs_file)
-        end
       end
 
       # Resolve the state bucket name to use in backend.tf.

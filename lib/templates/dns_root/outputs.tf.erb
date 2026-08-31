@@ -1,0 +1,14 @@
+output "root_zone_id" {
+  description = "Route53 Hosted Zone ID for the root domain"
+  value       = aws_route53_zone.root.zone_id
+}
+
+output "root_name_servers" {
+  description = "NS records to configure at your registrar (name.com, GoDaddy, etc.)"
+  value       = aws_route53_zone.root.name_servers
+}
+
+output "delegated_environments" {
+  description = "Environments with NS delegation configured"
+  value       = keys(var.environment_zones)
+}

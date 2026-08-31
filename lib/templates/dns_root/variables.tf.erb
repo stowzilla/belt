@@ -1,0 +1,27 @@
+variable "domain" {
+  description = "Root domain (e.g., myapp.com)"
+  type        = string
+}
+
+variable "aws_region" {
+  description = "AWS region"
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "environment_zones" {
+  description = <<-EOT
+    Map of environment names to their hosted zone NS records.
+    Get these values from each environment's Terraform output:
+      cd infrastructure/<env> && terraform output name_servers
+    
+    Example:
+      environment_zones = {
+        dev     = ["ns-1098.awsdns-09.org", "ns-2035.awsdns-62.co.uk", ...]
+        staging = ["ns-1318.awsdns-36.org", "ns-1762.awsdns-28.co.uk", ...]
+        prod    = ["ns-111.awsdns-11.org", "ns-222.awsdns-22.co.uk", ...]
+      }
+  EOT
+  type        = map(list(string))
+  default     = {}
+}

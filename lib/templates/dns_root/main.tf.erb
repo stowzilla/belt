@@ -1,0 +1,45 @@
+# DNS Root Zone Configuration
+# This module manages the root domain and delegates subdomains to per-environment
+# hosted zones. This enables multiple environments (dev, staging, prod, etc.) to
+# each have their own DNS zone while sharing a single domain.
+#
+# SETUP:
+# 1. Deploy each environment first: belt deploy dev, belt deploy staging, etc.
+# 2. Get each environment's NS records: cd infrastructure/<env> && terraform output name_servers
+# 3. Add them to terraform.tfvars below
+# 4. Apply this module: cd infrastructure/dns-root && terraform apply
+# 5. Update your registrar's NS records to the root_name_servers output
+
+terraform {
+  required_version = ">= 1.0"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 5.0"
+    }
+  }
+}
+
+provider "aws" {
+  region = var.aws_region
+}
+
+# --- Root Hosted Zone ---
+resource "aws_route53_zone" "root" {
+  name = var.domain
+}
+
+# --- Subdomain NS Delegation ---
+# For each environment, create NS records that delegate to that environment's
+# hosted zone. This allows dev.domain.com, staging.domain.com, etc. to resolve
+# independently.
+resource "aws_route53_record" "env_delegation" {
+  for_each = var.environment_zones
+
+  zone_id = aws_route53_zone.root.zone_id
+  name    = "${each.key}.${var.domain}"
+  type    = "NS"
+  ttl     = 300
+  records = each.value
+}
