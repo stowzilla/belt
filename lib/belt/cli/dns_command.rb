@@ -125,7 +125,7 @@ module Belt
           else
             print "\nApply this plan? [y/N] "
             answer = $stdin.gets&.strip&.downcase
-            if answer == 'y' || answer == 'yes'
+            if %w[y yes].include?(answer)
               run_terraform('apply', env_config, 'tfplan')
             else
               puts 'Aborted.'
