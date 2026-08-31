@@ -12,6 +12,10 @@ locals {
 
   # Whether DNS is enabled
   dns_enabled = var.domain != ""
+
+  # Whether to create NS delegation records in the root zone
+  # (only for non-prod environments with a root_zone_id configured)
+  ns_delegation_enabled = local.dns_enabled && var.root_zone_id != "" && var.environment != "prod"
 }
 
 # --- Route53 Hosted Zone ---
@@ -19,6 +23,19 @@ locals {
 resource "aws_route53_zone" "app" {
   count = local.dns_enabled ? 1 : 0
   name  = local.app_domain
+}
+
+# --- NS Delegation ---
+# When root_zone_id is configured, create NS records in the root zone that
+# delegate this environment's subdomain to its own hosted zone.
+# This allows multi-environment DNS without manual registrar configuration.
+resource "aws_route53_record" "ns_delegation" {
+  count   = local.ns_delegation_enabled ? 1 : 0
+  zone_id = var.root_zone_id
+  name    = local.app_domain
+  type    = "NS"
+  ttl     = 300
+  records = aws_route53_zone.app[0].name_servers
 }
 
 # --- ACM Certificate ---
@@ -35,23 +52,25 @@ resource "aws_acm_certificate" "app" {
 }
 
 # DNS validation record for the certificate
-# Key by resource_record_name (not domain_name) because ACM uses the same
-# validation CNAME for both base domain and wildcard — keying by domain_name
-# creates duplicate records that Route 53 rejects.
+# Key by resource_record_name (not domain_name) because ACM uses identical
+# validation records for base domain + wildcard — keying by domain would
+# create duplicate CNAME entries that Route 53 rejects.
+# Use ellipsis (...) to group duplicates, then take the first element since
+# they're identical anyway.
 resource "aws_route53_record" "cert_validation" {
   for_each = local.dns_enabled ? {
     for dvo in aws_acm_certificate.app[0].domain_validation_options : dvo.resource_record_name => {
       name   = dvo.resource_record_name
       type   = dvo.resource_record_type
       record = dvo.resource_record_value
-    }
+    }...
   } : {}
 
   zone_id = aws_route53_zone.app[0].zone_id
-  name    = each.value.name
-  type    = each.value.type
+  name    = each.value[0].name
+  type    = each.value[0].type
   ttl     = 300
-  records = [each.value.record]
+  records = [each.value[0].record]
 }
 
 resource "aws_acm_certificate_validation" "app" {

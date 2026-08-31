@@ -21,6 +21,12 @@ variable "domain" {
   default     = ""
 }
 
+variable "root_zone_id" {
+  description = "Root hosted zone ID for NS delegation. Creates NS records in the root zone for this environment's subdomain."
+  type        = string
+  default     = ""
+}
+
 variable "enable_pitr" {
   description = "Enable DynamoDB Point-in-Time Recovery (PITR) for all tables"
   type        = bool

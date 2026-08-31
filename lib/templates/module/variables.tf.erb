@@ -20,6 +20,12 @@ variable "domain" {
   default     = ""
 }
 
+variable "root_zone_id" {
+  description = "Root hosted zone ID for NS delegation. When set, each non-prod environment creates NS records in this zone. Get from: cd infrastructure/root && terraform output zone_id"
+  type        = string
+  default     = ""
+}
+
 variable "frontend_urls" {
   description = "URLs allowed for CORS frontend access"
   type        = list(string)

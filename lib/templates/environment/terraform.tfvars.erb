@@ -5,6 +5,11 @@ domain      = "<%= @domain %>"
 # domain      = "myapp.com"
 <% end -%>
 
+# DNS delegation: when using multiple environments, set up a root zone first:
+#   belt setup dns myapp.com
+# Then add its zone_id here so each environment auto-delegates its subdomain.
+# root_zone_id = ""
+
 # DynamoDB protection (PITR is true by default everywhere)
 <% if @env_name == 'prod' || @env_name == 'production' -%>
 deletion_protection = true

@@ -1,0 +1,7 @@
+terraform {
+  backend "s3" {
+    bucket = "<%= @state_bucket %>"
+    key    = "<%= @app_name %>/root-zone/terraform.tfstate"
+    region = "<%= @region %>"
+  }
+}

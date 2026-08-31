@@ -1,0 +1,47 @@
+# Root DNS zone for <%= @domain %>
+#
+# This zone manages your root domain's NS records and delegates subdomains
+# to per-environment zones. Configure your registrar with the name servers
+# output by this module.
+#
+# Managed separately from environment infrastructure to allow multi-environment
+# DNS without circular dependencies.
+
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
+provider "aws" {
+  region = var.aws_region
+}
+
+variable "aws_region" {
+  description = "AWS region"
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "domain" {
+  description = "Root domain (e.g., myapp.com)"
+  type        = string
+}
+
+# --- Root Hosted Zone ---
+resource "aws_route53_zone" "root" {
+  name = var.domain
+}
+
+output "zone_id" {
+  description = "Root hosted zone ID — use this as root_zone_id in environment tfvars"
+  value       = aws_route53_zone.root.zone_id
+}
+
+output "name_servers" {
+  description = "NS records to configure at your domain registrar"
+  value       = aws_route53_zone.root.name_servers
+}

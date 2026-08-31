@@ -7,11 +7,12 @@ require_relative 'app_detection'
 require_relative 'bucket_security'
 require_relative 'tables_command'
 require_relative 'frontend_setup_command'
+require_relative 'dns_command'
 
 module Belt
   module CLI
     class SetupCommand
-      SUBCOMMANDS = %w[state tables frontend].freeze
+      SUBCOMMANDS = %w[state tables frontend dns].freeze
 
       SECURITY_CHECKS = %i[versioning encryption public_access_block tls_policy].freeze
 
@@ -28,12 +29,15 @@ module Belt
           Belt::CLI::TablesCommand.run(args)
         when 'frontend'
           Belt::CLI::FrontendSetupCommand.run(args)
+        when 'dns'
+          Belt::CLI::DnsCommand.run(args)
         else
-          puts 'Usage: belt setup <state|tables|frontend> [options]'
+          puts 'Usage: belt setup <state|tables|frontend|dns> [options]'
           puts "\nSubcommands:"
           puts '  state     Set up S3 bucket for Terraform state'
           puts '  tables    Generate DynamoDB table definitions from contracts.rb'
           puts '  frontend  Generate S3 + CloudFront infrastructure for frontend hosting'
+          puts '  dns       Create root DNS zone for multi-environment deployments'
           exit 1
         end
       end

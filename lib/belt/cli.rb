@@ -125,6 +125,7 @@ module Belt
           setup state                                 Create/select S3 state bucket
           setup tables <env>                          Generate DynamoDB tables from schema
           setup frontend [--name NAME]                Generate S3 + CloudFront infrastructure
+          setup dns <domain>                          Create root zone for multi-env DNS
           doctor                                      Check system dependencies and AWS config
           plugin new <name>                           Scaffold a new Belt plugin gem
           explain <topic>                             Explain a Belt concept (routing, models, …)
