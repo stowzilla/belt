@@ -215,10 +215,10 @@ module Belt
 
       def fetch_ns_records(env_name)
         env_dir = "infrastructure/#{env_name}"
-        env_config = load_env_config(env_name)
+        env_config = EnvironmentConfig.load(env_name)
 
         env = {}
-        env['AWS_PROFILE'] = env_config[:aws_profile] if env_config[:aws_profile]
+        env['AWS_PROFILE'] = env_config.aws_profile if env_config.aws_profile?
 
         Dir.chdir(env_dir) do
           # Try terraform output first
@@ -243,13 +243,6 @@ module Belt
             nil
           end
         end
-      end
-
-      def load_env_config(env_name)
-        belt_rb = "infrastructure/#{env_name}/belt.rb"
-        return {} unless File.exist?(belt_rb)
-
-        EnvironmentConfig.load(belt_rb)
       end
 
       def update_tfvars(path, env_name, ns_records)
