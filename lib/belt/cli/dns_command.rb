@@ -241,17 +241,10 @@ module Belt
           end
         end
 
-        # Extract values
+        # Extract values from terraform state
         name_servers = outputs.dig('root_name_servers', 'value') || []
         zone_id = outputs.dig('root_zone_id', 'value')
         environments = outputs.dig('delegated_environments', 'value') || []
-
-        if name_servers.empty?
-          puts 'No name servers found. Is the DNS zone deployed?'
-          puts "\nRun:"
-          puts '  belt dns deploy'
-          exit 1
-        end
 
         # Read domain from tfvars
         tfvars_path = "#{DNS_DIR}/terraform.tfvars"
@@ -260,6 +253,26 @@ module Belt
           content = File.read(tfvars_path)
           match = content.match(/domain\s*=\s*"([^"]+)"/)
           domain = match[1] if match
+        end
+
+        # Verify the zone actually exists in AWS (terraform state can be stale)
+        if zone_id && !zone_exists_in_aws?(zone_id, env)
+          puts 'Root Zone Not Found'
+          puts '==================='
+          puts ''
+          puts "Terraform state references zone #{zone_id}, but it doesn't exist in AWS."
+          puts 'The zone may have been deleted or the state is stale.'
+          puts ''
+          puts 'To create the root zone:'
+          puts '  belt dns deploy'
+          exit 1
+        end
+
+        if name_servers.empty?
+          puts 'No name servers found. Is the DNS zone deployed?'
+          puts "\nRun:"
+          puts '  belt dns deploy'
+          exit 1
         end
 
         # Display
@@ -453,6 +466,16 @@ module Belt
         require 'open3'
         cmd = ['aws', 's3api', 'head-bucket', '--bucket', bucket]
         cmd += ['--profile', @aws_profile] if @aws_profile
+        _, status = Open3.capture2e(*cmd)
+        status.success?
+      end
+
+      # Verify a Route 53 hosted zone exists in AWS.
+      # env is a hash with optional AWS_PROFILE for the aws CLI.
+      def zone_exists_in_aws?(zone_id, env = {})
+        require 'open3'
+        cmd = ['aws', 'route53', 'get-hosted-zone', '--id', zone_id]
+        cmd += ['--profile', env['AWS_PROFILE']] if env['AWS_PROFILE']
         _, status = Open3.capture2e(*cmd)
         status.success?
       end
