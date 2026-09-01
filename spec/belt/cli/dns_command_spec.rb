@@ -4,6 +4,7 @@ require 'spec_helper'
 require 'fileutils'
 require 'tmpdir'
 require 'belt/cli/dns_command'
+require 'belt/cli/environment_config'
 
 RSpec.describe Belt::CLI::DnsCommand do
   around do |example|
@@ -97,6 +98,136 @@ RSpec.describe Belt::CLI::DnsCommand do
 
         expect(bucket).to eq('belt-terraform-state')
       end
+    end
+  end
+
+  describe '#show' do
+    context 'when infrastructure/dns does not exist' do
+      it 'exits with an error' do
+        expect do
+          described_class.run(['show'])
+        end.to raise_error(SystemExit)
+      end
+
+      it 'prints a helpful message' do
+        expect do
+          described_class.run(['show'])
+        rescue SystemExit
+          # expected
+        end.to output(%r{No infrastructure/dns directory found}).to_stdout
+      end
+    end
+
+    context 'when infrastructure/dns exists' do
+      let(:env_config) { instance_double(Belt::CLI::EnvironmentConfig, aws_profile?: false) }
+
+      before do
+        FileUtils.mkdir_p('infrastructure/dns')
+        File.write('infrastructure/dns/belt.rb', <<~RUBY)
+          Belt.configure do |config|
+            config.aws_profile = nil
+          end
+        RUBY
+        File.write('infrastructure/dns/terraform.tfvars', <<~TFVARS)
+          domain = "example.com"
+          environment_zones = {}
+        TFVARS
+
+        # Mock EnvironmentConfig.load to avoid BackupConfig dependency
+        allow(Belt::CLI::EnvironmentConfig).to receive(:load).with('dns').and_return(env_config)
+      end
+
+      context 'when terraform output succeeds' do
+        let(:terraform_output) do
+          {
+            'root_name_servers' => {
+              'value' => %w[
+                ns-123.awsdns-12.com
+                ns-456.awsdns-34.net
+                ns-789.awsdns-56.org
+                ns-012.awsdns-78.co.uk
+              ]
+            },
+            'root_zone_id' => {
+              'value' => 'Z0123456789ABCDEF'
+            },
+            'delegated_environments' => {
+              'value' => %w[dev staging]
+            }
+          }
+        end
+
+        before do
+          allow(Open3).to receive(:capture2e)
+            .with({}, 'terraform', 'output', '-json')
+            .and_return([terraform_output.to_json, double(success?: true)])
+        end
+
+        it 'displays the name servers' do
+          expect do
+            described_class.run(['show'])
+          end.to output(/ns-123\.awsdns-12\.com/).to_stdout
+        end
+
+        it 'displays the domain' do
+          expect do
+            described_class.run(['show'])
+          end.to output(/Domain: example\.com/).to_stdout
+        end
+
+        it 'displays the zone ID' do
+          expect do
+            described_class.run(['show'])
+          end.to output(/Zone ID: Z0123456789ABCDEF/).to_stdout
+        end
+
+        it 'displays delegated environments' do
+          expect do
+            described_class.run(['show'])
+          end.to output(/Delegated environments: dev, staging/).to_stdout
+        end
+      end
+
+      context 'when terraform output fails' do
+        before do
+          allow(Open3).to receive(:capture2e)
+            .with({}, 'terraform', 'output', '-json')
+            .and_return(['Error: No state', double(success?: false)])
+        end
+
+        it 'exits with an error' do
+          expect do
+            described_class.run(['show'])
+          end.to raise_error(SystemExit)
+        end
+
+        it 'suggests deploying DNS' do
+          expect do
+            described_class.run(['show'])
+          rescue SystemExit
+            # expected
+          end.to output(/belt dns deploy/).to_stdout
+        end
+      end
+    end
+  end
+
+  describe 'subcommand dispatch' do
+    it 'recognizes show as a valid subcommand' do
+      # Just verify it doesn't print "Unknown dns subcommand"
+      expect do
+        described_class.run(['show'])
+      rescue SystemExit
+        # expected - no dns dir
+      end.not_to output(/Unknown dns subcommand/).to_stdout
+    end
+
+    it 'recognizes list as an alias for show' do
+      expect do
+        described_class.run(['list'])
+      rescue SystemExit
+        # expected - no dns dir
+      end.not_to output(/Unknown dns subcommand/).to_stdout
     end
   end
 end

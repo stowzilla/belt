@@ -25,6 +25,8 @@ module Belt
           new.generate(args)
         when 'add'
           new.add_environment(args)
+        when 'show', 'list'
+          new.show(args)
         when '--help', '-h', 'help'
           puts help
         else
@@ -41,6 +43,7 @@ module Belt
             deploy              Deploy the dns infrastructure (init → plan → apply)
             generate            Create the infrastructure/dns directory (same as belt generate dns)
             add <env>           Add an environment's NS records to dns/terraform.tfvars
+            show                Show root zone name servers (for registrar configuration)
             help                Show this help
 
           Options for generate:
@@ -52,6 +55,7 @@ module Belt
             belt dns generate               # Scaffold infrastructure/dns (prompts for profile)
             belt dns generate --aws-profile fpshared  # Non-interactive with profile
             belt dns add staging            # Add staging's NS records to tfvars
+            belt dns show                   # Show root name servers to configure at registrar
 
           The dns directory manages your root domain and delegates subdomains to
           per-environment hosted zones. Each environment (dev, staging, prod) gets
@@ -202,6 +206,81 @@ module Belt
         update_tfvars(tfvars_path, env_name, ns_records)
         puts "✓ Added #{env_name} NS records to #{tfvars_path}"
         puts "\nRun 'belt dns deploy' to apply the changes."
+      end
+
+      # --- Show ---
+      def show(_args)
+        require 'open3'
+
+        unless Dir.exist?(DNS_DIR)
+          puts 'No infrastructure/dns directory found.'
+          puts "\nCreate it first:"
+          puts '  belt dns generate'
+          exit 1
+        end
+
+        env_config = load_dns_config
+        env = {}
+        env['AWS_PROFILE'] = env_config.aws_profile if env_config.aws_profile?
+
+        # Get all outputs in one call
+        outputs = Dir.chdir(DNS_DIR) do
+          output, status = Open3.capture2e(env, 'terraform', 'output', '-json')
+          unless status.success?
+            puts 'Failed to read terraform outputs.'
+            puts "\nMake sure DNS is deployed:"
+            puts '  belt dns deploy'
+            exit 1
+          end
+
+          begin
+            JSON.parse(output)
+          rescue JSON::ParserError
+            puts 'Failed to parse terraform outputs.'
+            exit 1
+          end
+        end
+
+        # Extract values
+        name_servers = outputs.dig('root_name_servers', 'value') || []
+        zone_id = outputs.dig('root_zone_id', 'value')
+        environments = outputs.dig('delegated_environments', 'value') || []
+
+        if name_servers.empty?
+          puts 'No name servers found. Is the DNS zone deployed?'
+          puts "\nRun:"
+          puts '  belt dns deploy'
+          exit 1
+        end
+
+        # Read domain from tfvars
+        tfvars_path = "#{DNS_DIR}/terraform.tfvars"
+        domain = nil
+        if File.exist?(tfvars_path)
+          content = File.read(tfvars_path)
+          match = content.match(/domain\s*=\s*"([^"]+)"/)
+          domain = match[1] if match
+        end
+
+        # Display
+        puts 'Root Zone Name Servers'
+        puts '======================'
+        puts ''
+        puts "Domain: #{domain}" if domain
+        puts "Zone ID: #{zone_id}" if zone_id
+        puts ''
+        puts 'Configure these at your domain registrar:'
+        puts ''
+        name_servers.each { |ns| puts "  #{ns}" }
+        puts ''
+
+        if environments.any?
+          puts "Delegated environments: #{environments.join(', ')}"
+        else
+          puts 'No environments delegated yet.'
+          puts "\nTo add an environment:"
+          puts '  belt dns add <env>'
+        end
       end
 
       private
