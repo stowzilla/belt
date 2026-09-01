@@ -1,18 +1,34 @@
 # DNS configuration for Belt application
 # Convention: prod → mydomain.com, other envs → <env>.mydomain.com
+# Nested envs: fizzy123 with parent=dev → fizzy123.dev.mydomain.com
 
 locals {
+  # Is this a nested environment (has a parent)?
+  is_nested = var.parent_environment != ""
+
   # Determine the domain for this environment
+  # Standalone: prod → mydomain.com, dev → dev.mydomain.com
+  # Nested: fizzy123 with parent=dev → fizzy123.dev.mydomain.com
   app_domain = var.domain != "" ? (
-    var.environment == "prod" ? var.domain : "${var.environment}.${var.domain}"
+    local.is_nested ? "${var.environment}.${var.parent_environment}.${var.domain}" : (
+      var.environment == "prod" ? var.domain : "${var.environment}.${var.domain}"
+    )
   ) : ""
+
+  # Parent domain (for nested envs, this is what we look up)
+  parent_domain = local.is_nested && var.domain != "" ? "${var.parent_environment}.${var.domain}" : ""
 
   # API subdomain: api.mydomain.com (prod) or api.<env>.mydomain.com (non-prod)
   api_domain = var.domain != "" ? "api.${local.app_domain}" : ""
 
-  # Whether DNS is enabled
-  dns_enabled = var.domain != ""
+  # Whether DNS is enabled (standalone environments only create their own zone)
+  dns_enabled         = var.domain != "" && !local.is_nested
+  dns_nested_enabled  = var.domain != "" && local.is_nested
 }
+
+# ============================================================================
+# STANDALONE ENVIRONMENT DNS (creates its own hosted zone + certificate)
+# ============================================================================
 
 # --- Route53 Hosted Zone ---
 # One zone per environment subdomain (or root domain for prod)
@@ -22,7 +38,7 @@ resource "aws_route53_zone" "app" {
 }
 
 # --- ACM Certificate ---
-# Wildcard cert covers the app domain + all subdomains (api.*, www.*, etc.)
+# Wildcard cert covers the app domain + all subdomains (api.*, www.*, nested.*, etc.)
 resource "aws_acm_certificate" "app" {
   count                     = local.dns_enabled ? 1 : 0
   domain_name               = local.app_domain
@@ -62,7 +78,7 @@ resource "aws_acm_certificate_validation" "app" {
   validation_record_fqdns = [for record in aws_route53_record.cert_validation : record.fqdn]
 }
 
-# --- API Gateway Custom Domain ---
+# --- API Gateway Custom Domain (standalone) ---
 resource "aws_api_gateway_domain_name" "api" {
   count                    = local.dns_enabled ? 1 : 0
   domain_name              = local.api_domain
@@ -73,7 +89,7 @@ resource "aws_api_gateway_domain_name" "api" {
   }
 }
 
-# Route53 A record for api.<domain>
+# Route53 A record for api.<domain> (standalone)
 resource "aws_route53_record" "api" {
   count   = local.dns_enabled ? 1 : 0
   zone_id = aws_route53_zone.app[0].zone_id
@@ -83,6 +99,51 @@ resource "aws_route53_record" "api" {
   alias {
     name                   = aws_api_gateway_domain_name.api[0].regional_domain_name
     zone_id                = aws_api_gateway_domain_name.api[0].regional_zone_id
+    evaluate_target_health = false
+  }
+}
+
+# ============================================================================
+# NESTED ENVIRONMENT DNS (uses parent's hosted zone + wildcard certificate)
+# ============================================================================
+
+# Look up the parent environment's hosted zone
+data "aws_route53_zone" "parent" {
+  count = local.dns_nested_enabled ? 1 : 0
+  name  = local.parent_domain
+}
+
+# Look up the parent environment's wildcard certificate
+# The parent's cert covers *.parent.domain.com, which includes nested.parent.domain.com
+data "aws_acm_certificate" "parent" {
+  count       = local.dns_nested_enabled ? 1 : 0
+  domain      = local.parent_domain
+  statuses    = ["ISSUED"]
+  most_recent = true
+}
+
+# --- API Gateway Custom Domain (nested) ---
+# Uses the parent's wildcard certificate
+resource "aws_api_gateway_domain_name" "api_nested" {
+  count                    = local.dns_nested_enabled ? 1 : 0
+  domain_name              = local.api_domain
+  regional_certificate_arn = data.aws_acm_certificate.parent[0].arn
+
+  endpoint_configuration {
+    types = ["REGIONAL"]
+  }
+}
+
+# Route53 A record for api.<nested>.<parent>.<domain> in the PARENT's zone
+resource "aws_route53_record" "api_nested" {
+  count   = local.dns_nested_enabled ? 1 : 0
+  zone_id = data.aws_route53_zone.parent[0].zone_id
+  name    = local.api_domain
+  type    = "A"
+
+  alias {
+    name                   = aws_api_gateway_domain_name.api_nested[0].regional_domain_name
+    zone_id                = aws_api_gateway_domain_name.api_nested[0].regional_zone_id
     evaluate_target_health = false
   }
 }

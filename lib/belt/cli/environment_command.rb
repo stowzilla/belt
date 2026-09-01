@@ -3,6 +3,7 @@
 require 'fileutils'
 require 'erb'
 require_relative 'app_detection'
+require_relative 'environment_config'
 require_relative 'frontend_registry'
 require_relative 'frontend_setup_command'
 
@@ -15,25 +16,41 @@ module Belt
 
       def self.run(args)
         env_name = args.shift
+        parent_env = args.shift # Optional: parent environment for nested subdomains
 
         if env_name.nil? || env_name.empty?
-          puts 'Usage: belt generate environment <name>'
+          puts 'Usage: belt generate environment <name> [parent]'
           puts "\nExamples:"
           puts '  belt generate environment dev01'
           puts '  belt generate environment staging'
           puts '  belt generate environment prod'
+          puts ''
+          puts 'Nested environments (subdomain of existing environment):'
+          puts '  belt generate environment fizzy123 dev'
+          puts '    → Creates fizzy123.dev.example.com using dev\'s wildcard cert'
           exit 1
         end
 
-        new(env_name).generate
+        # Validate parent environment exists if provided
+        if parent_env && !parent_env.empty?
+          parent_dir = "infrastructure/#{parent_env}"
+          unless Dir.exist?(parent_dir)
+            puts "✗ Parent environment '#{parent_env}' not found at #{parent_dir}/"
+            puts '  The parent environment must exist before creating a nested environment.'
+            exit 1
+          end
+        end
+
+        new(env_name, parent_environment: parent_env).generate
       end
 
-      def initialize(env_name, quiet: false, domain: nil, announce: true)
+      def initialize(env_name, quiet: false, domain: nil, announce: true, parent_environment: nil)
         @env_name = env_name.downcase.gsub(/[^a-z0-9_-]/, '')
         @app_name = detect_app_name
         @domain = domain
         @quiet = quiet
         @announce = announce
+        @parent_environment = parent_environment&.downcase&.gsub(/[^a-z0-9_-]/, '')
         @state_bucket = resolve_state_bucket
       end
 
@@ -46,6 +63,7 @@ module Belt
         end
 
         puts "Creating environment: #{@env_name}" unless @quiet
+        puts "  (nested under #{@parent_environment})" if @parent_environment && !@quiet
         FileUtils.mkdir_p(dest_dir)
 
         templates.each do |template_name, dest_file|
@@ -59,14 +77,24 @@ module Belt
         return if @quiet || !@announce
 
         puts "\n✓ Environment '#{@env_name}' created!"
-        puts "\nReview your settings in #{dest_dir}/terraform.tfvars:"
-        puts '  environment = "..."   # environment name (defaults to directory name)'
-        puts '  domain      = "..."   # your domain (e.g., "myapp.com")'
-        puts "\nThen deploy:"
-        puts "  belt deploy #{@env_name}"
-        puts "\nIf using multiple environments with a custom domain, run:"
-        puts '  belt dns generate'
-        puts 'to manage root domain delegation to per-environment zones.'
+
+        if @parent_environment
+          puts "\nThis is a nested environment under '#{@parent_environment}'."
+          puts "It will use the parent's wildcard certificate and hosted zone."
+          puts "Domain will be: #{@env_name}.#{@parent_environment}.<your-domain>"
+          puts "\nDeploy with:"
+          puts "  belt deploy #{@env_name}"
+          puts "\nNo DNS delegation needed — the parent environment handles DNS."
+        else
+          puts "\nReview your settings in #{dest_dir}/terraform.tfvars:"
+          puts '  environment = "..."   # environment name (defaults to directory name)'
+          puts '  domain      = "..."   # your domain (e.g., "myapp.com")'
+          puts "\nThen deploy:"
+          puts "  belt deploy #{@env_name}"
+          puts "\nIf using multiple environments with a custom domain, run:"
+          puts '  belt dns generate'
+          puts 'to manage root domain delegation to per-environment zones.'
+        end
       end
 
       private

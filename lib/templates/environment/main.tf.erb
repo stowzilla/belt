@@ -35,14 +35,15 @@ provider "conveyor-belt" {
 module "app" {
   source = "../modules/app"
 
-  app_name     = var.app_name
-  environment  = var.environment
-  aws_region   = var.aws_region
-  domain       = var.domain
-  enable_pitr  = var.enable_pitr
+  app_name            = var.app_name
+  environment         = var.environment
+  parent_environment  = var.parent_environment
+  aws_region          = var.aws_region
+  domain              = var.domain
+  enable_pitr         = var.enable_pitr
   deletion_protection = var.deletion_protection
   frontend_urls = concat(
-    var.domain != "" ? ["https://${var.environment == "prod" ? var.domain : "${var.environment}.${var.domain}"}"] : [],
+    var.domain != "" ? ["https://${var.parent_environment != "" ? "${var.environment}.${var.parent_environment}.${var.domain}" : (var.environment == "prod" ? var.domain : "${var.environment}.${var.domain}")}"] : [],
     var.environment == "prod" ? [] : ["http://localhost:3000"]
   )
 
