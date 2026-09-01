@@ -161,6 +161,11 @@ RSpec.describe Belt::CLI::DnsCommand do
           allow(Open3).to receive(:capture2e)
             .with({}, 'terraform', 'output', '-json')
             .and_return([terraform_output.to_json, double(success?: true)])
+
+          # Mock AWS CLI zone verification - zone exists by default
+          allow(Open3).to receive(:capture2e)
+            .with('aws', 'route53', 'get-hosted-zone', '--id', 'Z0123456789ABCDEF')
+            .and_return(['{}', double(success?: true)])
         end
 
         it 'displays the name servers' do
@@ -185,6 +190,36 @@ RSpec.describe Belt::CLI::DnsCommand do
           expect do
             described_class.run(['show'])
           end.to output(/Delegated environments: dev, staging/).to_stdout
+        end
+
+        context 'when zone does not exist in AWS (stale terraform state)' do
+          before do
+            allow(Open3).to receive(:capture2e)
+              .with('aws', 'route53', 'get-hosted-zone', '--id', 'Z0123456789ABCDEF')
+              .and_return(['NoSuchHostedZone', double(success?: false)])
+          end
+
+          it 'exits with an error' do
+            expect do
+              described_class.run(['show'])
+            end.to raise_error(SystemExit)
+          end
+
+          it 'explains the zone is missing' do
+            expect do
+              described_class.run(['show'])
+            rescue SystemExit
+              # expected
+            end.to output(/doesn't exist in AWS/).to_stdout
+          end
+
+          it 'suggests running belt dns deploy' do
+            expect do
+              described_class.run(['show'])
+            rescue SystemExit
+              # expected
+            end.to output(/belt dns deploy/).to_stdout
+          end
         end
       end
 
