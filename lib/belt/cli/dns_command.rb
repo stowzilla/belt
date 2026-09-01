@@ -25,6 +25,8 @@ module Belt
           new.generate(args)
         when 'add'
           new.add_environment(args)
+        when 'remove', 'rm'
+          new.remove_environment(args)
         when 'show', 'list'
           new.show(args)
         when '--help', '-h', 'help'
@@ -43,6 +45,7 @@ module Belt
             deploy              Deploy the dns infrastructure (init → plan → apply)
             generate            Create the infrastructure/dns directory (same as belt generate dns)
             add <env>           Add an environment's NS records to dns/terraform.tfvars
+            remove <env>        Remove an environment's NS records from dns/terraform.tfvars
             show                Show root zone name servers (for registrar configuration)
             help                Show this help
 
@@ -55,6 +58,7 @@ module Belt
             belt dns generate               # Scaffold infrastructure/dns (prompts for profile)
             belt dns generate --aws-profile fpshared  # Non-interactive with profile
             belt dns add staging            # Add staging's NS records to tfvars
+            belt dns remove staging         # Remove staging's NS delegation
             belt dns show                   # Show root name servers to configure at registrar
 
           The dns directory manages your root domain and delegates subdomains to
@@ -67,6 +71,11 @@ module Belt
             3. belt dns add dev             # Add dev's NS records
             4. belt dns deploy              # Deploy root zone
             5. Update registrar NS records to output values
+
+          When destroying an environment:
+            1. belt destroy environment dev # Destroy the environment
+            2. belt dns remove dev          # Remove DNS delegation
+            3. belt dns deploy              # Apply the change
         HELP
       end
 
@@ -205,6 +214,37 @@ module Belt
 
         update_tfvars(tfvars_path, env_name, ns_records)
         puts "✓ Added #{env_name} NS records to #{tfvars_path}"
+        puts "\nRun 'belt dns deploy' to apply the changes."
+      end
+
+      # --- Remove Environment ---
+      def remove_environment(args)
+        env_name = args.shift
+
+        if env_name.nil? || env_name.start_with?('-')
+          puts 'Usage: belt dns remove <env>'
+          puts "\nExample: belt dns remove staging"
+          exit 1
+        end
+
+        tfvars_path = "#{DNS_DIR}/terraform.tfvars"
+        unless File.exist?(tfvars_path)
+          puts "#{tfvars_path} not found."
+          puts "\nNo DNS infrastructure to modify."
+          exit 1
+        end
+
+        content = File.read(tfvars_path)
+
+        # Check if the environment exists in the tfvars
+        unless content.include?("#{env_name} =")
+          puts "Environment '#{env_name}' not found in #{tfvars_path}."
+          puts "\nNothing to remove."
+          exit 0
+        end
+
+        remove_env_from_tfvars(tfvars_path, env_name)
+        puts "✓ Removed #{env_name} NS records from #{tfvars_path}"
         puts "\nRun 'belt dns deploy' to apply the changes."
       end
 
@@ -395,6 +435,31 @@ module Belt
             content.sub!(/^environment_zones\s*=\s*\{/m, "environment_zones = {\n#{new_entry}")
           end
         end
+
+        File.write(path, content)
+      end
+
+      def remove_env_from_tfvars(path, env_name)
+        content = File.read(path)
+
+        # Match the environment entry: "  env_name = [\n    ...\n  ]" with optional trailing comma
+        # The entry can be followed by another entry, a closing brace, or whitespace
+        #
+        # Pattern breakdown:
+        # - ^(\s*)#{env_name}\s*= matches "  env_name =" at start of line
+        # - \s*\[\s* matches " [" with optional whitespace
+        # - [^\]]* matches everything inside brackets (the NS records)
+        # - \]\s*,?\s* matches "]" with optional trailing comma and whitespace
+        # - (?=\n|\s*[}\w]) lookahead for newline or closing brace/next entry
+        entry_pattern = /^\s*#{Regexp.escape(env_name)}\s*=\s*\[[^\]]*\]\s*,?\s*\n?/m
+
+        content.gsub!(entry_pattern, '')
+
+        # Clean up any double newlines that may have been created
+        content.gsub!(/\n{3,}/, "\n\n")
+
+        # If the environment_zones block is now empty (just whitespace), clean it up
+        content.gsub!(/^environment_zones\s*=\s*\{\s*\n\s*\}/, 'environment_zones = {}')
 
         File.write(path, content)
       end

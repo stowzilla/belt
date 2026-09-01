@@ -236,6 +236,9 @@ module Belt
         @removed << dir
         puts "  remove  #{dir}/"
         puts "\n✓ Environment '#{@name}' destroyed!"
+
+        # Check if DNS delegation exists and warn about cleanup
+        warn_about_dns_delegation(@name)
       end
 
       def terraform_state_exists?(dir)
@@ -256,6 +259,24 @@ module Belt
       rescue StandardError
         # If we can't determine state, assume it might exist and warn
         true
+      end
+
+      def warn_about_dns_delegation(env_name)
+        dns_tfvars = 'infrastructure/dns/terraform.tfvars'
+        return unless File.exist?(dns_tfvars)
+
+        content = File.read(dns_tfvars)
+        # Only match a real HCL entry (e.g. "  dev = [") at the start of a line,
+        # not the commented-out examples in the tfvars template (e.g. "#   dev = [").
+        # This mirrors the anchored patterns DNSCommand uses when writing entries.
+        return unless content =~ /^\s*#{Regexp.escape(env_name)}\s*=/
+
+        puts ''
+        puts '⚠  DNS delegation still exists for this environment.'
+        puts '   To clean up the root zone delegation:'
+        puts ''
+        puts "     belt dns remove #{env_name}"
+        puts '     belt dns deploy'
       end
 
       def run_terraform_destroy(dir)

@@ -251,7 +251,7 @@ RSpec.describe Belt::CLI::DnsCommand do
     it 'recognizes show as a valid subcommand' do
       # Just verify it doesn't print "Unknown dns subcommand"
       expect do
-        described_class.run(['show'])
+        described_class.run(%w[show])
       rescue SystemExit
         # expected - no dns dir
       end.not_to output(/Unknown dns subcommand/).to_stdout
@@ -259,10 +259,149 @@ RSpec.describe Belt::CLI::DnsCommand do
 
     it 'recognizes list as an alias for show' do
       expect do
-        described_class.run(['list'])
+        described_class.run(%w[list])
       rescue SystemExit
         # expected - no dns dir
       end.not_to output(/Unknown dns subcommand/).to_stdout
+    end
+
+    it 'recognizes remove as a valid subcommand' do
+      expect do
+        described_class.run(%w[remove])
+      rescue SystemExit
+        # expected - missing arg
+      end.not_to output(/Unknown dns subcommand/).to_stdout
+    end
+
+    it 'recognizes rm as an alias for remove' do
+      expect do
+        described_class.run(%w[rm])
+      rescue SystemExit
+        # expected - missing arg
+      end.not_to output(/Unknown dns subcommand/).to_stdout
+    end
+  end
+
+  describe '#remove_environment' do
+    context 'when no environment name is provided' do
+      it 'exits with usage message' do
+        expect do
+          described_class.run(%w[remove])
+        end.to raise_error(SystemExit)
+      end
+
+      it 'prints usage' do
+        expect do
+          described_class.run(%w[remove])
+        rescue SystemExit
+          # expected
+        end.to output(/Usage: belt dns remove <env>/).to_stdout
+      end
+    end
+
+    context 'when infrastructure/dns/terraform.tfvars does not exist' do
+      it 'exits with an error' do
+        expect do
+          described_class.run(%w[remove staging])
+        end.to raise_error(SystemExit)
+      end
+
+      it 'explains there is nothing to modify' do
+        expect do
+          described_class.run(%w[remove staging])
+        rescue SystemExit
+          # expected
+        end.to output(/No DNS infrastructure to modify/).to_stdout
+      end
+    end
+
+    context 'when environment does not exist in tfvars' do
+      before do
+        FileUtils.mkdir_p('infrastructure/dns')
+        File.write('infrastructure/dns/terraform.tfvars', <<~TFVARS)
+          domain = "example.com"
+          environment_zones = {
+            dev = [
+              "ns-1.awsdns.com"
+            ]
+          }
+        TFVARS
+      end
+
+      it 'exits with code 0' do
+        expect do
+          described_class.run(%w[remove staging])
+        end.to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
+      end
+
+      it 'reports nothing to remove' do
+        expect do
+          described_class.run(%w[remove staging])
+        rescue SystemExit
+          # expected
+        end.to output(/Nothing to remove/).to_stdout
+      end
+    end
+
+    context 'when environment exists in tfvars' do
+      before do
+        FileUtils.mkdir_p('infrastructure/dns')
+        File.write('infrastructure/dns/terraform.tfvars', <<~TFVARS)
+          domain = "example.com"
+          environment_zones = {
+            dev = [
+              "ns-123.awsdns-12.com",
+              "ns-456.awsdns-34.net"
+            ]
+            staging = [
+              "ns-789.awsdns-56.org",
+              "ns-012.awsdns-78.co.uk"
+            ]
+          }
+        TFVARS
+      end
+
+      it 'removes the environment from tfvars' do
+        described_class.run(%w[remove staging])
+
+        content = File.read('infrastructure/dns/terraform.tfvars')
+        expect(content).not_to include('staging =')
+        expect(content).to include('dev =') # other envs preserved
+      end
+
+      it 'prints success message' do
+        expect do
+          described_class.run(%w[remove staging])
+        end.to output(/Removed staging NS records/).to_stdout
+      end
+
+      it 'reminds to deploy' do
+        expect do
+          described_class.run(%w[remove staging])
+        end.to output(/belt dns deploy/).to_stdout
+      end
+    end
+
+    context 'when removing the only environment' do
+      before do
+        FileUtils.mkdir_p('infrastructure/dns')
+        File.write('infrastructure/dns/terraform.tfvars', <<~TFVARS)
+          domain = "example.com"
+          environment_zones = {
+            dev = [
+              "ns-123.awsdns-12.com"
+            ]
+          }
+        TFVARS
+      end
+
+      it 'leaves a valid empty block' do
+        described_class.run(%w[remove dev])
+
+        content = File.read('infrastructure/dns/terraform.tfvars')
+        expect(content).not_to include('dev =')
+        expect(content).to include('environment_zones')
+      end
     end
   end
 end
