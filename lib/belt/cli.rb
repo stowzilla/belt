@@ -116,6 +116,7 @@ module Belt
           deploy frontend <env> [--frontend NAME]     Build and deploy frontend(s) to AWS
           dns deploy                                  Deploy root DNS zone (init → plan → apply)
           dns add <env>                               Add environment NS records to dns/terraform.tfvars
+          dns show                                    Show root zone name servers for registrar
           frontend env <env> [--frontend NAME]        Write <frontend>/.env from terraform outputs
           frontend list                               List configured frontends
           routes [-g PATTERN] [-f json]               Show route definitions
