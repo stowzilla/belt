@@ -266,7 +266,10 @@ module Belt
         return unless File.exist?(dns_tfvars)
 
         content = File.read(dns_tfvars)
-        return unless content.include?("#{env_name} =")
+        # Only match a real HCL entry (e.g. "  dev = [") at the start of a line,
+        # not the commented-out examples in the tfvars template (e.g. "#   dev = [").
+        # This mirrors the anchored patterns DNSCommand uses when writing entries.
+        return unless content =~ /^\s*#{Regexp.escape(env_name)}\s*=/
 
         puts ''
         puts '⚠  DNS delegation still exists for this environment.'
