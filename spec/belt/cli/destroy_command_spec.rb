@@ -145,6 +145,91 @@ RSpec.describe Belt::CLI::DestroyCommand do
         expect(ENV.fetch('AWS_PROFILE', nil)).to eq('devzilla')
       end
     end
+
+    # --yes is the flag automated workflows (CI, agents spinning up per-PR
+    # environments) reach for: it must ALWAYS run terraform destroy and then
+    # delete the local files, with zero prompts. This is deliberately different
+    # from --force, which skips terraform and only removes local files.
+    context 'when --yes is passed (non-interactive full teardown)' do
+      it 'runs terraform destroy without any prompt, then deletes files' do
+        dir = make_env('superman', belt_rb: belt_rb)
+
+        cmd = described_class.new('environment', 'superman', [], yes: true, skip_terraform: false)
+        allow(cmd).to receive(:terraform_state_exists?).and_return(true)
+        allow(cmd).to receive(:warn_about_dns_delegation)
+
+        destroy_ran = false
+        allow(cmd).to receive(:run_terraform_destroy) { destroy_ran = true }
+
+        allow($stdout).to receive(:puts)
+        allow($stdout).to receive(:print)
+
+        cmd.destroy
+
+        expect(destroy_ran).to be(true)
+        expect(Dir.exist?(dir)).to be(false)
+      end
+
+      it 'does not read stdin (no prompts at all)' do
+        make_env('superman', belt_rb: belt_rb)
+
+        cmd = described_class.new('environment', 'superman', [], yes: true, skip_terraform: false)
+        allow(cmd).to receive(:terraform_state_exists?).and_return(true)
+        allow(cmd).to receive(:run_terraform_destroy)
+        allow(cmd).to receive(:warn_about_dns_delegation)
+
+        # Any attempt to read stdin means the command tried to prompt.
+        expect($stdin).not_to receive(:gets)
+
+        allow($stdout).to receive(:puts)
+        allow($stdout).to receive(:print)
+        cmd.destroy
+      end
+
+      it 'auto-continues past the nested-children warning without prompting' do
+        make_env('parent', belt_rb: belt_rb)
+        make_env('child', tfvars: "environment = \"child\"\nparent_environment = \"parent\"")
+
+        cmd = described_class.new('environment', 'parent', [], yes: true, skip_terraform: false)
+        allow(cmd).to receive(:terraform_state_exists?).and_return(false)
+        allow(cmd).to receive(:warn_about_dns_delegation)
+
+        expect($stdin).not_to receive(:gets)
+
+        allow($stdout).to receive(:puts)
+        allow($stdout).to receive(:print)
+        cmd.destroy
+
+        expect(Dir.exist?('infrastructure/parent')).to be(false)
+      end
+
+      it 'skips terraform destroy when there is no state (nothing to tear down)' do
+        dir = make_env('superman', belt_rb: belt_rb)
+
+        cmd = described_class.new('environment', 'superman', [], yes: true, skip_terraform: false)
+        allow(cmd).to receive(:terraform_state_exists?).and_return(false)
+        allow(cmd).to receive(:warn_about_dns_delegation)
+
+        expect(cmd).not_to receive(:run_terraform_destroy)
+
+        allow($stdout).to receive(:puts)
+        allow($stdout).to receive(:print)
+        cmd.destroy
+
+        expect(Dir.exist?(dir)).to be(false)
+      end
+    end
+
+    context 'environment flag parsing' do
+      it 'parses --yes and -y into the yes flag' do
+        expect(described_class.parse_environment_flags(['--yes'])).to include(yes: true)
+        expect(described_class.parse_environment_flags(['-y'])).to include(yes: true)
+      end
+
+      it 'defaults yes to false' do
+        expect(described_class.parse_environment_flags([])).to include(yes: false)
+      end
+    end
   end
 
   describe '#apply_env_config!' do

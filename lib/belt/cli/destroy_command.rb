@@ -47,7 +47,7 @@ module Belt
         when 'environment'
           name = args.shift
           if name.nil? || name.empty?
-            puts 'Usage: belt destroy environment <name> [--force] [--skip-terraform]'
+            puts 'Usage: belt destroy environment <name> [--yes] [--force] [--skip-terraform]'
             exit 1
           end
           flags = parse_environment_flags(args)
@@ -79,13 +79,15 @@ module Belt
       end
 
       def self.parse_environment_flags(args)
-        flags = { force: false, skip_terraform: false }
+        flags = { force: false, skip_terraform: false, yes: false }
         args.each do |arg|
           case arg
           when '--force', '-f'
             flags[:force] = true
           when '--skip-terraform'
             flags[:skip_terraform] = true
+          when '--yes', '-y'
+            flags[:yes] = true
           end
         end
         flags
@@ -114,7 +116,11 @@ module Belt
             views         Remove React pages for a resource
 
           Environment options:
-            --force, -f          Skip all prompts (CI mode)
+            --yes, -y            Non-interactive teardown: ALWAYS run terraform
+                                 destroy, then delete local files, no prompts
+                                 (use this for CI / agents tearing down ephemeral envs)
+            --force, -f          Skip all prompts but SKIP terraform destroy —
+                                 only deletes local files (leaves cloud resources)
             --skip-terraform     Delete local files without running terraform destroy
 
           Examples:
@@ -124,6 +130,7 @@ module Belt
             belt d environment staging
             belt d environment dev --skip-terraform
             belt d environment dev --force
+            belt d environment pr-1234 --yes    # full non-interactive teardown
             belt d frontend
             belt d frontend --frontend ops
             belt d views post
@@ -133,16 +140,18 @@ module Belt
 
           For environments: if terraform state is detected, you'll be prompted to run
           `terraform destroy` first to tear down cloud resources before removing files.
+          Pass --yes to run the whole teardown non-interactively (destroy + delete).
         HELP
       end
 
       # -- keyword options for destroy flags
-      def initialize(generator, name, fields, force: false, skip_terraform: false, frontend_name: nil)
+      def initialize(generator, name, fields, force: false, skip_terraform: false, yes: false, frontend_name: nil)
         @generator = generator
         @name = name&.downcase&.gsub(/[^a-z0-9_]/, '_')
         @fields = fields
         @force = force
         @skip_terraform = skip_terraform
+        @yes = yes
         @frontend_name = frontend_name
         @app_name = detect_namespace
         @singular_name = @name ? Belt::Inflector.singularize(@name) : nil
@@ -205,7 +214,7 @@ module Belt
           puts '   Consider destroying nested environments first:'
           nested_children.each { |child| puts "     belt destroy environment #{child}" }
           puts ''
-          unless @force
+          unless @force || @yes
             print '   Continue anyway? [y/N] '
             response = $stdin.gets&.strip&.downcase
             unless response&.start_with?('y')
@@ -227,7 +236,12 @@ module Belt
           puts "⚠  Environment '#{@name}' appears to have active infrastructure."
           puts "   Terraform state was found — resources may still be running.\n\n"
 
-          if @force
+          if @yes
+            # Fully non-interactive teardown (CI / agents): always run terraform
+            # destroy, then delete files. This is the flag to reach for when an
+            # automated workflow spins an environment up and tears it down.
+            run_terraform_destroy(dir)
+          elsif @force
             puts '   --force passed, skipping terraform destroy.'
           else
             puts '   Options:'
@@ -251,7 +265,7 @@ module Belt
         end
 
         # Final confirmation before deleting files
-        unless @force
+        unless @force || @yes
           print "\nPermanently delete #{dir}/? [y/N] "
           response = $stdin.gets&.strip&.downcase
           unless response&.start_with?('y')

@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.32
+
+### Enhancement
+
+- **`belt destroy environment --yes` for fully non-interactive teardown**: Added
+  a `--yes` / `-y` flag that tears an environment down with zero prompts —
+  intended for CI pipelines and agents that spin up ephemeral per-PR
+  environments and destroy them on merge. Unlike `--force` (which skips
+  terraform and only removes local files), `--yes` **always runs
+  `terraform destroy`** when terraform state is present, then deletes the local
+  `infrastructure/<env>/` files. It also auto-continues past the nested-children
+  warning. When no terraform state exists there is nothing to tear down, so the
+  destroy step is skipped and only the files are removed.
+
+  ```bash
+  belt destroy environment pr-1234 --yes
+  ```
+
 ## 0.3.31
 
 ### Bug Fix
