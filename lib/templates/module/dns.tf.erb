@@ -2,11 +2,11 @@
 # Convention:
 #   prod           → api.mydomain.com (standalone, creates own zone + cert)
 #   dev            → api.dev.mydomain.com (standalone, creates own zone + cert)
-#   fizzy123 (dev) → fizzy123.dev.mydomain.com (nested, uses parent zone + cert)
+#   fizzy123 (dev) → api-fizzy123.dev.mydomain.com (nested, uses parent zone + cert)
 #
-# Note: Nested envs DON'T get an api.* prefix because SSL wildcards are single-level.
-# The parent's *.dev.mydomain.com covers fizzy123.dev.mydomain.com but NOT
-# api.fizzy123.dev.mydomain.com.
+# Note: Nested envs use api-<env> prefix (not api.<env>) because SSL wildcards are
+# single-level. The parent's *.dev.mydomain.com covers api-fizzy123.dev.mydomain.com
+# but NOT api.fizzy123.dev.mydomain.com.
 
 locals {
   # S3 bucket names follow DNS rules — underscores are not allowed.
@@ -29,10 +29,9 @@ locals {
 
   # API subdomain: 
   # Standalone: api.dev.mydomain.com (covered by *.dev.mydomain.com)
-  # Nested: fizzy123.dev.mydomain.com (same as app_domain — can't add api. prefix 
-  #         because *.dev.mydomain.com doesn't cover api.fizzy123.dev.mydomain.com)
+  # Nested: api-fizzy123.dev.mydomain.com (api- prefix keeps it single-level under wildcard)
   api_domain = var.domain != "" ? (
-    local.is_nested ? local.app_domain : "api.${local.app_domain}"
+    local.is_nested ? "api-${var.environment}.${local.parent_domain}" : "api.${local.app_domain}"
   ) : ""
 
   # Whether DNS is enabled
