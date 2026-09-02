@@ -117,7 +117,8 @@ module Belt
 
           Environment options:
             --full, -y           Non-interactive teardown: ALWAYS run terraform
-                                 destroy, then delete local files, no prompts
+                                 destroy, then delete local files AND purge the
+                                 remote terraform state from S3, no prompts
                                  (use this for CI / agents tearing down ephemeral envs)
             --force, -f          Skip all prompts but SKIP terraform destroy —
                                  only deletes local files (leaves cloud resources)
@@ -274,6 +275,9 @@ module Belt
           end
         end
 
+        # Purge remote state from S3 when --full is used (complete ephemeral cleanup)
+        purge_terraform_state(dir) if @full
+
         FileUtils.rm_rf(dir)
         @removed << dir
         puts "  remove  #{dir}/"
@@ -400,6 +404,50 @@ module Belt
         end
 
         puts '  ✓ Infrastructure destroyed.'
+      end
+
+      # Purge the terraform state file from S3 after a full destroy.
+      # This leaves zero trace of ephemeral environments in the state bucket.
+      def purge_terraform_state(dir)
+        backend_file = File.join(dir, 'backend.tf')
+        return unless File.exist?(backend_file)
+
+        content = File.read(backend_file)
+
+        # Extract bucket and key from backend config
+        bucket_match = content.match(/bucket\s*=\s*"([^"]+)"/)
+        key_match = content.match(/key\s*=\s*"([^"]+)"/)
+
+        return unless bucket_match && key_match
+
+        bucket = bucket_match[1]
+        key = key_match[1]
+
+        puts '  Purging terraform state from S3...'
+
+        # Delete the state file
+        result = `aws s3 rm "s3://#{bucket}/#{key}" 2>&1`
+        if Process.last_status.success?
+          puts "    ✓ Deleted s3://#{bucket}/#{key}"
+        else
+          puts "    ⚠ Could not delete state file: #{result.strip}" unless result.include?('delete: s3://')
+        end
+
+        # Also try to delete the state lock file if it exists (DynamoDB-based locking
+        # uses a separate mechanism, but some setups have .tflock files)
+        lock_key = key.sub(/\.tfstate$/, '.tfstate.lock')
+        `aws s3 rm "s3://#{bucket}/#{lock_key}" 2>/dev/null`
+
+        # Try to clean up the environment's directory in the bucket if empty
+        # (e.g., if the key is "myapp/fizzy123/terraform.tfstate", try to remove the "fizzy123" prefix)
+        env_prefix = key.sub(%r{/[^/]+$}, '')
+        return unless env_prefix != key
+
+        # List remaining objects under this prefix
+        remaining = `aws s3 ls "s3://#{bucket}/#{env_prefix}/" 2>/dev/null`
+        return unless Process.last_status.success? && remaining.strip.empty?
+
+        puts "    ✓ State directory s3://#{bucket}/#{env_prefix}/ is now empty"
       end
 
       # Load infrastructure/<env>/belt.rb and apply its aws_profile + env vars to
