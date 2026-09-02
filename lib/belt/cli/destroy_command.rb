@@ -423,7 +423,7 @@ module Belt
         bucket = bucket_match[1]
         key = key_match[1]
 
-        puts "  Purging terraform state from S3..."
+        puts '  Purging terraform state from S3...'
 
         # Delete the state file
         result = `aws s3 rm "s3://#{bucket}/#{key}" 2>&1`
@@ -441,13 +441,13 @@ module Belt
         # Try to clean up the environment's directory in the bucket if empty
         # (e.g., if the key is "myapp/fizzy123/terraform.tfstate", try to remove the "fizzy123" prefix)
         env_prefix = key.sub(%r{/[^/]+$}, '')
-        if env_prefix != key
-          # List remaining objects under this prefix
-          remaining = `aws s3 ls "s3://#{bucket}/#{env_prefix}/" 2>/dev/null`
-          if Process.last_status.success? && remaining.strip.empty?
-            puts "    ✓ State directory s3://#{bucket}/#{env_prefix}/ is now empty"
-          end
-        end
+        return unless env_prefix != key
+
+        # List remaining objects under this prefix
+        remaining = `aws s3 ls "s3://#{bucket}/#{env_prefix}/" 2>/dev/null`
+        return unless Process.last_status.success? && remaining.strip.empty?
+
+        puts "    ✓ State directory s3://#{bucket}/#{env_prefix}/ is now empty"
       end
 
       # Load infrastructure/<env>/belt.rb and apply its aws_profile + env vars to
