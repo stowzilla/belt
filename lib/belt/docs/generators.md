@@ -106,6 +106,34 @@ belt destroy frontend --frontend ops
 belt destroy views post
 ```
 
+### Non-interactive environment teardown
+
+`belt destroy environment` is interactive by default: it prompts before running
+`terraform destroy` and again before deleting local files. For CI pipelines and
+agents that spin up ephemeral per-PR environments and tear them down on merge,
+use `--full`:
+
+```bash
+belt destroy environment pr-1234 --full
+```
+
+`--full` (alias `-y`) runs the whole teardown with zero prompts: it **always runs
+`terraform destroy`** (when terraform state is present), then deletes the local
+`infrastructure/<env>/` files.
+
+Flag comparison:
+
+| Flag | terraform destroy | Deletes local files | Prompts |
+|------|-------------------|---------------------|---------|
+| _(none)_ | Prompted | Prompted | Yes |
+| `--full` / `-y` | Always (if state exists) | Yes | No |
+| `--force` / `-f` | **Skipped** (leaves cloud resources) | Yes | No |
+| `--skip-terraform` | Never | Yes | Final delete only |
+
+> `--force` is for the "just clean up my local files" case — it intentionally
+> leaves cloud infrastructure running. Reach for `--full` when you want the
+> environment fully gone.
+
 ## Plugin Generators
 
 Gems that follow the Belt plugin contract are auto-discovered:
