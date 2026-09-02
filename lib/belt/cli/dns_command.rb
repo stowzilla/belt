@@ -167,17 +167,24 @@ module Belt
 
           if auto
             run_terraform('apply', env_config, 'tfplan')
+            cleanup_plan
           else
             print "\nApply this plan? [y/N] "
             answer = $stdin.gets&.strip&.downcase
             if %w[y yes].include?(answer)
               run_terraform('apply', env_config, 'tfplan')
+              cleanup_plan
             else
+              cleanup_plan
               puts 'Aborted.'
               exit 1
             end
           end
         end
+      end
+
+      def cleanup_plan
+        FileUtils.rm_f('tfplan')
       end
 
       # --- Add Environment ---
