@@ -194,6 +194,26 @@ module Belt
           exit 1
         end
 
+        # Check if any environments are nested under this one
+        nested_children = find_nested_children(@name)
+        if nested_children.any?
+          puts "⚠  The following environments are nested under '#{@name}':"
+          nested_children.each { |child| puts "     - #{child}" }
+          puts ''
+          puts '   Destroying the parent will leave them with broken DNS references.'
+          puts '   Consider destroying nested environments first:'
+          nested_children.each { |child| puts "     belt destroy environment #{child}" }
+          puts ''
+          unless @force
+            print '   Continue anyway? [y/N] '
+            response = $stdin.gets&.strip&.downcase
+            unless response&.start_with?('y')
+              puts 'Cancelled.'
+              exit 0
+            end
+          end
+        end
+
         # Check if terraform state exists (infra may still be live)
         if !@skip_terraform && terraform_state_exists?(dir)
           puts "⚠  Environment '#{@name}' appears to have active infrastructure."
@@ -241,6 +261,21 @@ module Belt
         warn_about_dns_delegation(@name)
       end
 
+      def find_nested_children(env_name)
+        nested_children = []
+        Dir.glob('infrastructure/*/terraform.tfvars').each do |tfvars_file|
+          next if tfvars_file.include?('/dns/')
+          next if tfvars_file.include?('/modules/')
+
+          content = File.read(tfvars_file)
+          next unless content =~ /^\s*parent_environment\s*=\s*"#{Regexp.escape(env_name)}"/
+
+          child_env = File.basename(File.dirname(tfvars_file))
+          nested_children << child_env
+        end
+        nested_children
+      end
+
       def terraform_state_exists?(dir)
         # Check for local .terraform directory (initialized state)
         return true if Dir.exist?(File.join(dir, '.terraform'))
@@ -262,6 +297,23 @@ module Belt
       end
 
       def warn_about_dns_delegation(env_name)
+        # Check if this is a nested environment (DNS records are in parent's zone, handled by terraform)
+        tfvars_file = "infrastructure/#{env_name}/terraform.tfvars"
+        if File.exist?(tfvars_file)
+          tfvars_content = File.read(tfvars_file)
+          if tfvars_content =~ /^\s*parent_environment\s*=\s*"([^"]+)"/
+            parent_env = ::Regexp.last_match(1)
+            puts ''
+            puts "ℹ  This was a nested environment under '#{parent_env}'."
+            puts '   The DNS A record in the parent zone was deleted by terraform destroy.'
+            return
+          end
+        end
+
+        # Check if any other environments are nested under this one
+        warn_about_nested_children(env_name)
+
+        # Check for standalone environment DNS delegation
         dns_tfvars = 'infrastructure/dns/terraform.tfvars'
         return unless File.exist?(dns_tfvars)
 
@@ -277,6 +329,27 @@ module Belt
         puts ''
         puts "     belt dns remove #{env_name}"
         puts '     belt dns deploy'
+      end
+
+      def warn_about_nested_children(env_name)
+        nested_children = []
+        Dir.glob('infrastructure/*/terraform.tfvars').each do |tfvars_file|
+          next if tfvars_file.include?('/dns/')
+
+          content = File.read(tfvars_file)
+          next unless content =~ /^\s*parent_environment\s*=\s*"#{Regexp.escape(env_name)}"/
+
+          child_env = File.basename(File.dirname(tfvars_file))
+          nested_children << child_env
+        end
+
+        return if nested_children.empty?
+
+        puts ''
+        puts '⚠  The following environments were nested under this one:'
+        nested_children.each { |child| puts "     - #{child}" }
+        puts '   They may have dangling DNS references. Consider destroying them first,'
+        puts '   or manually cleaning up their Route53 records.'
       end
 
       def run_terraform_destroy(dir)

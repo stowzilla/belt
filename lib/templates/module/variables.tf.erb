@@ -8,6 +8,12 @@ variable "environment" {
   type        = string
 }
 
+variable "parent_environment" {
+  description = "Parent environment for nested subdomains (e.g., 'dev' creates fizzy123.dev.example.com). Leave empty for standalone environments."
+  type        = string
+  default     = ""
+}
+
 variable "aws_region" {
   description = "AWS region"
   type        = string

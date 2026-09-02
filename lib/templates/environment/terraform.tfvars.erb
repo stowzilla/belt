@@ -1,4 +1,7 @@
 environment = "<%= @env_name %>"
+<% if @parent_environment && !@parent_environment.empty? -%>
+parent_environment = "<%= @parent_environment %>"
+<% end -%>
 <% if @domain && !@domain.empty? -%>
 domain      = "<%= @domain %>"
 <% else -%>
