@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.31
+
+### Bug Fix
+
+- **`belt destroy environment` now uses the environment's AWS profile**: The
+  terraform destroy path (and remote-state detection) previously inherited
+  whatever `AWS_PROFILE` was in the shell, which could point at the wrong
+  account and fail with "No valid credential sources found". It now loads
+  `infrastructure/<env>/belt.rb` and applies the configured `aws_profile` and
+  env vars before running terraform — matching `belt deploy` and
+  `belt terraform`.
+
 ## 0.3.16
 
 ### Enhancement
