@@ -218,6 +218,59 @@ RSpec.describe Belt::CLI::DestroyCommand do
 
         expect(Dir.exist?(dir)).to be(false)
       end
+
+      it 'purges terraform state from S3 after successful destroy' do
+        dir = make_env('superman', belt_rb: belt_rb)
+        File.write(File.join(dir, 'backend.tf'), <<~HCL)
+          terraform {
+            backend "s3" {
+              bucket  = "belt-terraform-state-123456789"
+              key     = "myapp/superman/terraform.tfstate"
+              region  = "us-east-1"
+              encrypt = true
+            }
+          }
+        HCL
+
+        cmd = described_class.new('environment', 'superman', [], full: true, skip_terraform: false)
+        allow(cmd).to receive(:terraform_state_exists?).and_return(true)
+        allow(cmd).to receive(:run_terraform_destroy)
+        allow(cmd).to receive(:warn_about_dns_delegation)
+
+        # Mock purge_terraform_state to verify it's called with the right dir
+        purge_called_with = nil
+        allow(cmd).to receive(:purge_terraform_state) do |arg|
+          purge_called_with = arg
+        end
+
+        allow($stdout).to receive(:puts)
+        allow($stdout).to receive(:print)
+        cmd.destroy
+
+        expect(purge_called_with).to eq(dir)
+        expect(Dir.exist?(dir)).to be(false)
+      end
+
+      it 'does not purge state when --full is not passed' do
+        dir = make_env('superman', belt_rb: belt_rb)
+        File.write(File.join(dir, 'backend.tf'), <<~HCL)
+          terraform {
+            backend "s3" {
+              bucket  = "belt-terraform-state-123456789"
+              key     = "myapp/superman/terraform.tfstate"
+            }
+          }
+        HCL
+
+        cmd = described_class.new('environment', 'superman', [], force: true, skip_terraform: true)
+        allow(cmd).to receive(:warn_about_dns_delegation)
+
+        expect(cmd).not_to receive(:purge_terraform_state)
+
+        allow($stdout).to receive(:puts)
+        allow($stdout).to receive(:print)
+        cmd.destroy
+      end
     end
 
     context 'environment flag parsing' do
