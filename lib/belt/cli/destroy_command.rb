@@ -6,6 +6,7 @@ require_relative 'auth_command'
 require_relative 'frontend_registry'
 require_relative 'generator_registry'
 require_relative 'tables_command'
+require_relative 'environment_config'
 require_relative '../inflector'
 
 module Belt
@@ -214,6 +215,13 @@ module Belt
           end
         end
 
+        # Apply the environment's AWS profile + env vars from infrastructure/<env>/belt.rb
+        # BEFORE any terraform/aws calls, so both remote-state detection and the
+        # subsequent destroy authenticate against the correct account. Without this,
+        # terraform inherits whatever AWS_PROFILE is in the shell, which may point at
+        # the wrong account (mirrors `belt deploy` / `belt terraform`).
+        apply_env_config! unless @skip_terraform
+
         # Check if terraform state exists (infra may still be live)
         if !@skip_terraform && terraform_state_exists?(dir)
           puts "⚠  Environment '#{@name}' appears to have active infrastructure."
@@ -378,6 +386,15 @@ module Belt
         end
 
         puts '  ✓ Infrastructure destroyed.'
+      end
+
+      # Load infrastructure/<env>/belt.rb and apply its aws_profile + env vars to
+      # the current process so terraform (and any aws CLI calls during destroy)
+      # authenticate against the right account. Mirrors DeployCommand / TerraformCommand.
+      def apply_env_config!
+        env_config = EnvironmentConfig.load(@name)
+        env_config.apply!
+        puts "  🔑 Using AWS profile: #{env_config.aws_profile}" if env_config.aws_profile?
       end
 
       def empty_s3_buckets_in_state
