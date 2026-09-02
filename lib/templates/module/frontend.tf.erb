@@ -102,7 +102,7 @@ resource "aws_cloudfront_distribution" "<%= @tf_name %>" {
 
   viewer_certificate {
     cloudfront_default_certificate = <%= @include_dns ? '!local.dns_enabled' : 'true' %>
-    acm_certificate_arn            = <%= @include_dns ? 'local.dns_enabled ? aws_acm_certificate_validation.app[0].certificate_arn : null' : 'null' %>
+    acm_certificate_arn            = <%= @include_dns ? 'local.dns_enabled ? (local.is_nested ? data.aws_acm_certificate.parent[0].arn : aws_acm_certificate_validation.app[0].certificate_arn) : null' : 'null' %>
     ssl_support_method             = <%= @include_dns ? 'local.dns_enabled ? "sni-only" : null' : 'null' %>
     minimum_protocol_version       = <%= @include_dns ? 'local.dns_enabled ? "TLSv1.2_2021" : null' : 'null' %>
   }
@@ -144,7 +144,7 @@ resource "aws_s3_bucket_policy" "<%= @tf_name %>" {
 # Route53 record for frontend (app domain → CloudFront)
 resource "aws_route53_record" "<%= @tf_name %>" {
   count   = local.dns_enabled ? 1 : 0
-  zone_id = aws_route53_zone.app[0].zone_id
+  zone_id = local.is_nested ? data.aws_route53_zone.parent[0].zone_id : aws_route53_zone.app[0].zone_id
   name    = local.app_domain
   type    = "A"
 
@@ -155,9 +155,9 @@ resource "aws_route53_record" "<%= @tf_name %>" {
   }
 }
 
-# www record for prod only
+# www record for prod only (standalone envs only — nested envs don't need www)
 resource "aws_route53_record" "<%= @tf_name %>_www" {
-  count   = local.dns_enabled && var.environment == "prod" ? 1 : 0
+  count   = local.dns_enabled && var.environment == "prod" && !local.is_nested ? 1 : 0
   zone_id = aws_route53_zone.app[0].zone_id
   name    = "www.${var.domain}"
   type    = "A"

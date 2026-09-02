@@ -19,6 +19,6 @@ output "app_domain" {
 }
 
 output "name_servers" {
-  description = "NS records to configure at your registrar"
-  value       = local.dns_enabled ? aws_route53_zone.app[0].name_servers : []
+  description = "NS records to configure at your registrar (standalone envs only)"
+  value       = local.dns_enabled && !local.is_nested ? aws_route53_zone.app[0].name_servers : []
 }
