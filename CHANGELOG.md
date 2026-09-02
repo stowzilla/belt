@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.31
 
 ### Bug Fix
 
