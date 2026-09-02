@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'backup_config'
+
 module Belt
   module CLI
     class EnvironmentConfig

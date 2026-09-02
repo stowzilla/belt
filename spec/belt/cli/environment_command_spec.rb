@@ -85,6 +85,59 @@ RSpec.describe Belt::CLI::EnvironmentCommand do
         expect(main).to include('parent_environment  = var.parent_environment')
       end
     end
+
+    context 'with parent environment that has domain and aws_profile' do
+      before do
+        FileUtils.mkdir_p('infrastructure/dev')
+        File.write('infrastructure/dev/terraform.tfvars', <<~TFVARS)
+          environment = "dev"
+          domain      = "featureparity.dev"
+        TFVARS
+        File.write('infrastructure/dev/belt.rb', <<~RUBY)
+          Belt.configure do |config|
+            config.aws_profile = "fpdev"
+          end
+        RUBY
+        allow_any_instance_of(described_class).to receive(:bucket_from_aws).and_return('belt-state-123')
+      end
+
+      it 'inherits domain from parent terraform.tfvars' do
+        allow($stdout).to receive(:puts)
+        described_class.run(%w[fizzy123 dev])
+
+        tfvars = File.read('infrastructure/fizzy123/terraform.tfvars')
+        expect(tfvars).to include('domain      = "featureparity.dev"')
+      end
+
+      it 'creates belt.rb with inherited aws_profile' do
+        allow($stdout).to receive(:puts)
+        described_class.run(%w[fizzy123 dev])
+
+        expect(File.exist?('infrastructure/fizzy123/belt.rb')).to be true
+        belt_rb = File.read('infrastructure/fizzy123/belt.rb')
+        expect(belt_rb).to include('config.aws_profile = "fpdev"')
+      end
+
+      it 'shows correct domain in output message' do
+        expect { described_class.run(%w[fizzy123 dev]) }
+          .to output(/api\.fizzy123\.dev\.featureparity\.dev/).to_stdout
+      end
+    end
+
+    context 'with parent environment that has no belt.rb' do
+      before do
+        FileUtils.mkdir_p('infrastructure/dev')
+        File.write('infrastructure/dev/terraform.tfvars', 'environment = "dev"')
+        allow_any_instance_of(described_class).to receive(:bucket_from_aws).and_return('belt-state-123')
+      end
+
+      it 'does not create belt.rb when parent has no aws_profile' do
+        allow($stdout).to receive(:puts)
+        described_class.run(%w[fizzy123 dev])
+
+        expect(File.exist?('infrastructure/fizzy123/belt.rb')).to be false
+      end
+    end
   end
 
   describe 'standalone environment (no parent)' do

@@ -47,11 +47,18 @@ module Belt
       def initialize(env_name, quiet: false, domain: nil, announce: true, parent_environment: nil)
         @env_name = env_name.downcase.gsub(/[^a-z0-9_-]/, '')
         @app_name = detect_app_name
-        @domain = domain
         @quiet = quiet
         @announce = announce
         @parent_environment = parent_environment&.downcase&.gsub(/[^a-z0-9_-]/, '')
         @state_bucket = resolve_state_bucket
+
+        # For nested envs, inherit domain and aws_profile from parent
+        if @parent_environment
+          load_parent_config
+          @domain = domain || @parent_domain
+        else
+          @domain = domain
+        end
       end
 
       def generate
@@ -72,6 +79,13 @@ module Belt
           puts "  create  #{dest_path}" unless @quiet
         end
 
+        # Generate belt.rb if we have an inherited aws_profile
+        if @parent_aws_profile
+          belt_rb_path = File.join(dest_dir, 'belt.rb')
+          write_belt_rb(belt_rb_path)
+          puts "  create  #{belt_rb_path}" unless @quiet
+        end
+
         append_extra_frontend_outputs(File.join(dest_dir, 'outputs.tf'))
 
         return if @quiet || !@announce
@@ -81,7 +95,11 @@ module Belt
         if @parent_environment
           puts "\nThis is a nested environment under '#{@parent_environment}'."
           puts "It will use the parent's wildcard certificate and hosted zone."
-          puts "Domain will be: #{@env_name}.#{@parent_environment}.<your-domain>"
+          if @domain
+            puts "Domain will be: api.#{@env_name}.#{@parent_environment}.#{@domain}"
+          else
+            puts "Domain will be: #{@env_name}.#{@parent_environment}.<your-domain>"
+          end
           puts "\nDeploy with:"
           puts "  belt deploy #{@env_name}"
           puts "\nNo DNS delegation needed — the parent environment handles DNS."
@@ -127,6 +145,35 @@ module Belt
       # Priority: existing sibling backend.tf → AWS account ID → bare placeholder.
       def resolve_state_bucket
         bucket_from_sibling || bucket_from_aws || 'belt-terraform-state'
+      end
+
+      # Load domain and aws_profile from parent environment for nested envs
+      def load_parent_config
+        parent_dir = "infrastructure/#{@parent_environment}"
+
+        # Load domain from parent's terraform.tfvars
+        tfvars_path = File.join(parent_dir, 'terraform.tfvars')
+        if File.exist?(tfvars_path)
+          content = File.read(tfvars_path)
+          domain_match = content.match(/^\s*domain\s*=\s*"([^"]+)"/)
+          @parent_domain = domain_match[1] if domain_match
+        end
+
+        # Load aws_profile from parent's belt.rb
+        parent_config = EnvironmentConfig.load(@parent_environment)
+        @parent_aws_profile = parent_config.aws_profile if parent_config.aws_profile?
+      end
+
+      # Generate belt.rb with inherited aws_profile from parent
+      def write_belt_rb(path)
+        content = <<~RUBY
+          # frozen_string_literal: true
+
+          Belt.configure do |config|
+            config.aws_profile = "#{@parent_aws_profile}"
+          end
+        RUBY
+        File.write(path, content)
       end
 
       def bucket_from_sibling
