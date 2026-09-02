@@ -146,15 +146,15 @@ RSpec.describe Belt::CLI::DestroyCommand do
       end
     end
 
-    # --yes is the flag automated workflows (CI, agents spinning up per-PR
+    # --full is the flag automated workflows (CI, agents spinning up per-PR
     # environments) reach for: it must ALWAYS run terraform destroy and then
     # delete the local files, with zero prompts. This is deliberately different
     # from --force, which skips terraform and only removes local files.
-    context 'when --yes is passed (non-interactive full teardown)' do
+    context 'when --full is passed (non-interactive full teardown)' do
       it 'runs terraform destroy without any prompt, then deletes files' do
         dir = make_env('superman', belt_rb: belt_rb)
 
-        cmd = described_class.new('environment', 'superman', [], yes: true, skip_terraform: false)
+        cmd = described_class.new('environment', 'superman', [], full: true, skip_terraform: false)
         allow(cmd).to receive(:terraform_state_exists?).and_return(true)
         allow(cmd).to receive(:warn_about_dns_delegation)
 
@@ -173,7 +173,7 @@ RSpec.describe Belt::CLI::DestroyCommand do
       it 'does not read stdin (no prompts at all)' do
         make_env('superman', belt_rb: belt_rb)
 
-        cmd = described_class.new('environment', 'superman', [], yes: true, skip_terraform: false)
+        cmd = described_class.new('environment', 'superman', [], full: true, skip_terraform: false)
         allow(cmd).to receive(:terraform_state_exists?).and_return(true)
         allow(cmd).to receive(:run_terraform_destroy)
         allow(cmd).to receive(:warn_about_dns_delegation)
@@ -190,7 +190,7 @@ RSpec.describe Belt::CLI::DestroyCommand do
         make_env('parent', belt_rb: belt_rb)
         make_env('child', tfvars: "environment = \"child\"\nparent_environment = \"parent\"")
 
-        cmd = described_class.new('environment', 'parent', [], yes: true, skip_terraform: false)
+        cmd = described_class.new('environment', 'parent', [], full: true, skip_terraform: false)
         allow(cmd).to receive(:terraform_state_exists?).and_return(false)
         allow(cmd).to receive(:warn_about_dns_delegation)
 
@@ -206,7 +206,7 @@ RSpec.describe Belt::CLI::DestroyCommand do
       it 'skips terraform destroy when there is no state (nothing to tear down)' do
         dir = make_env('superman', belt_rb: belt_rb)
 
-        cmd = described_class.new('environment', 'superman', [], yes: true, skip_terraform: false)
+        cmd = described_class.new('environment', 'superman', [], full: true, skip_terraform: false)
         allow(cmd).to receive(:terraform_state_exists?).and_return(false)
         allow(cmd).to receive(:warn_about_dns_delegation)
 
@@ -221,13 +221,13 @@ RSpec.describe Belt::CLI::DestroyCommand do
     end
 
     context 'environment flag parsing' do
-      it 'parses --yes and -y into the yes flag' do
-        expect(described_class.parse_environment_flags(['--yes'])).to include(yes: true)
-        expect(described_class.parse_environment_flags(['-y'])).to include(yes: true)
+      it 'parses --full and -y into the full flag' do
+        expect(described_class.parse_environment_flags(['--full'])).to include(full: true)
+        expect(described_class.parse_environment_flags(['-y'])).to include(full: true)
       end
 
-      it 'defaults yes to false' do
-        expect(described_class.parse_environment_flags([])).to include(yes: false)
+      it 'defaults full to false' do
+        expect(described_class.parse_environment_flags([])).to include(full: false)
       end
     end
   end

@@ -111,13 +111,13 @@ belt destroy views post
 `belt destroy environment` is interactive by default: it prompts before running
 `terraform destroy` and again before deleting local files. For CI pipelines and
 agents that spin up ephemeral per-PR environments and tear them down on merge,
-use `--yes`:
+use `--full`:
 
 ```bash
-belt destroy environment pr-1234 --yes
+belt destroy environment pr-1234 --full
 ```
 
-`--yes` (alias `-y`) runs the whole teardown with zero prompts: it **always runs
+`--full` (alias `-y`) runs the whole teardown with zero prompts: it **always runs
 `terraform destroy`** (when terraform state is present), then deletes the local
 `infrastructure/<env>/` files.
 
@@ -126,12 +126,12 @@ Flag comparison:
 | Flag | terraform destroy | Deletes local files | Prompts |
 |------|-------------------|---------------------|---------|
 | _(none)_ | Prompted | Prompted | Yes |
-| `--yes` / `-y` | Always (if state exists) | Yes | No |
+| `--full` / `-y` | Always (if state exists) | Yes | No |
 | `--force` / `-f` | **Skipped** (leaves cloud resources) | Yes | No |
 | `--skip-terraform` | Never | Yes | Final delete only |
 
 > `--force` is for the "just clean up my local files" case — it intentionally
-> leaves cloud infrastructure running. Reach for `--yes` when you want the
+> leaves cloud infrastructure running. Reach for `--full` when you want the
 > environment fully gone.
 
 ## Plugin Generators
