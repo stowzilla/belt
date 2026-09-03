@@ -23,7 +23,9 @@ module Belt
         @errors = []
       end
 
+      # rubocop:disable Naming/PredicateMethod
       def run
+        # rubocop:enable Naming/PredicateMethod
         pairs = table_pairs
         if pairs.empty?
           puts '  ℹ  No parent DynamoDB tables found to copy'
@@ -43,7 +45,7 @@ module Belt
         end
 
         puts "     copied #{copied}, skipped #{skipped}" \
-             "#{@errors.any? ? ", #{@errors.size} error(s)" : ''}"
+             "#{", #{@errors.size} error(s)" if @errors.any?}"
         @errors.empty?
       end
 
@@ -240,8 +242,8 @@ module Belt
         puts "    ⚠  #{short}: #{message} (will retry on next deploy if table is empty)"
       end
 
-      def aws_json(*args)
-        output, status = Open3.capture2('aws', *args)
+      def aws_json(*)
+        output, status = Open3.capture2('aws', *)
         return nil unless status.success?
 
         JSON.parse(output)

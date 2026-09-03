@@ -22,7 +22,9 @@ module Belt
         @nested = nested_env
       end
 
+      # rubocop:disable Naming/PredicateMethod
       def run
+        # rubocop:enable Naming/PredicateMethod
         pool_id = @nested.parent_cognito_pool_id
         unless pool_id
           puts '  ⚠  Could not read parent Cognito pool ID — nested env will use its own pool'
@@ -90,8 +92,8 @@ module Belt
 
         variables.each_with_object({}) do |(key, value), hash|
           hash[key] = new_value_for(key, value, pool_id: pool_id, client_id: client_id,
-                                               issuer: issuer, child_pool: child_pool,
-                                               child_client: child_client)
+                                                issuer: issuer, child_pool: child_pool,
+                                                child_client: child_client)
         end
       end
 
@@ -136,8 +138,8 @@ module Belt
         end
       end
 
-      def aws_json(*args)
-        output, status = Open3.capture2('aws', *args)
+      def aws_json(*)
+        output, status = Open3.capture2('aws', *)
         return nil unless status.success?
 
         JSON.parse(output)
