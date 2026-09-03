@@ -4,8 +4,10 @@ require 'shellwords'
 require 'open3'
 require_relative 'app_detection'
 require_relative 'env_resolver'
+require_relative 'environment_config'
 require_relative 'frontend_env_map'
 require_relative 'frontend_registry'
+require_relative 'terraform_command'
 
 module Belt
   module CLI
@@ -54,11 +56,13 @@ module Belt
       def initialize(env, frontend: nil)
         @env = env
         @app_name = detect_app_name
-        @env_dir = "infrastructure/#{@env}"
+        @infra_dir = TerraformCommand.find_infrastructure_dir || 'infrastructure'
+        @env_dir = File.join(@infra_dir, @env)
         @frontend = frontend || FrontendRegistry.new.resolve!
       end
 
       def run
+        load_and_apply_env_config!
         validate!
         puts "━━━ #{@frontend.label} (#{@frontend.path}/) ━━━"
         build_frontend
@@ -70,6 +74,12 @@ module Belt
       end
 
       private
+
+      def load_and_apply_env_config!
+        env_config = EnvironmentConfig.load(@env, infra_dir: @infra_dir)
+        env_config.apply!
+        puts "  🔑 Using AWS profile: #{env_config.aws_profile}" if env_config.aws_profile?
+      end
 
       def validate!
         unless Dir.exist?(@frontend.path)
