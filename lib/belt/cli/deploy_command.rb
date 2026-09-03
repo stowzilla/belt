@@ -11,6 +11,9 @@ require_relative 'backup_runner'
 require_relative 'environment_config'
 require_relative 'path_gem_materializer'
 require_relative 'zip_artifact_builder'
+require_relative 'nested_environment'
+require_relative 'cognito_sharer'
+require_relative 'dynamo_copier'
 
 module Belt
   module CLI
@@ -99,6 +102,7 @@ module Belt
             6. terraform plan    (preview changes)
             7. Prompt for confirmation (unless --auto)
             8. terraform apply   (deploy changes)
+            9. Nested envs: share parent Cognito + copy DynamoDB if empty
 
           Options:
             --auto, --yes, -y    Skip confirmation prompt (auto-approve)
@@ -171,6 +175,8 @@ module Belt
 
         puts "\n✅ Deployed #{@env} successfully!"
         print_outputs(env_dir)
+
+        run_nested_env_hooks
 
         deploy_frontend_if_exists
 
@@ -725,6 +731,15 @@ module Belt
 
       def cleanup_plan
         FileUtils.rm_f('tfplan')
+      end
+
+      def run_nested_env_hooks
+        nested = NestedEnvironment.for(@env, infra_dir: @infra_dir)
+        return unless nested
+
+        puts "\n━━━ nested environment (parent: #{nested.parent}) ━━━"
+        CognitoSharer.new(nested).run
+        DynamoCopier.new(nested, app_name: detect_app_name_for_backup).run
       end
 
       def deploy_frontend_if_exists
