@@ -2,8 +2,10 @@
 
 require_relative 'app_detection'
 require_relative 'env_resolver'
+require_relative 'environment_config'
 require_relative 'frontend_env_map'
 require_relative 'frontend_registry'
+require_relative 'terraform_command'
 
 module Belt
   module CLI
@@ -111,18 +113,19 @@ module Belt
       def initialize(env, frontend: nil)
         @env = env
         @app_name = detect_app_name
-        @env_dir = "infrastructure/#{@env}"
+        @infra_dir = TerraformCommand.find_infrastructure_dir || 'infrastructure'
+        @env_dir = File.join(@infra_dir, @env)
         @frontend = frontend || FrontendRegistry.new.resolve!
       end
 
       def run
+        load_and_apply_env_config!
+
         unless Dir.exist?(@frontend.path)
           abort "Error: No #{@frontend.path}/ directory found. Run `belt generate frontend react` first."
         end
 
-        unless Dir.exist?(@env_dir)
-          abort "Error: infrastructure/#{@env} not found. Run `belt generate environment #{@env}` first."
-        end
+        abort "Error: #{@env_dir} not found. Run `belt generate environment #{@env}` first." unless Dir.exist?(@env_dir)
 
         map = FrontendEnvMap.new(@env, env_dir: @env_dir, frontend_path: @frontend.path)
 
@@ -141,6 +144,12 @@ module Belt
         else
           puts "✅ Updated #{result[:path]} (#{updated.join(', ')})"
         end
+      end
+
+      private
+
+      def load_and_apply_env_config!
+        EnvironmentConfig.load(@env, infra_dir: @infra_dir).apply!
       end
     end
   end

@@ -4,8 +4,10 @@ require 'shellwords'
 require 'open3'
 require_relative 'app_detection'
 require_relative 'env_resolver'
+require_relative 'environment_config'
 require_relative 'frontend_env_map'
 require_relative 'frontend_registry'
+require_relative 'terraform_command'
 
 module Belt
   module CLI
@@ -54,11 +56,13 @@ module Belt
       def initialize(env, frontend: nil)
         @env = env
         @app_name = detect_app_name
-        @env_dir = "infrastructure/#{@env}"
+        @infra_dir = TerraformCommand.find_infrastructure_dir || 'infrastructure'
+        @env_dir = File.join(@infra_dir, @env)
         @frontend = frontend || FrontendRegistry.new.resolve!
       end
 
       def run
+        load_and_apply_env_config!
         validate!
         puts "━━━ #{@frontend.label} (#{@frontend.path}/) ━━━"
         build_frontend
@@ -70,6 +74,16 @@ module Belt
       end
 
       private
+
+      # Load infrastructure/<env>/belt.rb and apply its aws_profile + env vars
+      # to the current process. Without this, `terraform output` can't reach the
+      # S3 state backend (403), fetch_tf_output returns nil, and the deploy aborts
+      # with a misleading "Could not determine S3 bucket" error. The full
+      # `belt deploy` path applies this before invoking the frontend deploy;
+      # standalone `belt deploy frontend` must do it too.
+      def load_and_apply_env_config!
+        EnvironmentConfig.load(@env, infra_dir: @infra_dir).apply!
+      end
 
       def validate!
         unless Dir.exist?(@frontend.path)

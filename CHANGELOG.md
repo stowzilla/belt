@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.35
+
+### Bug Fix
+
+- **Apply environment AWS profile in `belt deploy frontend`, `belt frontend env`, `belt logs`, and `belt server`**:
+  Standalone frontend deployment (`belt deploy frontend <env>`), frontend env generation (`belt frontend env <env>`),
+  log viewing (`belt logs`), and the local dev server (`belt server`) now load `infrastructure/<env>/belt.rb`
+  and apply its configured `aws_profile` and environment variables. Previously, running `belt deploy frontend <env>`
+  directly would query Terraform outputs without the environment's AWS profile, causing a 403 against remote S3
+  state backends and aborting with `Error: Could not determine S3 bucket. Run belt apply <env> first.`
+
 ## 0.3.32
 
 ### Enhancement

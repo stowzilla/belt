@@ -3,6 +3,7 @@
 require 'base64'
 require 'json'
 require_relative 'app_detection'
+require_relative 'environment_config'
 require_relative 'frontend_env_map'
 require_relative 'frontend_registry'
 require_relative 'terraform_command'
@@ -124,6 +125,9 @@ module Belt
       def frontend_process_env
         env_name = @deploy_env || ENV.fetch('BELT_ENV', nil) || TerraformCommand.list_environments.first
         return {} unless env_name
+
+        infra_dir = TerraformCommand.find_infrastructure_dir
+        EnvironmentConfig.load(env_name, infra_dir: infra_dir).apply!
 
         FrontendEnvMap.new(env_name, frontend_path: @frontend.path).process_env
       rescue StandardError
@@ -274,6 +278,7 @@ module Belt
           next unless Dir.exist?(env_dir)
           next unless File.exist?(File.join(env_dir, '.terraform'))
 
+          EnvironmentConfig.load(env, infra_dir: infra_dir).apply!
           url = read_api_url_from_outputs(env_dir)
           if url
             @deploy_env = env
