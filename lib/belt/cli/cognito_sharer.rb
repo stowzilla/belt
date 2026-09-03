@@ -28,6 +28,13 @@ module Belt
         pool_id = @nested.parent_cognito_pool_id
         unless pool_id
           puts '  ⚠  Could not read parent Cognito pool ID — nested env will use its own pool'
+          reason = @nested.last_output_error
+          detail = if reason && !reason.empty?
+                     "terraform output for '#{@nested.parent}' failed: #{reason.lines.first&.strip}"
+                   else
+                     "no cognito_user_pool_id output found in '#{@nested.parent}'"
+                   end
+          puts "     (#{detail})"
           return false
         end
 
