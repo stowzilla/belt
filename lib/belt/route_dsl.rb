@@ -96,7 +96,8 @@ module Belt
 
     %i[get post put delete patch].each do |method|
       define_method(method) do |path, options = {}|
-        full_path = options[:on] == :collection ? "#{@collection_prefix}#{path}" : "#{@prefix}#{path}"
+        base = options[:on] == :collection ? @collection_prefix : @prefix
+        full_path = join_path(base, path)
         options = merge_inherited_options(options)
         route_options = options.except(:on)
         @gateway.send(:add_route, method, full_path, route_options)
@@ -104,6 +105,15 @@ module Belt
     end
 
     private
+
+    # Join a base path with a relative path, ensuring exactly one `/` separator.
+    def join_path(base, path)
+      path = path.to_s
+      return base if path.empty?
+      return "#{base}#{path}" if path.start_with?('/')
+
+      "#{base}/#{path}"
+    end
 
     def add_nested_resource_routes(resource_name, param_name, resource_options, actions)
       if actions.include?(:index)
@@ -165,13 +175,22 @@ module Belt
 
     %i[get post put delete patch].each do |method|
       define_method(method) do |path, options = {}|
-        full_path = "#{@prefix}#{path}"
+        full_path = join_path(@prefix, path)
         options = merge_inherited_options(options)
         @gateway.send(:add_route, method, full_path, options)
       end
     end
 
     private
+
+    # Join a base path with a relative path, ensuring exactly one `/` separator.
+    def join_path(base, path)
+      path = path.to_s
+      return base if path.empty?
+      return "#{base}#{path}" if path.start_with?('/')
+
+      "#{base}/#{path}"
+    end
 
     def merge_inherited_options(options)
       result = options.dup
