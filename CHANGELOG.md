@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.39
+
+### Enhancement
+
+- **Auto-load `application_controller.rb` per gateway**: `Belt::LambdaHandler`
+  now requires each gateway's `application_controller.rb` before its sibling
+  controllers, mirroring the existing model convention (`application_record.rb`
+  loads first). Controllers can inherit from `ApplicationController` without an
+  explicit `require_relative 'application_controller'` — Belt handles ordering,
+  matching Rails. The `belt generate controller` template no longer emits the
+  redundant `require_relative`, keeping loading a single framework concern.
+
 ## 0.3.38
 
 ### Enhancement
