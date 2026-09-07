@@ -23,9 +23,9 @@ RSpec.describe 'RouteBuilder#resources inside scope' do
       paths = routes.map { |r| [r.method, r.path] }
       expect(paths).to include(['GET', '/users'])
       expect(paths).to include(['POST', '/users'])
-      expect(paths).to include(['GET', '/users/{user_id}'])
-      expect(paths).to include(['PUT', '/users/{user_id}'])
-      expect(paths).to include(['DELETE', '/users/{user_id}'])
+      expect(paths).to include(['GET', '/users/{id}'])
+      expect(paths).to include(['PUT', '/users/{id}'])
+      expect(paths).to include(['DELETE', '/users/{id}'])
     end
   end
 
@@ -40,9 +40,9 @@ RSpec.describe 'RouteBuilder#resources inside scope' do
       paths = routes.map { |r| [r.method, r.path] }
       expect(paths).to include(['GET', '/admin/users'])
       expect(paths).to include(['POST', '/admin/users'])
-      expect(paths).to include(['GET', '/admin/users/{user_id}'])
-      expect(paths).to include(['PUT', '/admin/users/{user_id}'])
-      expect(paths).to include(['DELETE', '/admin/users/{user_id}'])
+      expect(paths).to include(['GET', '/admin/users/{id}'])
+      expect(paths).to include(['PUT', '/admin/users/{id}'])
+      expect(paths).to include(['DELETE', '/admin/users/{id}'])
     end
 
     it 'sets controller to scope/resource_name' do
@@ -89,7 +89,7 @@ RSpec.describe 'RouteBuilder#resources inside scope' do
 
       methods = routes.map(&:method)
       expect(methods).to contain_exactly('GET', 'GET')
-      expect(routes.map(&:path)).to contain_exactly('/admin/users', '/admin/users/{user_id}')
+      expect(routes.map(&:path)).to contain_exactly('/admin/users', '/admin/users/{id}')
     end
 
     it 'respects :except option' do
@@ -100,9 +100,9 @@ RSpec.describe 'RouteBuilder#resources inside scope' do
       end
 
       paths = routes.map { |r| [r.method, r.path] }
-      expect(paths).not_to include(['DELETE', '/admin/users/{user_id}'])
+      expect(paths).not_to include(['DELETE', '/admin/users/{id}'])
       expect(paths).to include(['GET', '/admin/users'])
-      expect(paths).to include(['PUT', '/admin/users/{user_id}'])
+      expect(paths).to include(['PUT', '/admin/users/{id}'])
     end
 
     it 'supports multiple resources in same scope' do
@@ -116,8 +116,8 @@ RSpec.describe 'RouteBuilder#resources inside scope' do
       user_paths = routes.select { |r| r.path.include?('users') }.map(&:path)
       sponsor_paths = routes.select { |r| r.path.include?('sponsors') }.map(&:path)
 
-      expect(user_paths).to include('/admin/users', '/admin/users/{user_id}')
-      expect(sponsor_paths).to include('/admin/sponsors', '/admin/sponsors/{sponsor_id}')
+      expect(user_paths).to include('/admin/users', '/admin/users/{id}')
+      expect(sponsor_paths).to include('/admin/sponsors', '/admin/sponsors/{id}')
     end
 
     it 'supports nested block routes' do
@@ -131,8 +131,8 @@ RSpec.describe 'RouteBuilder#resources inside scope' do
 
       paths = routes.map { |r| [r.method, r.path] }
       expect(paths).to include(['GET', '/admin/slots'])
-      expect(paths).to include(['GET', '/admin/slots/{slot_id}'])
-      expect(paths).to include(['PUT', '/admin/slots/{slot_id}'])
+      expect(paths).to include(['GET', '/admin/slots/{id}'])
+      expect(paths).to include(['PUT', '/admin/slots/{id}'])
       expect(paths).to include(['POST', '/admin/slots/import'])
 
       import_route = routes.find { |r| r.path == '/admin/slots/import' }
