@@ -90,6 +90,115 @@ RSpec.describe 'NestedResourceBuilder scope and action inference' do
     end
   end
 
+  describe 'namespace inside nested resources (Rails-like)' do
+    it 'adds path prefix and controller module prefix' do
+      routes = build_routes do
+        resources :projects do
+          namespace :admin do
+            resources :users, only: [:index]
+          end
+        end
+      end
+
+      admin_route = routes.find { |r| r.path.include?('admin/users') }
+      expect(admin_route).not_to be_nil
+      expect(admin_route.path).to eq('/projects/{project_id}/admin/users')
+      expect(admin_route.controller).to eq('admin/users')
+    end
+
+    it 'allows nested namespaces' do
+      routes = build_routes do
+        resources :projects do
+          namespace :admin do
+            namespace :v2 do
+              resources :settings, only: [:index]
+            end
+          end
+        end
+      end
+
+      route = routes.find { |r| r.path.include?('settings') }
+      expect(route.path).to eq('/projects/{project_id}/admin/v2/settings')
+      expect(route.controller).to eq('admin/v2/settings')
+    end
+
+    it 'inherits auth and tables' do
+      routes = build_routes do
+        resources :projects, tables: [:projects] do
+          namespace :admin, auth: :iam, tables: [:audit_log] do
+            resources :users, only: [:index]
+          end
+        end
+      end
+
+      route = routes.find { |r| r.path.include?('admin/users') }
+      expect(route.auth).to eq(:iam)
+      expect(route.tables).to include(:projects)
+      expect(route.tables).to include(:audit_log)
+      expect(route.tables).to include(:users)
+    end
+
+    it 'supports singular resource inside namespace' do
+      routes = build_routes do
+        resources :projects do
+          namespace :settings do
+            resource :profile, only: %i[show update]
+          end
+        end
+      end
+
+      show_route = routes.find { |r| r.path == '/projects/{project_id}/settings/profile' && r.method == 'GET' }
+      expect(show_route).not_to be_nil
+      expect(show_route.controller).to eq('settings/profile')
+
+      update_route = routes.find { |r| r.path == '/projects/{project_id}/settings/profile' && r.method == 'PUT' }
+      expect(update_route).not_to be_nil
+      expect(update_route.controller).to eq('settings/profile')
+    end
+
+    it 'supports member/collection blocks inside namespaced resources' do
+      routes = build_routes do
+        resources :projects do
+          namespace :admin do
+            resources :users, only: %i[index show] do
+              member do
+                post :activate
+              end
+              collection do
+                get :pending
+              end
+            end
+          end
+        end
+      end
+
+      activate_route = routes.find { |r| r.path.include?('activate') }
+      expect(activate_route.path).to eq('/projects/{project_id}/admin/users/{user_id}/activate')
+      expect(activate_route.controller).to eq('admin/users')
+
+      pending_route = routes.find { |r| r.path.include?('pending') }
+      expect(pending_route.path).to eq('/projects/{project_id}/admin/users/pending')
+      expect(pending_route.controller).to eq('admin/users')
+    end
+
+    it 'does not leak namespace to sibling routes' do
+      routes = build_routes do
+        resources :projects do
+          namespace :admin do
+            resources :users, only: [:index]
+          end
+          resources :comments, only: [:index]
+        end
+      end
+
+      admin_route = routes.find { |r| r.path.include?('admin/users') }
+      expect(admin_route.controller).to eq('admin/users')
+
+      comments_route = routes.find { |r| r.path.include?('comments') }
+      expect(comments_route.controller).to eq('comments')
+    end
+  end
+
   describe 'singular resource inside nested resources' do
     it 'creates singular resource routes' do
       routes = build_routes do

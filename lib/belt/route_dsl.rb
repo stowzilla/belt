@@ -52,7 +52,7 @@ module Belt
 
   class NestedResourceBuilder
     def initialize(gateway, prefix, collection_prefix, inherited_tables: [], inherited_auth: nil, # rubocop:disable Metrics/ParameterLists
-                   inherited_controller: nil, inherited_lambda: nil)
+                   inherited_controller: nil, inherited_lambda: nil, scope_module: nil)
       @gateway = gateway
       @prefix = prefix
       @collection_prefix = collection_prefix
@@ -60,6 +60,7 @@ module Belt
       @inherited_auth = inherited_auth
       @inherited_controller = inherited_controller
       @inherited_lambda = inherited_lambda
+      @scope_module = scope_module
     end
 
     def resources(name, options = {}, &block)
@@ -67,7 +68,10 @@ module Belt
       singular = @gateway.send(:singularize, resource_name)
       param_name = options[:param] || "#{singular}_id"
       options = options.merge(tables: [resource_name.to_sym]) unless options.key?(:tables)
-      options = merge_inherited_options(options)
+      # Compute controller FIRST: explicit > scope_module/resource > resource_name
+      # Don't inherit controller from parent resource — nested resources get their own controller
+      controller_name = options[:controller] || compute_controller_name(resource_name)
+      options = merge_inherited_options(options.merge(controller: controller_name))
       resource_options = options.merge(route_type: :resources)
       actions = @gateway.send(:determine_actions, options)
 
@@ -76,19 +80,23 @@ module Belt
 
       nested_member_prefix = "#{@prefix}/#{resource_name}/{#{param_name}}"
       nested_collection_prefix = "#{@prefix}/#{resource_name}"
-      nested_controller = resource_name
+      # Pass scope_module to nested builder so nested resources inherit it
       nested_builder = NestedResourceBuilder.new(@gateway, nested_member_prefix, nested_collection_prefix,
                                                  inherited_tables: Array(options[:tables] || []),
                                                  inherited_auth: options[:auth] || @inherited_auth,
-                                                 inherited_controller: nested_controller,
-                                                 inherited_lambda: @inherited_lambda)
+                                                 inherited_controller: controller_name,
+                                                 inherited_lambda: @inherited_lambda,
+                                                 scope_module: @scope_module)
       nested_builder.instance_eval(&block)
     end
 
     # Singular resource inside nested context (e.g. resource :billing inside resources :projects)
     def resource(name, options = {})
       resource_name = name.to_s
-      options = merge_inherited_options(options)
+      # Compute controller FIRST: explicit > scope_module/resource > resource_name
+      # Don't inherit controller from parent resource — singular resources get their own controller
+      controller_name = options[:controller] || compute_controller_name(resource_name)
+      options = merge_inherited_options(options.merge(controller: controller_name))
       resource_options = options.merge(route_type: :resource)
       actions = determine_actions(options, default: %i[show update destroy create])
 
@@ -110,6 +118,22 @@ module Belt
                     resolve_request_model_for(resource_options, :create))
     end
 
+    # Rails-like `namespace` inside nested resource context — adds both a path prefix
+    # AND sets the controller module. Resources inside inherit the namespace module.
+    #
+    # Example:
+    #   resources :projects do
+    #     namespace :admin do
+    #       resources :users   # → /projects/:project_id/admin/users → admin/users controller
+    #     end
+    #   end
+    def namespace(name, options = {}, &)
+      segment = name.to_s
+      # namespace sets path AND module (controller prefix)
+      merged = { path: segment, module: segment }.merge(options)
+      scope(merged, &)
+    end
+
     # Scope inside nested resource context - groups routes with shared options
     # Example:
     #   resources :projects do
@@ -118,17 +142,30 @@ module Belt
     #       post :checkout
     #     end
     #   end
+    #
+    # With module option (like Rails):
+    #   resources :projects do
+    #     scope module: 'v2' do
+    #       resources :users   # → /projects/:project_id/users → v2/users controller
+    #     end
+    #   end
     def scope(options = {}, &)
       previous_prefix = @prefix
       previous_collection_prefix = @collection_prefix
       previous_tables = @inherited_tables
       previous_auth = @inherited_auth
       previous_controller = @inherited_controller
+      previous_module = @scope_module
 
       if options.key?(:path)
         segment = options[:path].to_s.gsub(%r{^/|/$}, '')
         @prefix = join_path(@prefix, segment)
         @collection_prefix = join_path(@collection_prefix, segment)
+      end
+      # Module sets the controller prefix for nested resources (like Rails)
+      if options.key?(:module)
+        mod_segment = options[:module].to_s
+        @scope_module = @scope_module.to_s.empty? ? mod_segment : "#{@scope_module}/#{mod_segment}"
       end
       @inherited_auth = options[:auth] || @inherited_auth
       @inherited_tables = (@inherited_tables + Array(options[:tables] || [])).uniq
@@ -141,6 +178,7 @@ module Belt
       @inherited_tables = previous_tables
       @inherited_auth = previous_auth
       @inherited_controller = previous_controller
+      @scope_module = previous_module
     end
 
     def member(&)
@@ -257,6 +295,17 @@ module Belt
       result[:controller] ||= @inherited_controller if @inherited_controller
       result[:lambda] ||= @inherited_lambda if @inherited_lambda
       result
+    end
+
+    # Compute controller name from scope_module and resource name
+    # If scope_module is set, returns "module/resource_name" (Rails-like)
+    # Otherwise returns just resource_name
+    def compute_controller_name(resource_name)
+      if @scope_module && !@scope_module.empty?
+        "#{@scope_module}/#{resource_name}"
+      else
+        resource_name
+      end
     end
   end
 

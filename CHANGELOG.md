@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.3.38
+
+### Enhancement
+
+- **Rails-like `namespace` inside nested resources**: The `NestedResourceBuilder`
+  now supports `namespace` blocks that add both a path prefix AND a controller
+  module prefix, just like Rails. This provides 99% Rails compatibility for
+  nested route organization.
+
+  ```ruby
+  resources :projects do
+    namespace :admin do
+      resources :users   # → /projects/:project_id/admin/users → admin/users controller
+    end
+  end
+  ```
+
+  Namespaces can be nested and inherit auth/tables options:
+
+  ```ruby
+  resources :projects do
+    namespace :admin, auth: :iam, tables: [:audit_log] do
+      namespace :v2 do
+        resources :settings, only: [:index]  # → admin/v2/settings controller
+      end
+    end
+  end
+  ```
+
+- **`scope module:` option inside nested resources**: The existing `scope` method
+  now supports the `module:` option for Rails-like controller module prefixing
+  without adding a path prefix.
+
+  ```ruby
+  resources :projects do
+    scope module: 'v2' do
+      resources :users   # → /projects/:project_id/users → v2/users controller
+    end
+  end
+  ```
+
 ## 0.3.37
 
 ### Enhancement
