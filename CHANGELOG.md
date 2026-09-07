@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.3.40
+
+### Breaking Change
+
+- **Rails-style `{id}` for member routes**: Member routes (show, update, destroy)
+  now use `{id}` instead of `{singular_id}`. This matches Rails conventions where
+  the resource being operated on uses `:id`, and only parent resources use prefixed
+  names like `:project_id`.
+
+  Before:
+  ```
+  GET  /projects/{project_id}
+  GET  /projects/{project_id}/epics/{epic_id}
+  ```
+
+  After:
+  ```
+  GET  /projects/{id}
+  GET  /projects/{project_id}/epics/{id}
+  ```
+
+  Parent resources in nested routes still use `{singular_id}` (e.g., `{project_id}`,
+  `{epic_id}` when they are parents of nested resources).
+
 ## 0.3.39
 
 ### Enhancement

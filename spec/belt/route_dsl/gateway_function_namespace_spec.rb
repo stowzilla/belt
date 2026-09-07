@@ -42,9 +42,9 @@ RSpec.describe 'gateway, function, namespace, scope interactions' do
       paths = routes.map { |r| [r.method, r.path] }
       expect(paths).to include(['GET', '/admin/tasks'])
       expect(paths).to include(['POST', '/admin/tasks'])
-      expect(paths).to include(['GET', '/admin/tasks/{task_id}'])
-      expect(paths).to include(['PUT', '/admin/tasks/{task_id}'])
-      expect(paths).to include(['DELETE', '/admin/tasks/{task_id}'])
+      expect(paths).to include(['GET', '/admin/tasks/{id}'])
+      expect(paths).to include(['PUT', '/admin/tasks/{id}'])
+      expect(paths).to include(['DELETE', '/admin/tasks/{id}'])
 
       routes.each do |route|
         expect(route.lambda).to eq('admin_worker')
@@ -81,9 +81,9 @@ RSpec.describe 'gateway, function, namespace, scope interactions' do
       paths = routes.map { |r| [r.method, r.path] }
       expect(paths).to include(['GET', '/admin/jobs'])
       expect(paths).to include(['POST', '/admin/jobs'])
-      expect(paths).to include(['GET', '/admin/jobs/{job_id}'])
-      expect(paths).to include(['PUT', '/admin/jobs/{job_id}'])
-      expect(paths).to include(['DELETE', '/admin/jobs/{job_id}'])
+      expect(paths).to include(['GET', '/admin/jobs/{id}'])
+      expect(paths).to include(['PUT', '/admin/jobs/{id}'])
+      expect(paths).to include(['DELETE', '/admin/jobs/{id}'])
 
       routes.each do |route|
         expect(route.lambda).to eq('worker')
@@ -120,9 +120,9 @@ RSpec.describe 'gateway, function, namespace, scope interactions' do
       paths = routes.map { |r| [r.method, r.path] }
       expect(paths).to include(['GET', '/widgets'])
       expect(paths).to include(['POST', '/widgets'])
-      expect(paths).to include(['GET', '/widgets/{widget_id}'])
-      expect(paths).to include(['PUT', '/widgets/{widget_id}'])
-      expect(paths).to include(['DELETE', '/widgets/{widget_id}'])
+      expect(paths).to include(['GET', '/widgets/{id}'])
+      expect(paths).to include(['PUT', '/widgets/{id}'])
+      expect(paths).to include(['DELETE', '/widgets/{id}'])
 
       routes.each do |route|
         expect(route.controller).to eq('v1/internal/widgets')
@@ -218,7 +218,7 @@ RSpec.describe 'gateway, function, namespace, scope interactions' do
 
       paths = routes.map(&:path)
       expect(paths).to include('/v1/widgets')
-      expect(paths).to include('/v1/widgets/{widget_id}')
+      expect(paths).to include('/v1/widgets/{id}')
     end
 
     it 'propagates to nested scopes unless overridden' do
