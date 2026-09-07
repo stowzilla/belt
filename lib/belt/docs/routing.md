@@ -57,6 +57,111 @@ resources :comments, except: [:destroy]
 | POST | /profile | create |
 | DELETE | /profile | destroy |
 
+## Nested Resource DSL
+
+Inside a `resources` block, you can use Rails-like `member`, `collection`, `scope`,
+`namespace`, and singular `resource` for DRYer route definitions:
+
+```ruby
+Belt.application.routes.draw do
+  gateway :api do
+    resources :projects do
+      # Singular nested resource (no :id in path)
+      resource :billing, only: [:show], tables: [:memberships]
+      resource :token_usage, only: [:show]
+
+      # Member routes (include /:id/)
+      resources :webhooks do
+        member do
+          post :test            # → POST /projects/:project_id/webhooks/:webhook_id/test
+        end
+      end
+
+      # Collection routes (no /:id/)
+      resources :surfaces do
+        collection do
+          get :teams            # → GET /projects/:project_id/surfaces/teams
+        end
+        member do
+          put :assign           # → PUT /projects/:project_id/surfaces/:surface_id/assign
+        end
+      end
+
+      # Scope: groups routes with shared options
+      scope path: 'billing', controller: :billing, tables: [:memberships] do
+        get '/', action: :show  # → GET /projects/:project_id/billing
+        post :checkout          # → POST /projects/:project_id/billing/checkout
+        post :subscribe
+        post :cancel
+      end
+
+      # Namespace: adds path prefix AND controller module
+      namespace :admin do
+        resources :users        # → /projects/:project_id/admin/users → admin/users controller
+      end
+    end
+  end
+end
+```
+
+### Action Inference
+
+Symbol paths automatically become the action name:
+
+```ruby
+member do
+  post :test                    # path: /test, action: :test
+end
+post 'mark-complete'            # path: /mark-complete, action: :mark_complete
+```
+
+Hyphens in path segments convert to underscores in action names.
+
+### Controller Inheritance
+
+Routes inside `member` and `collection` blocks inherit the parent resource's controller:
+
+```ruby
+resources :surfaces do
+  member do
+    put :assign                 # controller: surfaces, action: assign
+  end
+end
+```
+
+Override with the `controller:` option:
+
+```ruby
+member do
+  get :billing, controller: :project_billing
+end
+```
+
+### Namespace vs Scope
+
+| Feature | `namespace` | `scope` |
+|---------|-------------|---------|
+| Path prefix | ✓ | Optional (`path:`) |
+| Controller module | ✓ | Optional (`module:`) |
+| Use case | Rails-like module nesting | Flexible grouping |
+
+```ruby
+# Namespace: path + controller module
+namespace :admin do
+  resources :users              # → /admin/users → admin/users controller
+end
+
+# Scope with path only (no controller change)
+scope path: 'v2' do
+  resources :users              # → /v2/users → users controller
+end
+
+# Scope with module only (no path change)
+scope module: 'legacy' do
+  resources :users              # → /users → legacy/users controller
+end
+```
+
 ## Namespace and Scope
 
 ```ruby
