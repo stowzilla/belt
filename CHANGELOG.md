@@ -1,5 +1,121 @@
 # Changelog
 
+## 0.3.38
+
+### Enhancement
+
+- **Rails-like `namespace` inside nested resources**: The `NestedResourceBuilder`
+  now supports `namespace` blocks that add both a path prefix AND a controller
+  module prefix, just like Rails. This provides 99% Rails compatibility for
+  nested route organization.
+
+  ```ruby
+  resources :projects do
+    namespace :admin do
+      resources :users   # → /projects/:project_id/admin/users → admin/users controller
+    end
+  end
+  ```
+
+  Namespaces can be nested and inherit auth/tables options:
+
+  ```ruby
+  resources :projects do
+    namespace :admin, auth: :iam, tables: [:audit_log] do
+      namespace :v2 do
+        resources :settings, only: [:index]  # → admin/v2/settings controller
+      end
+    end
+  end
+  ```
+
+- **`scope module:` option inside nested resources**: The existing `scope` method
+  now supports the `module:` option for Rails-like controller module prefixing
+  without adding a path prefix.
+
+  ```ruby
+  resources :projects do
+    scope module: 'v2' do
+      resources :users   # → /projects/:project_id/users → v2/users controller
+    end
+  end
+  ```
+
+## 0.3.37
+
+### Enhancement
+
+- **DRYer routing DSL with Rails-like `scope` inside nested resources**: The
+  `NestedResourceBuilder` now supports `scope` blocks for grouping routes with
+  shared options (path prefix, controller, tables, auth). This enables much
+  cleaner route definitions when multiple routes share the same controller or
+  tables.
+
+  **Before:**
+  ```ruby
+  resources :projects do
+    get 'billing', controller: :billing, action: :show, tables: [:memberships]
+    post 'billing/checkout', controller: :billing, action: :checkout, tables: [:memberships]
+    post 'billing/subscribe', controller: :billing, action: :subscribe, tables: [:memberships]
+  end
+  ```
+
+  **After:**
+  ```ruby
+  resources :projects do
+    scope path: 'billing', controller: :billing, tables: [:memberships] do
+      get '/', action: :show
+      post :checkout
+      post :subscribe
+    end
+  end
+  ```
+
+- **Singular `resource` inside nested resources**: You can now use `resource`
+  (singular) inside a `resources` block for nested singular resources like
+  `:billing`, `:token_usage`, or `:profile`.
+
+  ```ruby
+  resources :projects do
+    resource :billing, only: [:show], tables: [:memberships]
+    resource :token_usage, only: [:show]
+  end
+  ```
+
+- **Action inference from path**: When using symbol arguments or simple string
+  paths, the action is now inferred automatically. This works in `member`,
+  `collection`, and direct route definitions within resources.
+
+  ```ruby
+  resources :webhooks do
+    member do
+      post :test      # action: :test inferred
+    end
+  end
+
+  resources :surfaces do
+    collection do
+      get :teams      # action: :teams inferred
+    end
+  end
+
+  resources :projects do
+    post 'mark-complete'  # action: :mark_complete inferred (hyphens → underscores)
+  end
+  ```
+
+- **Controller inheritance in member/collection blocks**: Routes defined in
+  `member` and `collection` blocks now properly inherit the parent resource's
+  controller. This was inconsistent before and sometimes returned `nil`.
+
+  ```ruby
+  resources :webhooks do
+    member do
+      post :test     # controller: 'webhooks' inherited
+    end
+  end
+  ```
+
 ## 0.3.32
 
 ### Enhancement
