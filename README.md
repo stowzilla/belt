@@ -209,6 +209,53 @@ end
 
 **Key point:** `namespace` and `scope` are purely organizational — they affect URL paths and controller module resolution but never change which Lambda handles the request. Use `function` when you need routes to go to a different Lambda.
 
+### Nested Resource DSL
+
+Inside a `resources` block, you can use Rails-like `member`, `collection`, `scope`, and singular `resource` for DRYer route definitions:
+
+```ruby
+Belt.application.routes.draw do
+  gateway :api do
+    resources :projects do
+      # Singular nested resource
+      resource :billing, only: [:show], tables: [:memberships]
+      resource :token_usage, only: [:show]
+
+      # Member routes (include /:id/)
+      resources :webhooks do
+        member do
+          post :test                    # → POST /projects/:project_id/webhooks/:webhook_id/test
+        end
+      end
+
+      # Collection routes (no /:id/)
+      resources :surfaces do
+        collection do
+          get :teams                    # → GET /projects/:project_id/surfaces/teams
+        end
+        member do
+          put :assign                   # → PUT /projects/:project_id/surfaces/:surface_id/assign
+        end
+      end
+
+      # Scope groups routes with shared options
+      scope path: 'billing', controller: :billing, tables: [:memberships] do
+        get '/', action: :show          # → GET /projects/:project_id/billing
+        post :checkout                  # → POST /projects/:project_id/billing/checkout
+        post :subscribe
+        post :cancel
+      end
+    end
+  end
+end
+```
+
+**Key features:**
+- **Action inference**: `:checkout` means both path segment and action name
+- **Controller inheritance**: `member` and `collection` inherit parent resource's controller
+- **Scope in nested context**: Group routes with shared path prefix, controller, tables, or auth
+- **Singular `resource`**: For nested resources without an `:id` (billing, profile, etc.)
+
 ## BeltController Features
 
 ### Callbacks

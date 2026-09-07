@@ -76,12 +76,71 @@ module Belt
 
       nested_member_prefix = "#{@prefix}/#{resource_name}/{#{param_name}}"
       nested_collection_prefix = "#{@prefix}/#{resource_name}"
+      nested_controller = resource_name
       nested_builder = NestedResourceBuilder.new(@gateway, nested_member_prefix, nested_collection_prefix,
                                                  inherited_tables: Array(options[:tables] || []),
                                                  inherited_auth: options[:auth] || @inherited_auth,
-                                                 inherited_controller: @inherited_controller,
+                                                 inherited_controller: nested_controller,
                                                  inherited_lambda: @inherited_lambda)
       nested_builder.instance_eval(&block)
+    end
+
+    # Singular resource inside nested context (e.g. resource :billing inside resources :projects)
+    def resource(name, options = {})
+      resource_name = name.to_s
+      options = merge_inherited_options(options)
+      resource_options = options.merge(route_type: :resource)
+      actions = determine_actions(options, default: %i[show update destroy create])
+
+      if actions.include?(:show)
+        @gateway.send(:add_route, :get, join_path(@prefix, resource_name),
+                      resolve_request_model_for(resource_options, :show))
+      end
+      if actions.include?(:update)
+        @gateway.send(:add_route, :put, join_path(@prefix, resource_name),
+                      resolve_request_model_for(resource_options, :update))
+      end
+      if actions.include?(:destroy)
+        @gateway.send(:add_route, :delete, join_path(@prefix, resource_name),
+                      resolve_request_model_for(resource_options, :destroy))
+      end
+      return unless actions.include?(:create)
+
+      @gateway.send(:add_route, :post, join_path(@prefix, resource_name),
+                    resolve_request_model_for(resource_options, :create))
+    end
+
+    # Scope inside nested resource context - groups routes with shared options
+    # Example:
+    #   resources :projects do
+    #     scope path: 'billing', controller: :billing, tables: [:memberships] do
+    #       get '/', action: :show
+    #       post :checkout
+    #     end
+    #   end
+    def scope(options = {}, &)
+      previous_prefix = @prefix
+      previous_collection_prefix = @collection_prefix
+      previous_tables = @inherited_tables
+      previous_auth = @inherited_auth
+      previous_controller = @inherited_controller
+
+      if options.key?(:path)
+        segment = options[:path].to_s.gsub(%r{^/|/$}, '')
+        @prefix = join_path(@prefix, segment)
+        @collection_prefix = join_path(@collection_prefix, segment)
+      end
+      @inherited_auth = options[:auth] || @inherited_auth
+      @inherited_tables = (@inherited_tables + Array(options[:tables] || [])).uniq
+      @inherited_controller = options[:controller]&.to_s || @inherited_controller
+
+      instance_eval(&) if block_given?
+
+      @prefix = previous_prefix
+      @collection_prefix = previous_collection_prefix
+      @inherited_tables = previous_tables
+      @inherited_auth = previous_auth
+      @inherited_controller = previous_controller
     end
 
     def member(&)
@@ -95,24 +154,63 @@ module Belt
     end
 
     %i[get post put delete patch].each do |method|
-      define_method(method) do |path, options = {}|
+      define_method(method) do |path_or_action, options = {}|
+        # Support both symbol (action name = path) and string (explicit path)
+        path, action = normalize_path_and_action(path_or_action, options)
         base = options[:on] == :collection ? @collection_prefix : @prefix
         full_path = join_path(base, path)
         options = merge_inherited_options(options)
         route_options = options.except(:on)
+        route_options[:action] ||= action if action
         @gateway.send(:add_route, method, full_path, route_options)
       end
     end
 
     private
 
+    # Normalize path/action: symbol means path=action, string means infer action from path
+    def normalize_path_and_action(path_or_action, options)
+      return [options[:path] || '', options[:action]] if path_or_action.nil?
+
+      if path_or_action.is_a?(Symbol)
+        # Symbol: use as both path segment and action name (e.g. :checkout → path: 'checkout', action: :checkout)
+        [path_or_action.to_s, options[:action] || path_or_action]
+      else
+        path = path_or_action.to_s
+        # Infer action from last non-param segment of path (e.g. 'checkout' → :checkout, '/' → nil)
+        inferred_action = options[:action] || infer_action_from_path(path)
+        [path, inferred_action]
+      end
+    end
+
+    # Infer action name from path: 'checkout' → :checkout, 'billing/checkout' → :checkout
+    def infer_action_from_path(path)
+      return nil if path.nil? || path.empty? || path == '/'
+
+      segments = path.gsub(%r{^/|/$}, '').split('/')
+      # Find last segment that's not a parameter (doesn't contain {})
+      last_segment = segments.reverse.find { |s| !s.include?('{') }
+      last_segment&.tr('-', '_')&.to_sym
+    end
+
     # Join a base path with a relative path, ensuring exactly one `/` separator.
+    # Handles "/" path by returning just the base (no trailing slash).
     def join_path(base, path)
       path = path.to_s
-      return base if path.empty?
-      return "#{base}#{path}" if path.start_with?('/')
+      return base if path.empty? || path == '/'
+      return "#{base}#{path}".chomp('/') if path.start_with?('/')
 
       "#{base}/#{path}"
+    end
+
+    def determine_actions(options, default: %i[index create show update destroy])
+      if options[:only]
+        Array(options[:only])
+      elsif options[:except]
+        default - Array(options[:except])
+      else
+        default
+      end
     end
 
     def add_nested_resource_routes(resource_name, param_name, resource_options, actions)
@@ -174,20 +272,49 @@ module Belt
     end
 
     %i[get post put delete patch].each do |method|
-      define_method(method) do |path, options = {}|
+      define_method(method) do |path_or_action, options = {}|
+        # Support both symbol (action name = path) and string (explicit path)
+        path, action = normalize_path_and_action(path_or_action, options)
         full_path = join_path(@prefix, path)
         options = merge_inherited_options(options)
+        options[:action] ||= action if action
         @gateway.send(:add_route, method, full_path, options)
       end
     end
 
     private
 
+    # Normalize path/action: symbol means path=action, string means infer action from path
+    def normalize_path_and_action(path_or_action, options)
+      return ['', options[:action]] if path_or_action.nil?
+
+      if path_or_action.is_a?(Symbol)
+        # Symbol: use as both path segment and action name (e.g. :test → path: 'test', action: :test)
+        [path_or_action.to_s, options[:action] || path_or_action]
+      else
+        path = path_or_action.to_s
+        # Infer action from last non-param segment of path (e.g. 'test' → :test)
+        inferred_action = options[:action] || infer_action_from_path(path)
+        [path, inferred_action]
+      end
+    end
+
+    # Infer action name from path: 'test' → :test, 'deep/nested' → :nested
+    def infer_action_from_path(path)
+      return nil if path.nil? || path.empty? || path == '/'
+
+      segments = path.gsub(%r{^/|/$}, '').split('/')
+      # Find last segment that's not a parameter (doesn't contain {})
+      last_segment = segments.reverse.find { |s| !s.include?('{') && !s.start_with?(':') }
+      last_segment&.tr('-', '_')&.to_sym
+    end
+
     # Join a base path with a relative path, ensuring exactly one `/` separator.
+    # Handles "/" path by returning just the base (no trailing slash).
     def join_path(base, path)
       path = path.to_s
-      return base if path.empty?
-      return "#{base}#{path}" if path.start_with?('/')
+      return base if path.empty? || path == '/'
+      return "#{base}#{path}".chomp('/') if path.start_with?('/')
 
       "#{base}/#{path}"
     end
@@ -249,9 +376,11 @@ module Belt
       inherited_tables = (@default_tables + resource_tables).uniq
       inherited_auth = options[:auth] || @default_auth
       inherited_lambda = options[:lambda]
+      inherited_controller = resource_name
       nested_builder = NestedResourceBuilder.new(self, member_prefix, collection_prefix,
                                                  inherited_tables: inherited_tables,
                                                  inherited_auth: inherited_auth,
+                                                 inherited_controller: inherited_controller,
                                                  inherited_lambda: inherited_lambda)
       nested_builder.instance_eval(&)
     end
