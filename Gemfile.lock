@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    belt (0.3.40)
+    belt (0.3.41)
       activeitem (~> 0.0, >= 0.0.13)
       activesupport (>= 7.0)
       irb (>= 1.0)
@@ -11,7 +11,7 @@ PATH
 GEM
   remote: https://rubygems.org/
   specs:
-    activeitem (0.0.21)
+    activeitem (0.0.22)
       activemodel (>= 7.0)
       activesupport (>= 7.0)
       aws-sdk-dynamodb (~> 1.0)
@@ -75,7 +75,7 @@ GEM
     minitest (6.0.6)
       drb (~> 2.0)
       prism (~> 1.5)
-    parallel (2.1.0)
+    parallel (2.2.0)
     parser (3.3.12.0)
       ast (~> 2.4.1)
       racc
