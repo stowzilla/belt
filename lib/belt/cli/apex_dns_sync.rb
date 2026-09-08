@@ -131,41 +131,43 @@ module Belt
           output, status = Open3.capture2e(env, 'terraform', 'output', '-json')
           return targets unless status.success?
 
-          data = begin
-            JSON.parse(output)
-          rescue JSON::ParserError
-            {}
-          end
-
-          # Extract CloudFront distribution
-          cf_domain = data.dig('cloudfront_domain_name', 'value')
-          cf_zone = data.dig('cloudfront_hosted_zone_id', 'value')
-          if cf_domain
-            targets[:cloudfront] = {
-              domain_name: cf_domain,
-              hosted_zone_id: cf_zone || 'Z2FDTNDATAQYW2' # CloudFront's fixed zone ID
-            }
-          end
-
-          # Extract API Gateway
-          apigw_domain = data.dig('api_gateway_domain_name', 'value')
-          apigw_zone = data.dig('api_gateway_hosted_zone_id', 'value')
-          if apigw_domain && !apigw_domain.empty? && apigw_zone && !apigw_zone.empty?
-            targets[:api_gateway] = {
-              domain_name: apigw_domain,
-              hosted_zone_id: apigw_zone
-            }
-          end
-
-          # Read domain from tfvars
-          tfvars_path = 'terraform.tfvars'
-          if File.exist?(tfvars_path)
-            match = File.read(tfvars_path).match(/^\s*domain\s*=\s*"([^"]+)"/)
-            targets[:domain] = match[1] if match
-          end
+          data = parse_json(output) || {}
+          extract_cloudfront_target(data, targets)
+          extract_api_gateway_target(data, targets)
+          extract_domain(targets)
         end
 
         targets
+      end
+
+      def extract_cloudfront_target(data, targets)
+        cf_domain = data.dig('cloudfront_domain_name', 'value')
+        return unless cf_domain
+
+        cf_zone = data.dig('cloudfront_hosted_zone_id', 'value')
+        targets[:cloudfront] = {
+          domain_name: cf_domain,
+          hosted_zone_id: cf_zone || 'Z2FDTNDATAQYW2' # CloudFront's fixed zone ID
+        }
+      end
+
+      def extract_api_gateway_target(data, targets)
+        apigw_domain = data.dig('api_gateway_domain_name', 'value')
+        apigw_zone = data.dig('api_gateway_hosted_zone_id', 'value')
+        return unless apigw_domain && !apigw_domain.empty? && apigw_zone && !apigw_zone.empty?
+
+        targets[:api_gateway] = {
+          domain_name: apigw_domain,
+          hosted_zone_id: apigw_zone
+        }
+      end
+
+      def extract_domain(targets)
+        tfvars_path = 'terraform.tfvars'
+        return unless File.exist?(tfvars_path)
+
+        match = File.read(tfvars_path).match(/^\s*domain\s*=\s*"([^"]+)"/)
+        targets[:domain] = match[1] if match
       end
 
       def fetch_root_zone_id
@@ -229,7 +231,7 @@ module Belt
         end
       end
 
-      def sync_acm_validation(root_zone_id, domain)
+      def sync_acm_validation(root_zone_id, _domain)
         env_dir = File.join(@infra_dir, @env)
 
         Dir.chdir(env_dir) do
@@ -242,11 +244,8 @@ module Belt
           )
           return unless status.success?
 
-          cert_data = begin
-            JSON.parse(output)
-          rescue JSON::ParserError
-            return
-          end
+          cert_data = parse_json(output)
+          return unless cert_data
 
           cert_status = cert_data.dig('values', 'status')
 
@@ -260,40 +259,47 @@ module Belt
           validation_options = cert_data.dig('values', 'domain_validation_options') || []
           return if validation_options.empty?
 
-          # Build CNAME changes
-          changes = validation_options.map do |opt|
-            {
-              Action: 'UPSERT',
-              ResourceRecordSet: {
-                Name: opt['resource_record_name'],
-                Type: 'CNAME',
-                TTL: 300,
-                ResourceRecords: [{ Value: opt['resource_record_value'] }]
-              }
+          changes = build_validation_changes(validation_options)
+          upsert_validation_cnames(root_zone_id, changes)
+        end
+      end
+
+      def build_validation_changes(validation_options)
+        changes = validation_options.map do |opt|
+          {
+            Action: 'UPSERT',
+            ResourceRecordSet: {
+              Name: opt['resource_record_name'],
+              Type: 'CNAME',
+              TTL: 300,
+              ResourceRecords: [{ Value: opt['resource_record_value'] }]
             }
-          end
-
-          # Dedupe by name (ACM uses same CNAME for base and wildcard)
-          changes.uniq! { |c| c[:ResourceRecordSet][:Name] }
-
-          change_batch = {
-            Comment: 'Belt ACM validation sync',
-            Changes: changes
           }
+        end
 
-          dns_env = aws_env_for(@dns_config)
-          _, status = Open3.capture2e(
-            dns_env,
-            'aws', 'route53', 'change-resource-record-sets',
-            '--hosted-zone-id', root_zone_id,
-            '--change-batch', JSON.generate(change_batch)
-          )
+        # Dedupe by name (ACM uses same CNAME for base and wildcard)
+        changes.uniq! { |c| c[:ResourceRecordSet][:Name] }
+        changes
+      end
 
-          if status.success?
-            puts '    ✓ ACM validation CNAME synced (cert pending)' unless @quiet
-          else
-            puts '    ⚠ Failed to sync ACM validation CNAME' unless @quiet
-          end
+      def upsert_validation_cnames(root_zone_id, changes)
+        change_batch = {
+          Comment: 'Belt ACM validation sync',
+          Changes: changes
+        }
+
+        dns_env = aws_env_for(@dns_config)
+        _, status = Open3.capture2e(
+          dns_env,
+          'aws', 'route53', 'change-resource-record-sets',
+          '--hosted-zone-id', root_zone_id,
+          '--change-batch', JSON.generate(change_batch)
+        )
+
+        if status.success?
+          puts '    ✓ ACM validation CNAME synced (cert pending)' unless @quiet
+        else
+          puts '    ⚠ Failed to sync ACM validation CNAME' unless @quiet
         end
       end
 
@@ -316,6 +322,12 @@ module Belt
         env = {}
         env['AWS_PROFILE'] = config.aws_profile if config&.aws_profile?
         env
+      end
+
+      def parse_json(output)
+        JSON.parse(output)
+      rescue JSON::ParserError
+        nil
       end
     end
   end

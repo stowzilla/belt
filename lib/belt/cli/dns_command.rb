@@ -380,7 +380,7 @@ module Belt
           puts 'Root Zone (infrastructure/dns)'
           puts '────────────────────────────────────────'
           puts '  ⚠ Not configured'
-          puts "    Run: belt dns generate"
+          puts '    Run: belt dns generate'
           puts ''
         end
 
@@ -398,6 +398,12 @@ module Belt
 
       private
 
+      def parse_json(output)
+        JSON.parse(output)
+      rescue JSON::ParserError
+        nil
+      end
+
       def check_root_zone(domain)
         puts 'Root Zone (shared account)'
         puts '────────────────────────────────────────'
@@ -410,16 +416,16 @@ module Belt
           output, status = Open3.capture2e(env, 'terraform', 'output', '-json')
           unless status.success?
             puts '  ⚠ Cannot read terraform state'
-            puts "    Run: belt dns deploy"
+            puts '    Run: belt dns deploy'
             return
           end
 
-          begin
-            JSON.parse(output)
-          rescue JSON::ParserError
-            puts '  ⚠ Failed to parse terraform outputs'
-            return
-          end
+          parse_json(output)
+        end
+
+        unless outputs
+          puts '  ⚠ Failed to parse terraform outputs'
+          return
         end
 
         zone_id = outputs.dig('root_zone_id', 'value')
@@ -532,7 +538,11 @@ module Belt
           end
         end
 
-        label = is_prod ? "#{env_name} (#{env_domain || domain}) [apex]" : "#{env_name} (#{env_domain || "#{env_name}.#{domain}"})"
+        label = if is_prod
+                  "#{env_name} (#{env_domain || domain}) [apex]"
+                else
+                  "#{env_name} (#{env_domain || "#{env_name}.#{domain}"})"
+                end
         puts label
         puts '────────────────────────────────────────'
 
@@ -560,40 +570,39 @@ module Belt
             return
           end
 
-          outputs = begin
-            JSON.parse(output)
-          rescue JSON::ParserError
+          outputs = parse_json(output)
+          unless outputs
             puts '  ⚠ Failed to parse terraform outputs'
             puts ''
             return
           end
 
-          # Zone info
-          name_servers = outputs.dig('name_servers', 'value') || []
-          if name_servers.any?
-            puts "  ✓ Zone deployed (#{name_servers.length} NS records)"
-          else
-            puts '  ⚠ No hosted zone found'
-          end
-
-          # Check ACM certificate
-          check_acm_cert(env_dir, env)
-
-          # Check delegation in root zone (for non-apex envs)
-          unless is_prod
-            check_delegation(env_name, domain, name_servers)
-          end
-
-          # For apex (prod), check if DNS resolves
-          if is_prod && env_domain
-            check_dns_resolution(env_domain)
-          end
+          report_environment_status(outputs, env_name, env_dir, env, domain, env_domain, is_prod)
         end
 
         puts ''
       end
 
-      def check_acm_cert(env_dir, aws_env)
+      def report_environment_status(outputs, env_name, env_dir, env, domain, env_domain, is_prod)
+        # Zone info
+        name_servers = outputs.dig('name_servers', 'value') || []
+        if name_servers.any?
+          puts "  ✓ Zone deployed (#{name_servers.length} NS records)"
+        else
+          puts '  ⚠ No hosted zone found'
+        end
+
+        # Check ACM certificate
+        check_acm_cert(env_dir, env)
+
+        # Check delegation in root zone (for non-apex envs)
+        check_delegation(env_name, domain, name_servers) unless is_prod
+
+        # For apex (prod), check if DNS resolves
+        check_dns_resolution(env_domain) if is_prod && env_domain
+      end
+
+      def check_acm_cert(_env_dir, aws_env)
         # Try to get cert status from state
         output, status = Open3.capture2e(
           aws_env,
@@ -601,11 +610,8 @@ module Belt
         )
         return unless status.success?
 
-        cert_data = begin
-          JSON.parse(output)
-        rescue JSON::ParserError
-          return
-        end
+        cert_data = parse_json(output)
+        return unless cert_data
 
         cert_domain = cert_data.dig('values', 'domain_name')
         cert_status = cert_data.dig('values', 'status')
@@ -621,7 +627,7 @@ module Belt
         end
       end
 
-      def check_delegation(env_name, domain, expected_ns)
+      def check_delegation(env_name, _domain, _expected_ns)
         return unless Dir.exist?(DNS_DIR)
 
         dns_config = load_dns_config
@@ -644,7 +650,7 @@ module Belt
       def check_dns_resolution(domain)
         # Try to resolve the domain
         output, status = Open3.capture2e('dig', '+short', domain)
-        if status.success? && output.strip.length > 0
+        if status.success? && output.strip.length.positive?
           ips = output.strip.split("\n")
           puts "  ✓ DNS resolves: #{ips.first}"
         else
