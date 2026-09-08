@@ -131,8 +131,10 @@ RSpec.describe 'RouteBuilder#resources inside scope' do
 
       paths = routes.map { |r| [r.method, r.path] }
       expect(paths).to include(['GET', '/admin/slots'])
-      expect(paths).to include(['GET', '/admin/slots/{id}'])
-      expect(paths).to include(['PUT', '/admin/slots/{id}'])
+      # When resources has a nested block, member routes use {param_name} to avoid
+      # API Gateway sibling path parameter conflicts
+      expect(paths).to include(['GET', '/admin/slots/{slot_id}'])
+      expect(paths).to include(['PUT', '/admin/slots/{slot_id}'])
       expect(paths).to include(['POST', '/admin/slots/import'])
 
       import_route = routes.find { |r| r.path == '/admin/slots/import' }

@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.3.41
+
+### Bug Fix
+
+- **Fix API Gateway sibling path parameter conflict**: When a resource has nested
+  resources (a block), member routes (show, update, destroy) now use `{param_name}`
+  (e.g., `{project_id}`) instead of `{id}` to match the nested routes. This prevents
+  API Gateway from rejecting routes due to sibling path segments having different
+  parameter names.
+
+  Without nested resources (no block):
+  ```
+  GET  /posts/{id}
+  PUT  /posts/{id}
+  DELETE /posts/{id}
+  ```
+
+  With nested resources:
+  ```
+  GET  /projects/{project_id}
+  PUT  /projects/{project_id}
+  DELETE /projects/{project_id}
+  GET  /projects/{project_id}/epics
+  GET  /projects/{project_id}/epics/{id}
+  ```
+
+  This fixes the error: "Unable to create resource at path '...': A sibling ({id})
+  of this resource already has a variable path part".
+
 ## 0.3.40
 
 ### Breaking Change
