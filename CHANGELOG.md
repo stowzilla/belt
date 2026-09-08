@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.3.43
+
+### Bug Fix
+
+- **Fix nested resource member parameter conflicts**: Extends the fix from 0.3.41
+  to also cover deeply nested resources and custom member actions. Previously,
+  resources nested inside other nested resources (e.g., `epics` inside `projects`
+  with a block) still used `{id}` for member routes while custom member actions
+  (like `post :test, on: :member`) used `{param_name}`.
+
+  This fixes the error for routes like:
+  ```
+  /projects/{project_id}/webhooks/{id}           # show/update/destroy
+  /projects/{project_id}/webhooks/{webhook_id}/test  # custom member action
+  ```
+
+  Now both use consistent parameter names when the resource has a block:
+  ```
+  /projects/{project_id}/webhooks/{webhook_id}
+  /projects/{project_id}/webhooks/{webhook_id}/test
+  ```
+
+## 0.3.42
+
+### New Features
+
+- **Auto-sync apex DNS records**: When deploying to a production/apex environment,
+  `belt deploy` now automatically syncs A alias records (apex, www, api) to the
+  root zone in your shared DNS account. No more manual DNS steps for prod deploys.
+
+- **`belt dns doctor`**: New diagnostic command showing DNS health across all
+  environments — zone status, NS delegation, ACM certificates, and resolution tests.
+
 ## 0.3.41
 
 ### Bug Fix
