@@ -14,6 +14,7 @@ require_relative 'zip_artifact_builder'
 require_relative 'nested_environment'
 require_relative 'cognito_sharer'
 require_relative 'dynamo_copier'
+require_relative 'apex_dns_sync'
 
 module Belt
   module CLI
@@ -172,6 +173,9 @@ module Belt
 
           run_apply
         end
+
+        # Sync apex DNS records to root zone (if this is a prod/apex environment)
+        run_apex_dns_sync
 
         puts "\n✅ Deployed #{@env} successfully!"
         print_outputs(env_dir)
@@ -731,6 +735,14 @@ module Belt
 
       def cleanup_plan
         FileUtils.rm_f('tfplan')
+      end
+
+      def run_apex_dns_sync
+        sync = ApexDnsSync.new(@env, infra_dir: @infra_dir)
+        return unless sync.needs_sync?
+
+        puts ''
+        sync.run
       end
 
       def run_nested_env_hooks
