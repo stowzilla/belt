@@ -450,5 +450,52 @@ RSpec.describe 'NestedResourceBuilder scope and action inference' do
       expect(billing_checkout.controller).to eq('billing')
       expect(billing_checkout.action).to eq(:checkout)
     end
+
+    it 'uses consistent param names for member routes and custom actions to avoid API Gateway conflicts' do
+      routes = build_routes do
+        resources :projects, tables: [:surfaces] do
+          resources :webhooks do
+            member do
+              post :test
+            end
+          end
+          resources :conversations do
+            member do
+              post :chat
+            end
+          end
+          resources :epics do
+            resources :requirements, only: %i[create destroy]
+          end
+        end
+      end
+
+      # Check that MEMBER routes use {param_name} not {id} when there's a block
+      webhook_show = routes.find { |r| r.path =~ %r{/webhooks/.*} && r.method == 'GET' && !r.path.include?('test') }
+      expect(webhook_show.path).to eq('/projects/{project_id}/webhooks/{webhook_id}')
+
+      # Custom member action should use SAME param name
+      webhook_test = routes.find { |r| r.path.include?('test') }
+      expect(webhook_test.path).to eq('/projects/{project_id}/webhooks/{webhook_id}/test')
+
+      # Both use {webhook_id} — no API Gateway conflict!
+      expect(webhook_show.path.scan(/{[^}]+}/)).to eq(['{project_id}', '{webhook_id}'])
+      expect(webhook_test.path.scan(/{[^}]+}/).first(2)).to eq(['{project_id}', '{webhook_id}'])
+
+      # Same for conversations
+      conversation_show = routes.find do |r|
+        r.path =~ %r{/conversations/.*} && r.method == 'GET' && !r.path.include?('chat')
+      end
+      conversation_chat = routes.find { |r| r.path.include?('chat') }
+      expect(conversation_show.path).to eq('/projects/{project_id}/conversations/{conversation_id}')
+      expect(conversation_chat.path).to eq('/projects/{project_id}/conversations/{conversation_id}/chat')
+
+      # Nested resources with their own nested resources
+      epic_show = routes.find { |r| r.path =~ %r{/epics/{epic_id}$} && r.method == 'GET' }
+      expect(epic_show.path).to eq('/projects/{project_id}/epics/{epic_id}')
+
+      requirement_create = routes.find { |r| r.path.include?('requirements') && r.method == 'POST' }
+      expect(requirement_create.path).to eq('/projects/{project_id}/epics/{epic_id}/requirements')
+    end
   end
 end

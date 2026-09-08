@@ -75,8 +75,11 @@ module Belt
       resource_options = options.merge(route_type: :resources)
       actions = @gateway.send(:determine_actions, options)
 
-      add_nested_resource_routes(resource_name, param_name, resource_options, actions)
-      return unless block
+      # When there's a block (nested resources or custom member actions), use {param_name}
+      # for member routes to avoid API Gateway sibling path parameter conflicts.
+      has_nested = !block.nil?
+      add_nested_resource_routes(resource_name, param_name, resource_options, actions, use_param_name: has_nested)
+      return unless has_nested
 
       nested_member_prefix = "#{@prefix}/#{resource_name}/{#{param_name}}"
       nested_collection_prefix = "#{@prefix}/#{resource_name}"
@@ -251,8 +254,11 @@ module Belt
       end
     end
 
-    def add_nested_resource_routes(resource_name, _param_name, resource_options, actions)
-      # Member routes (show/update/destroy) use {id}, not {singular_id} — Rails convention
+    def add_nested_resource_routes(resource_name, param_name, resource_options, actions, use_param_name: false)
+      # Member routes (show/update/destroy) use {id} by default (Rails convention).
+      # When nested resources or custom member actions exist (use_param_name: true),
+      # use {param_name} instead to avoid API Gateway sibling path parameter conflicts.
+      member_param = use_param_name ? param_name : 'id'
       if actions.include?(:index)
         @gateway.send(:add_route, :get, "#{@prefix}/#{resource_name}",
                       resolve_request_model_for(resource_options, :index))
@@ -262,16 +268,16 @@ module Belt
                       resolve_request_model_for(resource_options, :create))
       end
       if actions.include?(:show)
-        @gateway.send(:add_route, :get, "#{@prefix}/#{resource_name}/{id}",
+        @gateway.send(:add_route, :get, "#{@prefix}/#{resource_name}/{#{member_param}}",
                       resolve_request_model_for(resource_options, :show))
       end
       if actions.include?(:update)
-        @gateway.send(:add_route, :put, "#{@prefix}/#{resource_name}/{id}",
+        @gateway.send(:add_route, :put, "#{@prefix}/#{resource_name}/{#{member_param}}",
                       resolve_request_model_for(resource_options, :update))
       end
       return unless actions.include?(:destroy)
 
-      @gateway.send(:add_route, :delete, "#{@prefix}/#{resource_name}/{id}",
+      @gateway.send(:add_route, :delete, "#{@prefix}/#{resource_name}/{#{member_param}}",
                     resolve_request_model_for(resource_options, :destroy))
     end
 
