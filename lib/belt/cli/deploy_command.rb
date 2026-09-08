@@ -14,6 +14,7 @@ require_relative 'zip_artifact_builder'
 require_relative 'nested_environment'
 require_relative 'cognito_sharer'
 require_relative 'dynamo_copier'
+require_relative 'dns_command'
 
 module Belt
   module CLI
@@ -173,6 +174,11 @@ module Belt
           run_apply
         end
 
+        # Sync ACM validation CNAMEs for apex domains (e.g., prod)
+        # This handles the case where prod uses the apex domain (example.com)
+        # and needs validation CNAMEs in the root zone, not the env's zone.
+        sync_acm_validation_if_apex
+
         puts "\n✅ Deployed #{@env} successfully!"
         print_outputs(env_dir)
 
@@ -293,6 +299,27 @@ module Belt
         rescue StandardError
           nil
         end
+      end
+
+      # ─── ACM Validation Sync ────────────────────────────────────────
+
+      # For apex environments (prod), ACM validation CNAMEs need to be in the
+      # root zone (managed by infrastructure/dns), not the environment's zone.
+      # This is because the registrar points to the root zone, which is
+      # authoritative for the apex domain.
+      def sync_acm_validation_if_apex
+        # Only sync if DNS infrastructure exists
+        return unless Dir.exist?(File.join(@infra_dir, '..', 'infrastructure', 'dns')) ||
+                      Dir.exist?('infrastructure/dns')
+
+        # Check if this is an apex environment
+        return unless apex_environment?
+
+        DnsCommand.sync_acm_validation_if_needed(@env)
+      end
+
+      def apex_environment?
+        %w[prod production].include?(@env)
       end
 
       # ─── Backup Phase ───────────────────────────────────────────────
