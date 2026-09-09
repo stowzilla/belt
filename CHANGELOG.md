@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.45
+
+### Bug Fix
+
+- **Fix misleading nested environment domain announcement**: `belt generate
+  environment <name> <parent>` printed `Domain will be:
+  api.<env>.<parent>.<domain>`, but the deployed infrastructure actually uses
+  the single-level `api-<env>.<parent>.<domain>` form (the `api-` prefix keeps
+  the host under the parent's `*.<parent>.<domain>` wildcard cert). The message
+  now matches the real deployed domain. Infrastructure was already correct —
+  only the CLI output was wrong.
+
 ## 0.3.43
 
 ### Bug Fix

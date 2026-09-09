@@ -95,10 +95,13 @@ module Belt
         if @parent_environment
           puts "\nThis is a nested environment under '#{@parent_environment}'."
           puts "It will use the parent's wildcard certificate and hosted zone."
+          # Nested envs use an `api-<env>` prefix (not `api.<env>`) so the API
+          # host stays a single level under the parent's *.<parent>.<domain>
+          # wildcard cert. See lib/templates/module/dns.tf.erb (api_domain).
           if @domain
-            puts "Domain will be: api.#{@env_name}.#{@parent_environment}.#{@domain}"
+            puts "Domain will be: api-#{@env_name}.#{@parent_environment}.#{@domain}"
           else
-            puts "Domain will be: #{@env_name}.#{@parent_environment}.<your-domain>"
+            puts "Domain will be: api-#{@env_name}.#{@parent_environment}.<your-domain>"
           end
           puts "\nDeploy with:"
           puts "  belt deploy #{@env_name}"
