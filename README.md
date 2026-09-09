@@ -294,6 +294,8 @@ end
 Full details — configuration, the `after_cognito_sync` hook, platform staff, and how
 both token shapes are handled — in `belt explain authentication`.
 
+Upgrading an existing app to Cognito auth? See [UPGRADING.md](UPGRADING.md).
+
 ## BeltController Features
 
 ### Callbacks

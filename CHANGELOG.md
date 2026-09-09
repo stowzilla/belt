@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.45
+## 0.4.0
 
 ### New Features
 
@@ -51,6 +51,12 @@
 
 - `Belt::AuthenticationError` and friends moved to `lib/belt/errors.rb` so they can be
   required without pulling in the whole gem. No API change.
+
+### Upgrading
+
+- Upgrade is additive — nothing breaks by bumping to 0.4.0. To adopt
+  `cognito_authenticatable` in an existing app (and for the one `index: false` diff to
+  watch even if you don't), see [UPGRADING.md](UPGRADING.md).
 
 ## 0.3.43
 
