@@ -99,9 +99,11 @@ module Belt
           # host stays a single level under the parent's *.<parent>.<domain>
           # wildcard cert. See lib/templates/module/dns.tf.erb (api_domain).
           if @domain
-            puts "Domain will be: api-#{@env_name}.#{@parent_environment}.#{@domain}"
+            puts "Frontend will be: https://#{@env_name}.#{@parent_environment}.#{@domain}"
+            puts "API will be: https://api-#{@env_name}.#{@parent_environment}.#{@domain}"
           else
-            puts "Domain will be: api-#{@env_name}.#{@parent_environment}.<your-domain>"
+            puts "Frontend will be: https://#{@env_name}.#{@parent_environment}.#{@domain}"
+            puts "API will be: https://api-#{@env_name}.#{@parent_environment}.#{@domain}"
           end
           puts "\nDeploy with:"
           puts "  belt deploy #{@env_name}"
