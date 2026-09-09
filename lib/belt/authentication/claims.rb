@@ -79,7 +79,9 @@ module Belt
           return [] if raw.nil?
           return raw.map(&:to_s) if raw.is_a?(Array)
 
-          raw.to_s.delete('[]').split(',').map(&:strip).reject(&:empty?)
+          # Strip only the wrapping brackets Cognito uses for the space/comma-separated
+          # group list (e.g. "[admins, editors]"), not brackets anywhere in the string.
+          raw.to_s.sub(/\A\[/, '').sub(/\]\z/, '').split(',').map(&:strip).reject(&:empty?)
         end
 
         # Booleans arrive as JSON booleans from a decoded token and as strings from
