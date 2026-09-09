@@ -195,6 +195,28 @@ RSpec.describe Belt::Authentication::CognitoAuthenticatable do
 
       SpecAuthUser.sync_from_claims!(sub: 'sub-1', email: 'ada@example.com', name: 'Ada', email_verified: true)
     end
+
+    # An admin who is still an admin must not generate a write. Guards against a
+    # regression where role mirroring compares against the wrong side and rewrites
+    # 'admin' → 'admin' on every request.
+    it 'does not write when an admin stays an admin' do
+      existing.role = 'admin'
+      expect(existing).not_to receive(:update!)
+
+      SpecAuthUser.sync_from_claims!(sub: 'sub-1', email: 'ada@example.com', name: 'Ada',
+                                     email_verified: true, admin: true)
+    end
+
+    # last_seen_on is a date, but sync still runs across a day boundary. When the
+    # stored date is stale, the drift write includes it — and only it, if nothing
+    # else changed.
+    it 'writes last_seen_on when the stored date is stale' do
+      existing.last_seen_on = '2000-01-01'
+      today = Time.now.utc.strftime('%Y-%m-%d')
+      expect(existing).to receive(:update!).with({ last_seen_on: today })
+
+      SpecAuthUser.sync_from_claims!(sub: 'sub-1', email: 'ada@example.com', name: 'Ada', email_verified: true)
+    end
   end
 
   describe '.for_email' do
@@ -208,6 +230,28 @@ RSpec.describe Belt::Authentication::CognitoAuthenticatable do
       expect(SpecAuthUser).not_to receive(:find_by)
 
       expect(SpecAuthUser.for_email(nil)).to be_nil
+    end
+
+    # A model that opted out of the GSI (email_index: false) still resolves by email —
+    # it just does an unindexed find_by rather than an index query. Without this the
+    # false branch of #for_email is never exercised.
+    it 'does an unindexed lookup when the model has no email index' do
+      expect(SpecAuthStaffUser).to receive(:find_by).with(email: 'ada@example.com')
+      expect(SpecAuthStaffUser).not_to receive(:find_by).with(hash_including(:index))
+
+      SpecAuthStaffUser.for_email(' Ada@Example.com ')
+    end
+  end
+
+  describe '.cognito_authenticatable?' do
+    it 'is true for a model that declared the macro' do
+      expect(SpecAuthUser.cognito_authenticatable?).to be(true)
+    end
+
+    it 'is false for a model that did not' do
+      plain = Class.new(ActiveItem::Base)
+
+      expect(plain.cognito_authenticatable?).to be(false)
     end
   end
 end

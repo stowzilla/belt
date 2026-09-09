@@ -86,6 +86,19 @@ RSpec.describe Belt::Authentication::Controller do
 
       expect(subject).to be_cognito_admin
     end
+
+    # An anonymous request has no groups, so it is never staff. Guards the
+    # [].intersect? path — an empty group list must answer false, not raise.
+    it 'is false for an anonymous request' do
+      expect(controller({})).not_to be_cognito_admin
+    end
+
+    it 'is false for a token carrying no groups claim' do
+      subject = controller(authorizer_event('sub' => 'abc'))
+
+      expect(subject).not_to be_cognito_admin
+      expect(subject.cognito_groups).to eq([])
+    end
   end
 
   describe '#current_user' do

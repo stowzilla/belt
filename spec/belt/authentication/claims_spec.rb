@@ -89,6 +89,54 @@ RSpec.describe Belt::Authentication::Claims do
       expect(described_class.decode('two.parts')).to be_nil
       expect(described_class.decode(nil)).to be_nil
     end
+
+    # A well-formed JWT whose payload decodes to something other than an object —
+    # a JSON array or scalar — is not a claim set. Reject it rather than letting a
+    # non-Hash sneak through to the callers that index into it with ['sub'].
+    it 'returns nil when the payload is valid JSON but not an object' do
+      header = Base64.urlsafe_encode64('{"alg":"RS256"}', padding: false)
+      array_payload = Base64.urlsafe_encode64(JSON.generate([1, 2, 3]), padding: false)
+      scalar_payload = Base64.urlsafe_encode64(JSON.generate('nope'), padding: false)
+
+      expect(described_class.decode("#{header}.#{array_payload}.sig")).to be_nil
+      expect(described_class.decode("#{header}.#{scalar_payload}.sig")).to be_nil
+    end
+
+    # payload_segment re-pads base64 whose length is not a multiple of 4. A payload
+    # that IS already a multiple of 4 must skip the padding branch and still decode.
+    # {"sub":"aa"} encodes to a 16-char segment (already 4-aligned).
+    it 'decodes a payload whose base64 length needs no re-padding' do
+      segment = Base64.urlsafe_encode64(JSON.generate('sub' => 'aa'), padding: false)
+      expect(segment.length % 4).to eq(0)
+
+      header = Base64.urlsafe_encode64('{"alg":"RS256"}', padding: false)
+      expect(described_class.decode("#{header}.#{segment}.sig")).to include('sub' => 'aa')
+    end
+  end
+
+  describe '.bearer_token' do
+    it 'is nil for a non-Bearer Authorization scheme' do
+      expect(described_class.bearer_token(event(headers: { 'Authorization' => 'Basic dXNlcjpwdw==' }))).to be_nil
+    end
+
+    it 'is nil for a bare token with no scheme' do
+      expect(described_class.bearer_token(event(headers: { 'Authorization' => 'sometoken' }))).to be_nil
+    end
+
+    # "Bearer " with nothing after it is not a credential.
+    it 'is nil when the Bearer value is empty' do
+      expect(described_class.bearer_token(event(headers: { 'Authorization' => 'Bearer ' }))).to be_nil
+      expect(described_class.bearer_token(event(headers: { 'Authorization' => 'Bearer    ' }))).to be_nil
+    end
+
+    it 'is nil when there is no Authorization header at all' do
+      expect(described_class.bearer_token({})).to be_nil
+      expect(described_class.bearer_token(event(headers: { 'X-Other' => 'v' }))).to be_nil
+    end
+
+    it 'strips surrounding whitespace off the token' do
+      expect(described_class.bearer_token(event(headers: { 'Authorization' => 'Bearer  tok  ' }))).to eq('tok')
+    end
   end
 
   describe '.parse_groups' do
