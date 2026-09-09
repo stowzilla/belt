@@ -1,0 +1,21 @@
+# frozen_string_literal: true
+
+# <%= @user_class %> — a human who signs into this app. One row per Cognito user.
+#
+# Cognito owns authentication (passwords, MFA, the `admins` group). `cognito_authenticatable`
+# supplies everything derived from a token — the `sub` as primary key, email/name/role,
+# just-in-time provisioning, an EmailIndex GSI. Run `belt explain authentication` for the
+# full list.
+#
+# Add your own domain below: associations, per-tenant roles, whatever this app needs to
+# know about a person that Cognito doesn't.
+class <%= @user_class %> < ApplicationRecord
+  cognito_authenticatable
+
+  # has_many :memberships, foreign_key: 'cognito_sub', index: 'CognitoIndex'
+
+  # Runs whenever an identity is resolved from a token — first sight and every request
+  # after. Override to bind pending invitations, seed a workspace, and so on.
+  # def after_cognito_sync
+  # end
+end

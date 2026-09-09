@@ -69,5 +69,95 @@ RSpec.describe Belt::CLI::TablesCommand do
       # The Terraform resource label can still use underscores (that's the HCL identifier)
       expect(tf_content).to include('resource "aws_dynamodb_table" "order_items"')
     end
+
+    # cognito_authenticatable installs the GSI without an indexes() call. If the
+    # generator didn't know that, the table would ship without EmailIndex and the
+    # failure would surface as a broken email lookup in production.
+    it 'generates EmailIndex for a cognito_authenticatable model' do
+      File.write(File.join(@project_dir, 'lambda/models/user.rb'), <<~RUBY)
+        class User < ApplicationRecord
+          cognito_authenticatable
+        end
+      RUBY
+
+      described_class.new(quiet: true).run
+
+      tf_content = File.read(File.join(@project_dir, 'infrastructure/modules/app/dynamodb.tf'))
+      expect(tf_content).to include('name            = "EmailIndex"')
+      expect(tf_content).to include('hash_key        = "email"')
+    end
+
+    it 'honours a custom email index name' do
+      File.write(File.join(@project_dir, 'lambda/models/user.rb'), <<~RUBY)
+        class User < ApplicationRecord
+          cognito_authenticatable email_index: 'PeopleEmailIndex'
+        end
+      RUBY
+
+      described_class.new(quiet: true).run
+
+      tf_content = File.read(File.join(@project_dir, 'infrastructure/modules/app/dynamodb.tf'))
+      expect(tf_content).to include('name            = "PeopleEmailIndex"')
+    end
+
+    it 'omits the GSI when the model opts out' do
+      File.write(File.join(@project_dir, 'lambda/models/user.rb'), <<~RUBY)
+        class User < ApplicationRecord
+          cognito_authenticatable email_index: false
+        end
+      RUBY
+
+      described_class.new(quiet: true).run
+
+      tf_content = File.read(File.join(@project_dir, 'infrastructure/modules/app/dynamodb.tf'))
+      expect(tf_content).not_to include('EmailIndex')
+    end
+
+    it 'does not add the GSI for a commented-out declaration' do
+      File.write(File.join(@project_dir, 'lambda/models/user.rb'), <<~RUBY)
+        class User < ApplicationRecord
+          # cognito_authenticatable
+        end
+      RUBY
+
+      described_class.new(quiet: true).run
+
+      tf_content = File.read(File.join(@project_dir, 'infrastructure/modules/app/dynamodb.tf'))
+      expect(tf_content).not_to include('EmailIndex')
+    end
+
+    it 'generates a convention GSI for belongs_to' do
+      File.write(File.join(@project_dir, 'lambda/models/comment.rb'), <<~RUBY)
+        class Comment < ApplicationRecord
+          belongs_to :post
+        end
+      RUBY
+
+      described_class.new(quiet: true).run
+
+      tf_content = File.read(File.join(@project_dir, 'infrastructure/modules/app/dynamodb.tf'))
+      expect(tf_content).to include('name            = "PostIndex"')
+      expect(tf_content).to include('hash_key        = "postId"')
+    end
+
+    # `index: false` means the model covers the reverse lookup some other way, usually
+    # under a different key name. Generating the convention GSI anyway produces one on
+    # an attribute that doesn't exist.
+    it 'respects belongs_to index: false' do
+      File.write(File.join(@project_dir, 'lambda/models/comment.rb'), <<~RUBY)
+        class Comment < ApplicationRecord
+          belongs_to :post, index: false
+          belongs_to :author, foreign_key: 'author_sub', optional: true, index: false
+          indexes('PostIndex' => { partition_key: 'post_id' })
+        end
+      RUBY
+
+      described_class.new(quiet: true).run
+
+      tf_content = File.read(File.join(@project_dir, 'infrastructure/modules/app/dynamodb.tf'))
+      expect(tf_content).not_to include('AuthorIndex')
+      expect(tf_content).not_to include('"postId"')
+      expect(tf_content).to include('hash_key        = "post_id"')
+    end
   end
 end
