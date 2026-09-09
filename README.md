@@ -256,6 +256,44 @@ end
 - **Scope in nested context**: Group routes with shared path prefix, controller, tables, or auth
 - **Singular `resource`**: For nested resources without an `:id` (billing, profile, etc.)
 
+## Authentication
+
+Cognito owns authentication. Belt owns the record of the human it authenticated:
+
+```ruby
+class User < ApplicationRecord
+  cognito_authenticatable
+end
+```
+
+One line supplies the Cognito `sub` as primary key, the identity attributes
+(`email`, `name`, `role`, `email_verified`, `last_seen_on`), an `EmailIndex` GSI,
+just-in-time provisioning from a token, and `#admin?` for platform staff. Your model is
+left holding only your own domain.
+
+Controllers get it for free — no `include`, no configuration:
+
+```ruby
+class ProfilesController < ApplicationController
+  before_action :authenticate_user!
+
+  def show
+    @profile = current_user
+  end
+end
+```
+
+| | |
+|---|---|
+| `current_user` | the user record, or nil. Memoized per request |
+| `user_signed_in?` | is there a Cognito identity on this request? |
+| `authenticate_user!` | `before_action` guard → 401 |
+| `cognito_admin?` | does the token carry a staff Cognito group? |
+
+`belt generate auth` creates the user pool *and* scaffolds the model and its table.
+Full details — configuration, the `after_cognito_sync` hook, platform staff, and how
+both token shapes are handled — in `belt explain authentication`.
+
 ## BeltController Features
 
 ### Callbacks

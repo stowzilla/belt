@@ -4,12 +4,14 @@ require 'fileutils'
 require 'erb'
 require_relative 'app_detection'
 require_relative 'frontend_registry'
+require_relative 'tables_command'
 
 module Belt
   module CLI
     class AuthCommand
       TEMPLATE_DIR = File.expand_path('../../templates/generate/auth', __dir__)
       MODULE_DIR = 'infrastructure/modules/app'
+      MODELS_DIR = 'lambda/models'
 
       include AppDetection
 
@@ -59,6 +61,8 @@ module Belt
           What this generates:
             infrastructure/modules/app/cognito.tf          User pool + client resources
             infrastructure/modules/app/cognito_outputs.tf  Pool ID, ARN, and client ID outputs
+            lambda/models/user.rb                          User model (cognito_authenticatable)
+            infrastructure/modules/app/dynamodb.tf         users table + EmailIndex (regenerated)
 
           With --signup (when frontend/ exists):
             frontend/src/lib/auth.js                       Auth module (signIn, signUp, etc.)
@@ -95,6 +99,8 @@ module Belt
             2. Add auth: :cognito to your routes namespace
             3. Run `belt deploy` to create the user pool
             4. Create your account (admin-only): aws cognito-idp admin-create-user ...
+
+          Then `current_user` works in every controller — see `belt explain authentication`.
         HELP
       end
 
@@ -125,6 +131,7 @@ module Belt
         write_cognito_variables_tf if @ses_email
         patch_main_tf
         patch_env_outputs
+        write_user_model
         generate_frontend_auth if frontend?
 
         puts "\n✓ Auth generated!"
@@ -218,6 +225,26 @@ module Belt
       end
 
       private
+
+      # Scaffold the app's user model. `cognito_authenticatable` is the whole point:
+      # the identity plumbing lives in the gem, so this file exists only to hold the
+      # app's own domain. Never overwritten — someone's associations are in there.
+      def write_user_model
+        return unless Dir.exist?(MODELS_DIR)
+
+        dest = File.join(MODELS_DIR, 'user.rb')
+        if File.exist?(dest)
+          puts "  skip    #{dest} (already exists)"
+          return
+        end
+
+        @user_class = 'User'
+        write_template('user_model.rb.erb', dest)
+        puts "  create  #{dest}"
+
+        # Regenerate dynamodb.tf so the users table (and its EmailIndex) exists.
+        TablesCommand.sync_all_environments
+      end
 
       def build_pool_metadata
         if @pool_names.length == 1 && @pool_names.first == 'main'
