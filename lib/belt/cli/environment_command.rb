@@ -98,13 +98,8 @@ module Belt
           # Nested envs use an `api-<env>` prefix (not `api.<env>`) so the API
           # host stays a single level under the parent's *.<parent>.<domain>
           # wildcard cert. See lib/templates/module/dns.tf.erb (api_domain).
-          if @domain
-            puts "Frontend will be: https://#{@env_name}.#{@parent_environment}.#{@domain}"
-            puts "API will be: https://api-#{@env_name}.#{@parent_environment}.#{@domain}"
-          else
-            puts "Frontend will be: https://#{@env_name}.#{@parent_environment}.#{@domain}"
-            puts "API will be: https://api-#{@env_name}.#{@parent_environment}.#{@domain}"
-          end
+          puts "Frontend will be: https://#{@env_name}.#{@parent_environment}.#{@domain}"
+          puts "API will be: https://api-#{@env_name}.#{@parent_environment}.#{@domain}"
           puts "\nDeploy with:"
           puts "  belt deploy #{@env_name}"
           puts "\nNo DNS delegation needed — the parent environment handles DNS."

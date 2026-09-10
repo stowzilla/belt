@@ -1,6 +1,36 @@
 # Changelog
 
-## 0.3.45
+## 0.4.1
+
+### Feature
+
+- **`belt dns doctor`**: New diagnostic command that checks DNS health across all
+  environments. Shows zone status, NS delegation, ACM certificate state, and
+  API Gateway custom domain configuration. Use `--env prod` to check a specific
+  environment only.
+
+  ```bash
+  belt dns doctor
+  belt dns doctor --env prod
+  ```
+
+- **`belt dns sync-validation`**: New command to sync ACM validation CNAMEs from
+  an environment's zone to the root zone. Needed for apex domains (e.g., prod →
+  `example.com`) where the root zone is authoritative for the apex domain.
+
+  ```bash
+  belt dns sync-validation prod
+  ```
+
+- **Auto-sync ACM validation for apex environments**: `belt deploy prod` now
+  automatically syncs ACM validation CNAMEs to the root zone when deploying
+  environments that use the apex domain. No manual intervention needed — the
+  "prod is special" logic is handled by Belt internally.
+
+  This fixes the issue where prod ACM certificates would timeout waiting for
+  validation because the validation CNAMEs were created in the prod zone, but
+  ACM validates against the authoritative zone (the root zone managed by
+  `infrastructure/dns`).
 
 ### Bug Fix
 
@@ -11,6 +41,64 @@
   the host under the parent's `*.<parent>.<domain>` wildcard cert). The message
   now matches the real deployed domain. Infrastructure was already correct —
   only the CLI output was wrong.
+
+## 0.4.0
+
+### New Features
+
+- **`cognito_authenticatable` — Cognito identity in one line.** Everything an app used
+  to hand-write to turn a JWT into a user record now lives in the gem, Devise-style:
+
+  ```ruby
+  class User < ApplicationRecord
+    cognito_authenticatable
+  end
+  ```
+
+  That supplies the Cognito `sub` as primary key, the identity attributes
+  (`email`, `name`, `role`, `email_verified`, `last_seen_on`), an `EmailIndex` GSI,
+  `.sync_from_claims!` / `.for_sub` / `.for_email`, and `#admin?`. The app's model is
+  left holding only the app's own domain.
+
+  Controllers get `current_user`, `user_signed_in?`, `authenticate_user!`, and
+  `cognito_admin?` with no `include` and no configuration — `BeltController::Base`
+  mixes them in. Both token shapes are handled (a pre-verified API Gateway authorizer
+  claim set, or a raw `Authorization: Bearer` ID token the Lambda decodes and checks
+  for expiry, issuer, and `token_use`).
+
+  Rows are provisioned just-in-time on the first authenticated request and refreshed
+  only on drift, so an unchanged user costs one `GetItem` and no write. Hook your own
+  behaviour off that moment with `#after_cognito_sync`.
+
+  Options: `roles:`, `default_role:`, `email_index:`. Configure with
+  `Belt.configure { |c| c.authentication.user_class = 'Account' }`. Full docs:
+  `belt explain authentication`.
+
+- **`belt generate auth` scaffolds the user model.** It writes `lambda/models/user.rb`
+  (never overwriting an existing one) and regenerates `dynamodb.tf` so the `users`
+  table and its `EmailIndex` exist. `belt setup tables` now recognizes the macro, so a
+  model that declares `cognito_authenticatable` gets its GSI without an explicit
+  `indexes()` call.
+
+### Bug Fix
+
+- **`belt setup tables` respected `belongs_to ..., index: false`.** It didn't. ActiveItem
+  skips registering an association index when told to, but the table generator created
+  the convention GSI anyway — on a `fooId` attribute the model never writes, so the
+  index silently indexed nothing while costing storage. It now skips those declarations.
+  Regenerating `dynamodb.tf` in a project that uses `index: false` will therefore drop
+  the dead GSIs; that's a real (if harmless) Terraform diff, so look before you apply.
+
+### Internal
+
+- `Belt::AuthenticationError` and friends moved to `lib/belt/errors.rb` so they can be
+  required without pulling in the whole gem. No API change.
+
+### Upgrading
+
+- Upgrade is additive — nothing breaks by bumping to 0.4.0. To adopt
+  `cognito_authenticatable` in an existing app (and for the one `index: false` diff to
+  watch even if you don't), see [UPGRADING.md](UPGRADING.md).
 
 ## 0.3.43
 

@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    belt (0.3.45)
+    belt (0.4.1)
       activeitem (~> 0.0, >= 0.0.13)
       activesupport (>= 7.0)
       irb (>= 1.0)
