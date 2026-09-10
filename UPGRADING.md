@@ -33,12 +33,21 @@ pull the branch — no version pin to change.
 on a `fooId` attribute your model never writes — an empty index costing storage.
 
 If any model uses `index: false`, regenerating `dynamodb.tf` will **drop those
-dead GSIs**. That's a real (if harmless) Terraform diff. Look before you apply:
+dead GSIs**. That's a real Terraform diff. Look before you apply:
 
 ```bash
 belt setup tables
 terraform plan   # confirm the only removals are empty convention indexes
 ```
+
+> **`belt setup tables` overwrites `dynamodb.tf` wholesale.** It regenerates the
+> file from your models every run, so a table or GSI you added to `dynamodb.tf`
+> **by hand** — not declared on a model — is invisible to the generator and gets
+> dropped. Dropping a live, populated GSI is not harmless: queries against it
+> start failing. As of this release the generator detects hand-added tables/GSIs
+> that would disappear and refuses (or, interactively, prompts) before
+> overwriting; pass `--force` to overwrite anyway. Still, always `terraform plan`
+> and read the removals before you apply.
 
 Nothing to do if you don't use `index: false`.
 

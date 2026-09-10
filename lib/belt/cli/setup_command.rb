@@ -40,7 +40,7 @@ module Belt
 
           Subcommands:
             state       Set up S3 bucket for Terraform state
-            tables      Generate DynamoDB table definitions from contracts.rb
+            tables      Generate DynamoDB table definitions from lambda/models/*.rb
             frontend    Generate S3 + CloudFront infrastructure for frontend hosting
 
           Options for state:
