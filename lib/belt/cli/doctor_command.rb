@@ -262,17 +262,31 @@ module Belt
         end
       end
 
+      # Which GSIs a model's belongs_to declarations require. This MUST agree with the
+      # generator (TablesCommand#extract_belongs_to_indexes) or the two halves of the gem
+      # disagree: the generator refuses to create an index the preflight then demands,
+      # and `belt setup tables` → `belt deploy` loops forever.
+      #
+      # `index: false` opts out — the reverse lookup is covered some other way (the
+      # model's own indexes() entry under a different key, or no reverse lookup at all).
+      # The generator skips those, so the preflight must too.
+      #
+      # An explicit `index: 'Name'` overrides the convention name; we honour it so the
+      # check matches the GSI the model actually declared.
       def extract_expected_indexes(content)
         indexes = []
-        content.lines.reject { |line| line.strip.start_with?('#') }.join
-               .scan(/belongs_to\s+:(\w+)/) do |match|
-          association_name = match[0]
-          indexes << {
-            name: "#{Belt::Inflector.classify(association_name)}Index",
-            association: association_name
-          }
+        uncommented(content).scan(/belongs_to\s+:(\w+)([^\n]*)/) do |association_name, options|
+          next if options.match?(/index:\s*false/)
+
+          explicit = options.match(/index:\s*['"]([^'"]+)['"]/)
+          name = explicit ? explicit[1] : "#{Belt::Inflector.classify(association_name)}Index"
+          indexes << { name: name, association: association_name }
         end
         indexes
+      end
+
+      def uncommented(content)
+        content.lines.reject { |line| line.strip.start_with?('#') }.join
       end
 
       def check_cognito_auth

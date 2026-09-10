@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.3
+
+### Bug Fix
+
+- **`belt deploy` preflight no longer false-fails on `belongs_to ..., index: false`.**
+  The deploy preflight added in 0.4.2 demanded a `{Assoc}Index` GSI for *every*
+  `belongs_to`, ignoring `index: false` and `index: 'CustomName'` — the exact
+  opt-outs the table generator honours. The two halves of the gem disagreed: a
+  model that opts out (its reverse lookup is covered by another GSI, or it doesn't
+  need one) got a passing `belt setup tables` and a failing `belt deploy`, with no
+  way out but `--force`-ing the generator or pinning back to 0.4.1. The preflight's
+  index extraction now mirrors the generator exactly: it skips `index: false` and
+  honours an explicit `index: 'Name'`. `foreign_key:`-remapped associations
+  (`belongs_to :user, foreign_key: 'cognito_sub', index: false`) no longer demand a
+  phantom `UserIndex` either.
+
 ## Unreleased
 
 ### Bug Fix
