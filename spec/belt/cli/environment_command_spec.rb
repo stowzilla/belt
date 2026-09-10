@@ -120,7 +120,7 @@ RSpec.describe Belt::CLI::EnvironmentCommand do
 
       it 'shows correct domain in output message' do
         expect { described_class.run(%w[fizzy123 dev]) }
-          .to output(/api\.fizzy123\.dev\.featureparity\.dev/).to_stdout
+          .to output(/api-fizzy123\.dev\.featureparity\.dev/).to_stdout
       end
     end
 
