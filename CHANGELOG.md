@@ -18,6 +18,21 @@
 
 ## Unreleased
 
+### Feature
+
+- **`belt generate auth --session-cookie`**: an opt-in browser sign-in that keeps
+  every bearer credential off the client. Where the default `belt g auth` reads a
+  Cognito ID token off the request (bearer header or gateway authorizer), the
+  session-cookie flow uses the **authorization code flow with PKCE**, holds the
+  **refresh token server-side**, and hands the browser only an **opaque session id in
+  a `Secure` `HttpOnly` `SameSite` cookie** — no token in `localStorage`, none in a
+  URL. Sign-out deletes the session and bumps a `credential_revision`, fencing every
+  other live session on its next read. The flag generates a public-client Hosted-UI
+  `cognito.tf`, a `Session` model + `SessionStore` adapter, and a `SessionsController`
+  with `sign_in`/`callback`/`sign_out`; the runtime lives in the gem under
+  `Belt::Authentication::SessionCookie` (`Flow`, `Pkce`, `Cookie`, `MemoryStore`).
+  See `belt explain authentication`.
+
 ### Bug Fix
 
 - **`belt setup tables` no longer silently clobbers hand-added tables/GSIs.**

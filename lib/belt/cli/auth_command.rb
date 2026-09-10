@@ -24,10 +24,12 @@ module Belt
         force = args.delete('--force') || args.delete('-f')
         signup = args.delete('--signup')
         ses_email = args.delete('--ses-email')
+        session_cookie = args.delete('--session-cookie')
         frontend_name = FrontendRegistry.extract_flag!(args, '--frontend')
         pools = parse_pools(args)
 
-        new(pools: pools, force: force, signup: signup, ses_email: ses_email, frontend_name: frontend_name).generate
+        new(pools: pools, force: force, signup: signup, ses_email: ses_email,
+            session_cookie: session_cookie, frontend_name: frontend_name).generate
       end
 
       def self.destroy(_args)
@@ -42,6 +44,8 @@ module Belt
 
           Options:
             --signup           Allow public user registration (generates frontend views)
+            --session-cookie   PKCE + server-side refresh + HttpOnly session cookie
+                               (no token in browser storage)
             --ses-email        Use Amazon SES for emails (custom from address/domain)
             --frontend NAME    Target frontend when several exist
             --force, -f        Overwrite existing cognito.tf (skip collision check)
@@ -53,6 +57,7 @@ module Belt
           Examples:
             belt g auth                        # Admin-only, single pool
             belt g auth --signup               # Public signup with frontend views
+            belt g auth --session-cookie       # Cookie session, refresh held server-side
             belt g auth --ses-email            # Custom email domain via SES
             belt g auth web                    # Named pool: "web"
             belt g auth web mobile             # Two pools
@@ -111,12 +116,13 @@ module Belt
         names.map(&:downcase).map { |n| n.gsub(/[^a-z0-9_]/, '_') }
       end
 
-      def initialize(pools:, force: false, signup: false, ses_email: false, frontend_name: nil,
-                     skip_frontend_resolve: false)
+      def initialize(pools:, force: false, signup: false, ses_email: false, session_cookie: false,
+                     frontend_name: nil, skip_frontend_resolve: false)
         @pool_names = pools
         @force = force
         @signup = signup
         @ses_email = ses_email
+        @session_cookie = session_cookie
         @app_name = detect_app_name
         @pools = build_pool_metadata
         @frontend = skip_frontend_resolve ? nil : resolve_frontend(frontend_name)
@@ -129,9 +135,11 @@ module Belt
         write_cognito_tf
         write_cognito_outputs_tf
         write_cognito_variables_tf if @ses_email
+        write_session_cookie_variables_tf if @session_cookie
         patch_main_tf
         patch_env_outputs
         write_user_model
+        write_session_cookie_app_files if @session_cookie
         generate_frontend_auth if frontend?
 
         puts "\n✓ Auth generated!"
@@ -160,6 +168,20 @@ module Belt
         puts '       end'
         puts ''
         step += 1
+
+        if @session_cookie
+          puts "  #{step}. Wire the session-cookie endpoints in config/routes.rb:"
+          puts ''
+          puts "       get  'auth/sign_in',  controller: :sessions, action: :sign_in"
+          puts "       get  'auth/callback', controller: :sessions, action: :callback"
+          puts "       post 'auth/sign_out', controller: :sessions, action: :sign_out"
+          puts ''
+          puts '     Then set COGNITO_HOSTED_UI_DOMAIN, COGNITO_CLIENT_ID and COGNITO_CALLBACK_URL,'
+          puts '     and implement the two hooks in SessionsController (token exchanger + subject).'
+          puts '     See `belt explain authentication`.'
+          puts ''
+          step += 1
+        end
 
         if frontend?
           puts "  #{step}. Wire auth into your #{@frontend.src_dir}/App.jsx:"
@@ -195,6 +217,7 @@ module Belt
         cognito_tf = File.join(MODULE_DIR, 'cognito.tf')
         cognito_outputs_tf = File.join(MODULE_DIR, 'cognito_outputs.tf')
         cognito_variables_tf = File.join(MODULE_DIR, 'cognito_variables.tf')
+        cognito_session_variables_tf = File.join(MODULE_DIR, 'cognito_session_variables.tf')
 
         if File.exist?(cognito_tf)
           FileUtils.rm(cognito_tf)
@@ -212,6 +235,12 @@ module Belt
           FileUtils.rm(cognito_variables_tf)
           removed << cognito_variables_tf
           puts "  remove  #{cognito_variables_tf}"
+        end
+
+        if File.exist?(cognito_session_variables_tf)
+          FileUtils.rm(cognito_session_variables_tf)
+          removed << cognito_session_variables_tf
+          puts "  remove  #{cognito_session_variables_tf}"
         end
 
         unpatch_main_tf
@@ -332,13 +361,62 @@ module Belt
 
       def write_cognito_tf
         dest = File.join(MODULE_DIR, 'cognito.tf')
-        write_template('cognito.tf.erb', dest)
+        template = @session_cookie ? 'cognito_session_cookie.tf.erb' : 'cognito.tf.erb'
+        write_template(template, dest)
         puts "  create  #{dest}"
       end
 
       def write_cognito_outputs_tf
         dest = File.join(MODULE_DIR, 'cognito_outputs.tf')
-        write_template('cognito_outputs.tf.erb', dest)
+        template = @session_cookie ? 'cognito_session_cookie_outputs.tf.erb' : 'cognito_outputs.tf.erb'
+        write_template(template, dest)
+        puts "  create  #{dest}"
+      end
+
+      def write_session_cookie_variables_tf
+        dest = File.join(MODULE_DIR, 'cognito_session_variables.tf')
+        write_template('cognito_session_cookie_variables.tf.erb', dest)
+        puts "  create  #{dest}"
+      end
+
+      # The session-cookie flow needs an app-owned Session model, a SessionStore adapter and
+      # a SessionsController for the sign-in / callback / sign-out endpoints. Runtime lives in
+      # the gem (Belt::Authentication::SessionCookie); these files are the app's own wiring.
+      def write_session_cookie_app_files
+        return unless Dir.exist?(MODELS_DIR)
+
+        write_app_file('session_model.rb.erb', File.join(MODELS_DIR, 'session.rb'))
+
+        lib_dir = File.join('lambda', 'lib')
+        FileUtils.mkdir_p(lib_dir)
+        write_app_file('session_store.rb.erb', File.join(lib_dir, 'session_store.rb'))
+
+        controllers_dir = detect_controllers_dir
+        if controllers_dir
+          write_app_file('sessions_controller.rb.erb', File.join(controllers_dir, 'sessions_controller.rb'))
+        end
+
+        TablesCommand.sync_all_environments
+      end
+
+      # Best-effort: drop the controller next to an existing application_controller.rb so it
+      # lands in the app's controller namespace. Falls back to lambda/controllers.
+      def detect_controllers_dir
+        found = Dir.glob('lambda/controllers/**/application_controller.rb').first
+        return File.dirname(found) if found
+
+        default = File.join('lambda', 'controllers')
+        Dir.exist?(default) ? default : nil
+      end
+
+      def write_app_file(template_name, dest)
+        if File.exist?(dest)
+          puts "  skip    #{dest} (already exists)"
+          return
+        end
+
+        @user_class = 'User'
+        write_template(template_name, dest)
         puts "  create  #{dest}"
       end
 

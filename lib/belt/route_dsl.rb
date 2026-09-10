@@ -51,7 +51,7 @@ module Belt
   end
 
   class NestedResourceBuilder
-    def initialize(gateway, prefix, collection_prefix, inherited_tables: [], inherited_auth: nil, # rubocop:disable Metrics/ParameterLists
+    def initialize(gateway, prefix, collection_prefix, inherited_tables: [], inherited_auth: nil,
                    inherited_controller: nil, inherited_lambda: nil, scope_module: nil)
       @gateway = gateway
       @prefix = prefix
