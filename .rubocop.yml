@@ -31,6 +31,7 @@ Metrics/ClassLength:
     - 'lib/belt/cli/**/*'
 
 Metrics/ParameterLists:
+  CountKeywordArgs: false
   Exclude:
     - 'lib/belt/cli/**/*'
 
@@ -38,6 +39,7 @@ Metrics/ModuleLength:
   Exclude:
     - 'lib/belt/cli.rb'
     - 'lib/belt/cli/**/*'
+    - 'lib/belt/authentication/session_cookie/flow.rb'
 
 Metrics/BlockLength:
   Exclude:

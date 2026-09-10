@@ -7,6 +7,7 @@ require_relative 'authentication/claims'
 require_relative 'authentication/cognito_authenticatable'
 require_relative 'authentication/model_macro'
 require_relative 'authentication/controller'
+require_relative 'authentication/session_cookie'
 module Belt
   # Cognito-backed identity for Belt apps.
   #

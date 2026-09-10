@@ -179,8 +179,65 @@ Anything that isn't a Cognito ID token — including your own API key scheme sha
 same header — reads as "no Cognito identity" rather than an error, so
 `current_user` is simply nil.
 
+## Session-cookie sign-in (PKCE, no token in the browser)
+
+The default flow above expects a bearer ID token on the request. That is right for
+machine callers and gateway-authorized routes, but a browser SPA holding a Cognito
+token — in `localStorage`, in a URL — is exactly the exposure a lot of security
+requirements are written to forbid.
+
+`belt generate auth --session-cookie` produces the alternative: **authorization code
+flow with PKCE**, the **refresh token held server-side**, and only an **opaque session
+id in a `Secure` `HttpOnly` `SameSite` cookie** reaching the client. No bearer
+credential is ever in a URL or in browser storage.
+
+What it generates on top of the usual `belt g auth` output:
+
+| File | Role |
+|---|---|
+| `infrastructure/modules/app/cognito.tf` | Public client (no secret), Hosted-UI domain, `allowed_oauth_flows = ["code"]`, callback/logout URLs |
+| `infrastructure/modules/app/cognito_session_variables.tf` | `cognito_callback_urls`, `cognito_logout_urls` |
+| `lambda/models/session.rb` | Server-side session record — holds the refresh token |
+| `lambda/lib/session_store.rb` | Persistence adapter for the flow |
+| `lambda/controllers/…/sessions_controller.rb` | `sign_in` / `callback` / `sign_out` endpoints |
+
+The runtime lives in the gem, under `Belt::Authentication::SessionCookie`:
+
+```ruby
+Flow = Belt::Authentication::SessionCookie::Flow
+
+# GET /auth/sign_in — redirect to the Hosted UI, set PKCE + state cookies
+begun = Flow.begin(hosted_ui_domain:, client_id:, redirect_uri:)
+redirect_to begun[:authorize_url], cookies: begun[:cookies]
+
+# GET /auth/callback — exchange the code, establish a server-side session
+result = Flow.complete(code:, returned_state:, cookie_state:, code_verifier:,
+                       subject:, token_exchanger:, store:)
+redirect_to '/', cookies: result[:browser_cookies]
+# result[:server_side][:refresh_token] stays on the server — never a cookie
+
+# POST /auth/sign_out — delete this session AND fence every other one
+Flow.revoke(session_id:, store:)
+```
+
+The five guarantees are enforced in `Flow`, not left to the caller:
+
+1. **PKCE** — the authorize URL carries the S256 *challenge*; the exchange carries the
+   *verifier* (an `HttpOnly` cookie). A stolen code can't be exchanged without it.
+2. **Refresh server-side** — returned only under `:server_side`, physically apart from
+   `:browser_cookies`.
+3. **Secure/HttpOnly/SameSite** — on every cookie the flow emits.
+4. **No bearer in a URL** — `Flow.assert_no_bearer_in_url!` guards every URL built.
+5. **Expiry + revocation** — a session is bound to the subject's `credential_revision`;
+   `authenticate` refuses an expired or fenced session, and `revoke` bumps the revision
+   so signing out one place fences everywhere on the next read.
+
+The `store` seam (see `SessionCookie::MemoryStore` for the contract) and the
+`token_exchanger` seam keep the flow free of AWS and network in tests.
+
 ## See also
 
 - `belt explain models` — ActiveItem
 - `belt explain controllers` — `before_action`, response helpers
 - `belt generate auth` — create the Cognito user pool
+- `belt generate auth --session-cookie` — PKCE + server-side refresh + cookie session
