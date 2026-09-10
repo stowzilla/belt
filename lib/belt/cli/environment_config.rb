@@ -41,9 +41,21 @@ module Belt
 
       # Apply the configured aws_profile and env vars to the current process.
       # Call this before running terraform, aws cli, etc.
+      #
+      # Note: If AWS credentials are already available via environment variables
+      # (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN) — as in GitHub
+      # Actions OIDC — we skip setting AWS_PROFILE to avoid overriding valid credentials.
       def apply!
-        ENV['AWS_PROFILE'] = @aws_profile if aws_profile?
+        ENV['AWS_PROFILE'] = @aws_profile if aws_profile? && !credentials_in_env?
         @env_vars.each { |key, value| ENV[key] = value }
+      end
+
+      # Returns true if AWS credentials are available via environment variables.
+      # This happens in CI environments (GitHub Actions OIDC, CodeBuild, etc.)
+      def credentials_in_env?
+        key = ENV.fetch('AWS_ACCESS_KEY_ID', nil)
+        secret = ENV.fetch('AWS_SECRET_ACCESS_KEY', nil)
+        !key.to_s.empty? && !secret.to_s.empty?
       end
 
       class ConfigEvaluator

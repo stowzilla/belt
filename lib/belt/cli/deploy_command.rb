@@ -15,6 +15,7 @@ require_relative 'nested_environment'
 require_relative 'cognito_sharer'
 require_relative 'dynamo_copier'
 require_relative 'dns_command'
+require_relative 'apex_dns_sync'
 
 module Belt
   module CLI
@@ -173,6 +174,9 @@ module Belt
 
           run_apply
         end
+
+        # Sync apex DNS records to root zone (if this is a prod/apex environment)
+        run_apex_dns_sync
 
         # Sync ACM validation CNAMEs for apex domains (e.g., prod)
         # This handles the case where prod uses the apex domain (example.com)
@@ -758,6 +762,14 @@ module Belt
 
       def cleanup_plan
         FileUtils.rm_f('tfplan')
+      end
+
+      def run_apex_dns_sync
+        sync = ApexDnsSync.new(@env, infra_dir: @infra_dir)
+        return unless sync.needs_sync?
+
+        puts ''
+        sync.run
       end
 
       def run_nested_env_hooks

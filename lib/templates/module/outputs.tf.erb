@@ -22,3 +22,31 @@ output "name_servers" {
   description = "NS records to configure at your registrar (standalone envs only)"
   value       = local.dns_enabled && !local.is_nested ? aws_route53_zone.app[0].name_servers : []
 }
+
+# --- Apex DNS sync outputs ---
+# These enable `belt deploy prod` to sync records to the root zone.
+
+output "cloudfront_domain_name" {
+  description = "CloudFront distribution domain name (for DNS alias)"
+  value       = aws_cloudfront_distribution.frontend.domain_name
+}
+
+output "cloudfront_hosted_zone_id" {
+  description = "CloudFront hosted zone ID (always Z2FDTNDATAQYW2)"
+  value       = aws_cloudfront_distribution.frontend.hosted_zone_id
+}
+
+output "api_gateway_domain_name" {
+  description = "API Gateway custom domain regional domain name"
+  value       = local.dns_enabled ? aws_api_gateway_domain_name.api[0].regional_domain_name : ""
+}
+
+output "api_gateway_hosted_zone_id" {
+  description = "API Gateway custom domain hosted zone ID"
+  value       = local.dns_enabled ? aws_api_gateway_domain_name.api[0].regional_zone_id : ""
+}
+
+output "is_apex_environment" {
+  description = "True if this is an apex (prod) environment using the bare domain"
+  value       = local.dns_enabled && !local.is_nested && var.environment == "prod"
+}

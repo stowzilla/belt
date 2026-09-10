@@ -84,6 +84,9 @@ module Belt
         # Extract indexes() declaration
         indexes = extract_indexes(content)
 
+        # cognito_authenticatable installs a GSI without an indexes() call
+        indexes += extract_cognito_indexes(content)
+
         # Extract belongs_to associations and generate convention indexes
         indexes += extract_belongs_to_indexes(content)
 
@@ -115,15 +118,33 @@ module Belt
         indexes
       end
 
+      # `cognito_authenticatable` installs an EmailIndex GSI without the model ever
+      # calling indexes() — see Belt::Authentication::CognitoAuthenticatable. The
+      # generator has to know that, or the table would be created without the GSI and
+      # the first email lookup would fail in production instead of here.
+      def extract_cognito_indexes(content)
+        declaration = uncommented(content).match(/^\s*cognito_authenticatable\b(.*)$/)
+        return [] unless declaration
+
+        options = declaration[1].to_s
+        return [] if options.match?(/email_index:\s*false/)
+
+        name = options.match(/email_index:\s*['"]([^'"]+)['"]/)
+        [{ name: name ? name[1] : 'EmailIndex', partition_key: 'email', sort_key: nil }]
+      end
+
       # Extract belongs_to declarations and generate convention-based GSI indexes.
       # belongs_to :conversation → ConversationIndex with partition_key: 'conversationId'
+      #
+      # `index: false` opts out — the model is saying the reverse lookup is covered some
+      # other way (its own indexes() entry, usually, under a different key name).
+      # Generating one anyway produces a GSI on an attribute that doesn't exist.
       def extract_belongs_to_indexes(content)
         indexes = []
 
-        # Skip commented-out belongs_to lines
-        content.lines.reject { |line| line.strip.start_with?('#') }.join
-               .scan(/belongs_to\s+:(\w+)/) do |match|
-          association_name = match[0]
+        uncommented(content).scan(/belongs_to\s+:(\w+)([^\n]*)/) do |association_name, options|
+          next if options.match?(/index:\s*false/)
+
           index_name = "#{Belt::Inflector.classify(association_name)}Index"
           partition_key = "#{association_name}Id"
 
@@ -131,6 +152,10 @@ module Belt
         end
 
         indexes
+      end
+
+      def uncommented(content)
+        content.lines.reject { |line| line.strip.start_with?('#') }.join
       end
 
       def generate_dynamodb_tf(models)

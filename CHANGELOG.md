@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.41
+## 0.4.1
 
 ### Feature
 
@@ -31,6 +31,150 @@
   validation because the validation CNAMEs were created in the prod zone, but
   ACM validates against the authoritative zone (the root zone managed by
   `infrastructure/dns`).
+
+## 0.4.0
+
+### New Features
+
+- **`cognito_authenticatable` — Cognito identity in one line.** Everything an app used
+  to hand-write to turn a JWT into a user record now lives in the gem, Devise-style:
+
+  ```ruby
+  class User < ApplicationRecord
+    cognito_authenticatable
+  end
+  ```
+
+  That supplies the Cognito `sub` as primary key, the identity attributes
+  (`email`, `name`, `role`, `email_verified`, `last_seen_on`), an `EmailIndex` GSI,
+  `.sync_from_claims!` / `.for_sub` / `.for_email`, and `#admin?`. The app's model is
+  left holding only the app's own domain.
+
+  Controllers get `current_user`, `user_signed_in?`, `authenticate_user!`, and
+  `cognito_admin?` with no `include` and no configuration — `BeltController::Base`
+  mixes them in. Both token shapes are handled (a pre-verified API Gateway authorizer
+  claim set, or a raw `Authorization: Bearer` ID token the Lambda decodes and checks
+  for expiry, issuer, and `token_use`).
+
+  Rows are provisioned just-in-time on the first authenticated request and refreshed
+  only on drift, so an unchanged user costs one `GetItem` and no write. Hook your own
+  behaviour off that moment with `#after_cognito_sync`.
+
+  Options: `roles:`, `default_role:`, `email_index:`. Configure with
+  `Belt.configure { |c| c.authentication.user_class = 'Account' }`. Full docs:
+  `belt explain authentication`.
+
+- **`belt generate auth` scaffolds the user model.** It writes `lambda/models/user.rb`
+  (never overwriting an existing one) and regenerates `dynamodb.tf` so the `users`
+  table and its `EmailIndex` exist. `belt setup tables` now recognizes the macro, so a
+  model that declares `cognito_authenticatable` gets its GSI without an explicit
+  `indexes()` call.
+
+### Bug Fix
+
+- **`belt setup tables` respected `belongs_to ..., index: false`.** It didn't. ActiveItem
+  skips registering an association index when told to, but the table generator created
+  the convention GSI anyway — on a `fooId` attribute the model never writes, so the
+  index silently indexed nothing while costing storage. It now skips those declarations.
+  Regenerating `dynamodb.tf` in a project that uses `index: false` will therefore drop
+  the dead GSIs; that's a real (if harmless) Terraform diff, so look before you apply.
+
+### Internal
+
+- `Belt::AuthenticationError` and friends moved to `lib/belt/errors.rb` so they can be
+  required without pulling in the whole gem. No API change.
+
+### Upgrading
+
+- Upgrade is additive — nothing breaks by bumping to 0.4.0. To adopt
+  `cognito_authenticatable` in an existing app (and for the one `index: false` diff to
+  watch even if you don't), see [UPGRADING.md](UPGRADING.md).
+
+## 0.3.43
+
+### Bug Fix
+
+- **Fix nested resource member parameter conflicts**: Extends the fix from 0.3.41
+  to also cover deeply nested resources and custom member actions. Previously,
+  resources nested inside other nested resources (e.g., `epics` inside `projects`
+  with a block) still used `{id}` for member routes while custom member actions
+  (like `post :test, on: :member`) used `{param_name}`.
+
+  This fixes the error for routes like:
+  ```
+  /projects/{project_id}/webhooks/{id}           # show/update/destroy
+  /projects/{project_id}/webhooks/{webhook_id}/test  # custom member action
+  ```
+
+  Now both use consistent parameter names when the resource has a block:
+  ```
+  /projects/{project_id}/webhooks/{webhook_id}
+  /projects/{project_id}/webhooks/{webhook_id}/test
+  ```
+
+## 0.3.42
+
+### New Features
+
+- **Auto-sync apex DNS records**: When deploying to a production/apex environment,
+  `belt deploy` now automatically syncs A alias records (apex, www, api) to the
+  root zone in your shared DNS account. No more manual DNS steps for prod deploys.
+
+- **`belt dns doctor`**: New diagnostic command showing DNS health across all
+  environments — zone status, NS delegation, ACM certificates, and resolution tests.
+
+## 0.3.41
+
+### Bug Fix
+
+- **Fix API Gateway sibling path parameter conflict**: When a resource has nested
+  resources (a block), member routes (show, update, destroy) now use `{param_name}`
+  (e.g., `{project_id}`) instead of `{id}` to match the nested routes. This prevents
+  API Gateway from rejecting routes due to sibling path segments having different
+  parameter names.
+
+  Without nested resources (no block):
+  ```
+  GET  /posts/{id}
+  PUT  /posts/{id}
+  DELETE /posts/{id}
+  ```
+
+  With nested resources:
+  ```
+  GET  /projects/{project_id}
+  PUT  /projects/{project_id}
+  DELETE /projects/{project_id}
+  GET  /projects/{project_id}/epics
+  GET  /projects/{project_id}/epics/{id}
+  ```
+
+  This fixes the error: "Unable to create resource at path '...': A sibling ({id})
+  of this resource already has a variable path part".
+
+## 0.3.40
+
+### Breaking Change
+
+- **Rails-style `{id}` for member routes**: Member routes (show, update, destroy)
+  now use `{id}` instead of `{singular_id}`. This matches Rails conventions where
+  the resource being operated on uses `:id`, and only parent resources use prefixed
+  names like `:project_id`.
+
+  Before:
+  ```
+  GET  /projects/{project_id}
+  GET  /projects/{project_id}/epics/{epic_id}
+  ```
+
+  After:
+  ```
+  GET  /projects/{id}
+  GET  /projects/{project_id}/epics/{id}
+  ```
+
+  Parent resources in nested routes still use `{singular_id}` (e.g., `{project_id}`,
+  `{epic_id}` when they are parents of nested resources).
 
 ## 0.3.39
 
