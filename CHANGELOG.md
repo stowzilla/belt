@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.4.1
+
+### Feature
+
+- **`belt dns doctor`**: New diagnostic command that checks DNS health across all
+  environments. Shows zone status, NS delegation, ACM certificate state, and
+  API Gateway custom domain configuration. Use `--env prod` to check a specific
+  environment only.
+
+  ```bash
+  belt dns doctor
+  belt dns doctor --env prod
+  ```
+
+- **`belt dns sync-validation`**: New command to sync ACM validation CNAMEs from
+  an environment's zone to the root zone. Needed for apex domains (e.g., prod →
+  `example.com`) where the root zone is authoritative for the apex domain.
+
+  ```bash
+  belt dns sync-validation prod
+  ```
+
+- **Auto-sync ACM validation for apex environments**: `belt deploy prod` now
+  automatically syncs ACM validation CNAMEs to the root zone when deploying
+  environments that use the apex domain. No manual intervention needed — the
+  "prod is special" logic is handled by Belt internally.
+
+  This fixes the issue where prod ACM certificates would timeout waiting for
+  validation because the validation CNAMEs were created in the prod zone, but
+  ACM validates against the authoritative zone (the root zone managed by
+  `infrastructure/dns`).
+
 ## 0.4.0
 
 ### New Features
