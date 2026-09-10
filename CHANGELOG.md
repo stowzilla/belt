@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.35
+## Unreleased
 
 ### Bug Fix
 
@@ -10,6 +10,310 @@
   and apply its configured `aws_profile` and environment variables. Previously, running `belt deploy frontend <env>`
   directly would query Terraform outputs without the environment's AWS profile, causing a 403 against remote S3
   state backends and aborting with `Error: Could not determine S3 bucket. Run belt apply <env> first.`
+
+## 0.4.1
+
+### Feature
+
+- **`belt dns doctor`**: New diagnostic command that checks DNS health across all
+  environments. Shows zone status, NS delegation, ACM certificate state, and
+  API Gateway custom domain configuration. Use `--env prod` to check a specific
+  environment only.
+
+  ```bash
+  belt dns doctor
+  belt dns doctor --env prod
+  ```
+
+- **`belt dns sync-validation`**: New command to sync ACM validation CNAMEs from
+  an environment's zone to the root zone. Needed for apex domains (e.g., prod →
+  `example.com`) where the root zone is authoritative for the apex domain.
+
+  ```bash
+  belt dns sync-validation prod
+  ```
+
+- **Auto-sync ACM validation for apex environments**: `belt deploy prod` now
+  automatically syncs ACM validation CNAMEs to the root zone when deploying
+  environments that use the apex domain. No manual intervention needed — the
+  "prod is special" logic is handled by Belt internally.
+
+  This fixes the issue where prod ACM certificates would timeout waiting for
+  validation because the validation CNAMEs were created in the prod zone, but
+  ACM validates against the authoritative zone (the root zone managed by
+  `infrastructure/dns`).
+
+## 0.4.0
+
+### New Features
+
+- **`cognito_authenticatable` — Cognito identity in one line.** Everything an app used
+  to hand-write to turn a JWT into a user record now lives in the gem, Devise-style:
+
+  ```ruby
+  class User < ApplicationRecord
+    cognito_authenticatable
+  end
+  ```
+
+  That supplies the Cognito `sub` as primary key, the identity attributes
+  (`email`, `name`, `role`, `email_verified`, `last_seen_on`), an `EmailIndex` GSI,
+  `.sync_from_claims!` / `.for_sub` / `.for_email`, and `#admin?`. The app's model is
+  left holding only the app's own domain.
+
+  Controllers get `current_user`, `user_signed_in?`, `authenticate_user!`, and
+  `cognito_admin?` with no `include` and no configuration — `BeltController::Base`
+  mixes them in. Both token shapes are handled (a pre-verified API Gateway authorizer
+  claim set, or a raw `Authorization: Bearer` ID token the Lambda decodes and checks
+  for expiry, issuer, and `token_use`).
+
+  Rows are provisioned just-in-time on the first authenticated request and refreshed
+  only on drift, so an unchanged user costs one `GetItem` and no write. Hook your own
+  behaviour off that moment with `#after_cognito_sync`.
+
+  Options: `roles:`, `default_role:`, `email_index:`. Configure with
+  `Belt.configure { |c| c.authentication.user_class = 'Account' }`. Full docs:
+  `belt explain authentication`.
+
+- **`belt generate auth` scaffolds the user model.** It writes `lambda/models/user.rb`
+  (never overwriting an existing one) and regenerates `dynamodb.tf` so the `users`
+  table and its `EmailIndex` exist. `belt setup tables` now recognizes the macro, so a
+  model that declares `cognito_authenticatable` gets its GSI without an explicit
+  `indexes()` call.
+
+### Bug Fix
+
+- **`belt setup tables` respected `belongs_to ..., index: false`.** It didn't. ActiveItem
+  skips registering an association index when told to, but the table generator created
+  the convention GSI anyway — on a `fooId` attribute the model never writes, so the
+  index silently indexed nothing while costing storage. It now skips those declarations.
+  Regenerating `dynamodb.tf` in a project that uses `index: false` will therefore drop
+  the dead GSIs; that's a real (if harmless) Terraform diff, so look before you apply.
+
+### Internal
+
+- `Belt::AuthenticationError` and friends moved to `lib/belt/errors.rb` so they can be
+  required without pulling in the whole gem. No API change.
+
+### Upgrading
+
+- Upgrade is additive — nothing breaks by bumping to 0.4.0. To adopt
+  `cognito_authenticatable` in an existing app (and for the one `index: false` diff to
+  watch even if you don't), see [UPGRADING.md](UPGRADING.md).
+
+## 0.3.43
+
+### Bug Fix
+
+- **Fix nested resource member parameter conflicts**: Extends the fix from 0.3.41
+  to also cover deeply nested resources and custom member actions. Previously,
+  resources nested inside other nested resources (e.g., `epics` inside `projects`
+  with a block) still used `{id}` for member routes while custom member actions
+  (like `post :test, on: :member`) used `{param_name}`.
+
+  This fixes the error for routes like:
+  ```
+  /projects/{project_id}/webhooks/{id}           # show/update/destroy
+  /projects/{project_id}/webhooks/{webhook_id}/test  # custom member action
+  ```
+
+  Now both use consistent parameter names when the resource has a block:
+  ```
+  /projects/{project_id}/webhooks/{webhook_id}
+  /projects/{project_id}/webhooks/{webhook_id}/test
+  ```
+
+## 0.3.42
+
+### New Features
+
+- **Auto-sync apex DNS records**: When deploying to a production/apex environment,
+  `belt deploy` now automatically syncs A alias records (apex, www, api) to the
+  root zone in your shared DNS account. No more manual DNS steps for prod deploys.
+
+- **`belt dns doctor`**: New diagnostic command showing DNS health across all
+  environments — zone status, NS delegation, ACM certificates, and resolution tests.
+
+## 0.3.41
+
+### Bug Fix
+
+- **Fix API Gateway sibling path parameter conflict**: When a resource has nested
+  resources (a block), member routes (show, update, destroy) now use `{param_name}`
+  (e.g., `{project_id}`) instead of `{id}` to match the nested routes. This prevents
+  API Gateway from rejecting routes due to sibling path segments having different
+  parameter names.
+
+  Without nested resources (no block):
+  ```
+  GET  /posts/{id}
+  PUT  /posts/{id}
+  DELETE /posts/{id}
+  ```
+
+  With nested resources:
+  ```
+  GET  /projects/{project_id}
+  PUT  /projects/{project_id}
+  DELETE /projects/{project_id}
+  GET  /projects/{project_id}/epics
+  GET  /projects/{project_id}/epics/{id}
+  ```
+
+  This fixes the error: "Unable to create resource at path '...': A sibling ({id})
+  of this resource already has a variable path part".
+
+## 0.3.40
+
+### Breaking Change
+
+- **Rails-style `{id}` for member routes**: Member routes (show, update, destroy)
+  now use `{id}` instead of `{singular_id}`. This matches Rails conventions where
+  the resource being operated on uses `:id`, and only parent resources use prefixed
+  names like `:project_id`.
+
+  Before:
+  ```
+  GET  /projects/{project_id}
+  GET  /projects/{project_id}/epics/{epic_id}
+  ```
+
+  After:
+  ```
+  GET  /projects/{id}
+  GET  /projects/{project_id}/epics/{id}
+  ```
+
+  Parent resources in nested routes still use `{singular_id}` (e.g., `{project_id}`,
+  `{epic_id}` when they are parents of nested resources).
+
+## 0.3.39
+
+### Enhancement
+
+- **Auto-load `application_controller.rb` per gateway**: `Belt::LambdaHandler`
+  now requires each gateway's `application_controller.rb` before its sibling
+  controllers, mirroring the existing model convention (`application_record.rb`
+  loads first). Controllers can inherit from `ApplicationController` without an
+  explicit `require_relative 'application_controller'` — Belt handles ordering,
+  matching Rails. The `belt generate controller` template no longer emits the
+  redundant `require_relative`, keeping loading a single framework concern.
+
+## 0.3.38
+
+### Enhancement
+
+- **Rails-like `namespace` inside nested resources**: The `NestedResourceBuilder`
+  now supports `namespace` blocks that add both a path prefix AND a controller
+  module prefix, just like Rails. This provides 99% Rails compatibility for
+  nested route organization.
+
+  ```ruby
+  resources :projects do
+    namespace :admin do
+      resources :users   # → /projects/:project_id/admin/users → admin/users controller
+    end
+  end
+  ```
+
+  Namespaces can be nested and inherit auth/tables options:
+
+  ```ruby
+  resources :projects do
+    namespace :admin, auth: :iam, tables: [:audit_log] do
+      namespace :v2 do
+        resources :settings, only: [:index]  # → admin/v2/settings controller
+      end
+    end
+  end
+  ```
+
+- **`scope module:` option inside nested resources**: The existing `scope` method
+  now supports the `module:` option for Rails-like controller module prefixing
+  without adding a path prefix.
+
+  ```ruby
+  resources :projects do
+    scope module: 'v2' do
+      resources :users   # → /projects/:project_id/users → v2/users controller
+    end
+  end
+  ```
+
+## 0.3.37
+
+### Enhancement
+
+- **DRYer routing DSL with Rails-like `scope` inside nested resources**: The
+  `NestedResourceBuilder` now supports `scope` blocks for grouping routes with
+  shared options (path prefix, controller, tables, auth). This enables much
+  cleaner route definitions when multiple routes share the same controller or
+  tables.
+
+  **Before:**
+  ```ruby
+  resources :projects do
+    get 'billing', controller: :billing, action: :show, tables: [:memberships]
+    post 'billing/checkout', controller: :billing, action: :checkout, tables: [:memberships]
+    post 'billing/subscribe', controller: :billing, action: :subscribe, tables: [:memberships]
+  end
+  ```
+
+  **After:**
+  ```ruby
+  resources :projects do
+    scope path: 'billing', controller: :billing, tables: [:memberships] do
+      get '/', action: :show
+      post :checkout
+      post :subscribe
+    end
+  end
+  ```
+
+- **Singular `resource` inside nested resources**: You can now use `resource`
+  (singular) inside a `resources` block for nested singular resources like
+  `:billing`, `:token_usage`, or `:profile`.
+
+  ```ruby
+  resources :projects do
+    resource :billing, only: [:show], tables: [:memberships]
+    resource :token_usage, only: [:show]
+  end
+  ```
+
+- **Action inference from path**: When using symbol arguments or simple string
+  paths, the action is now inferred automatically. This works in `member`,
+  `collection`, and direct route definitions within resources.
+
+  ```ruby
+  resources :webhooks do
+    member do
+      post :test      # action: :test inferred
+    end
+  end
+
+  resources :surfaces do
+    collection do
+      get :teams      # action: :teams inferred
+    end
+  end
+
+  resources :projects do
+    post 'mark-complete'  # action: :mark_complete inferred (hyphens → underscores)
+  end
+  ```
+
+- **Controller inheritance in member/collection blocks**: Routes defined in
+  `member` and `collection` blocks now properly inherit the parent resource's
+  controller. This was inconsistent before and sometimes returned `nil`.
+
+  ```ruby
+  resources :webhooks do
+    member do
+      post :test     # controller: 'webhooks' inherited
+    end
+  end
+  ```
 
 ## 0.3.32
 

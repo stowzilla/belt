@@ -8,6 +8,7 @@ module BeltController
     FRAMEWORK_IVARS = %i[
       @event @raw_body @params @current_action @current_user_id @user_groups
       @logger @__assigns_before @__response_status
+      @current_user @cognito_claims @cognito_groups
     ].freeze
 
     private

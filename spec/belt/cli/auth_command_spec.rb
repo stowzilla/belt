@@ -200,6 +200,43 @@ RSpec.describe Belt::CLI::AuthCommand do
     end
   end
 
+  describe 'user model scaffolding' do
+    let(:models_dir) { File.join(tmpdir, 'lambda/models') }
+    let(:user_model) { File.join(models_dir, 'user.rb') }
+
+    before { FileUtils.mkdir_p(models_dir) }
+
+    # The whole point: the identity plumbing lives in the gem, so the generated model
+    # is the app's own domain and nothing else.
+    it 'scaffolds a User model declaring cognito_authenticatable' do
+      expect { described_class.run([]) }.to output(%r{create.*lambda/models/user\.rb}).to_stdout
+
+      expect(File.read(user_model)).to include('class User < ApplicationRecord', 'cognito_authenticatable')
+    end
+
+    it 'regenerates dynamodb.tf so the users table exists with its EmailIndex' do
+      capture_output { described_class.run([]) }
+
+      tf = File.read(File.join(module_dir, 'dynamodb.tf'))
+      expect(tf).to include('"${var.app_name}-${var.environment}-users"')
+      expect(tf).to include('name            = "EmailIndex"')
+    end
+
+    # Someone's associations are in there.
+    it 'never overwrites an existing model, even with --force' do
+      File.write(user_model, "class User < ApplicationRecord\n  # mine\nend\n")
+
+      expect { described_class.run(['--force']) }.to output(%r{skip.*lambda/models/user\.rb}).to_stdout
+      expect(File.read(user_model)).to include('# mine')
+    end
+
+    it 'skips scaffolding when the project has no models directory' do
+      FileUtils.rm_rf(models_dir)
+
+      expect { described_class.run([]) }.not_to output(/user\.rb/).to_stdout
+    end
+  end
+
   private
 
   def capture_output(&block)

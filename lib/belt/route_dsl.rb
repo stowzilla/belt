@@ -52,7 +52,7 @@ module Belt
 
   class NestedResourceBuilder
     def initialize(gateway, prefix, collection_prefix, inherited_tables: [], inherited_auth: nil, # rubocop:disable Metrics/ParameterLists
-                   inherited_controller: nil, inherited_lambda: nil)
+                   inherited_controller: nil, inherited_lambda: nil, scope_module: nil)
       @gateway = gateway
       @prefix = prefix
       @collection_prefix = collection_prefix
@@ -60,6 +60,7 @@ module Belt
       @inherited_auth = inherited_auth
       @inherited_controller = inherited_controller
       @inherited_lambda = inherited_lambda
+      @scope_module = scope_module
     end
 
     def resources(name, options = {}, &block)
@@ -67,21 +68,120 @@ module Belt
       singular = @gateway.send(:singularize, resource_name)
       param_name = options[:param] || "#{singular}_id"
       options = options.merge(tables: [resource_name.to_sym]) unless options.key?(:tables)
-      options = merge_inherited_options(options)
+      # Compute controller FIRST: explicit > scope_module/resource > resource_name
+      # Don't inherit controller from parent resource — nested resources get their own controller
+      controller_name = options[:controller] || compute_controller_name(resource_name)
+      options = merge_inherited_options(options.merge(controller: controller_name))
       resource_options = options.merge(route_type: :resources)
       actions = @gateway.send(:determine_actions, options)
 
-      add_nested_resource_routes(resource_name, param_name, resource_options, actions)
-      return unless block
+      # When there's a block (nested resources or custom member actions), use {param_name}
+      # for member routes to avoid API Gateway sibling path parameter conflicts.
+      has_nested = !block.nil?
+      add_nested_resource_routes(resource_name, param_name, resource_options, actions, use_param_name: has_nested)
+      return unless has_nested
 
       nested_member_prefix = "#{@prefix}/#{resource_name}/{#{param_name}}"
       nested_collection_prefix = "#{@prefix}/#{resource_name}"
+      # Pass scope_module to nested builder so nested resources inherit it
       nested_builder = NestedResourceBuilder.new(@gateway, nested_member_prefix, nested_collection_prefix,
                                                  inherited_tables: Array(options[:tables] || []),
                                                  inherited_auth: options[:auth] || @inherited_auth,
-                                                 inherited_controller: @inherited_controller,
-                                                 inherited_lambda: @inherited_lambda)
+                                                 inherited_controller: controller_name,
+                                                 inherited_lambda: @inherited_lambda,
+                                                 scope_module: @scope_module)
       nested_builder.instance_eval(&block)
+    end
+
+    # Singular resource inside nested context (e.g. resource :billing inside resources :projects)
+    def resource(name, options = {})
+      resource_name = name.to_s
+      # Compute controller FIRST: explicit > scope_module/resource > resource_name
+      # Don't inherit controller from parent resource — singular resources get their own controller
+      controller_name = options[:controller] || compute_controller_name(resource_name)
+      options = merge_inherited_options(options.merge(controller: controller_name))
+      resource_options = options.merge(route_type: :resource)
+      actions = determine_actions(options, default: %i[show update destroy create])
+
+      if actions.include?(:show)
+        @gateway.send(:add_route, :get, join_path(@prefix, resource_name),
+                      resolve_request_model_for(resource_options, :show))
+      end
+      if actions.include?(:update)
+        @gateway.send(:add_route, :put, join_path(@prefix, resource_name),
+                      resolve_request_model_for(resource_options, :update))
+      end
+      if actions.include?(:destroy)
+        @gateway.send(:add_route, :delete, join_path(@prefix, resource_name),
+                      resolve_request_model_for(resource_options, :destroy))
+      end
+      return unless actions.include?(:create)
+
+      @gateway.send(:add_route, :post, join_path(@prefix, resource_name),
+                    resolve_request_model_for(resource_options, :create))
+    end
+
+    # Rails-like `namespace` inside nested resource context — adds both a path prefix
+    # AND sets the controller module. Resources inside inherit the namespace module.
+    #
+    # Example:
+    #   resources :projects do
+    #     namespace :admin do
+    #       resources :users   # → /projects/:project_id/admin/users → admin/users controller
+    #     end
+    #   end
+    def namespace(name, options = {}, &)
+      segment = name.to_s
+      # namespace sets path AND module (controller prefix)
+      merged = { path: segment, module: segment }.merge(options)
+      scope(merged, &)
+    end
+
+    # Scope inside nested resource context - groups routes with shared options
+    # Example:
+    #   resources :projects do
+    #     scope path: 'billing', controller: :billing, tables: [:memberships] do
+    #       get '/', action: :show
+    #       post :checkout
+    #     end
+    #   end
+    #
+    # With module option (like Rails):
+    #   resources :projects do
+    #     scope module: 'v2' do
+    #       resources :users   # → /projects/:project_id/users → v2/users controller
+    #     end
+    #   end
+    def scope(options = {}, &)
+      previous_prefix = @prefix
+      previous_collection_prefix = @collection_prefix
+      previous_tables = @inherited_tables
+      previous_auth = @inherited_auth
+      previous_controller = @inherited_controller
+      previous_module = @scope_module
+
+      if options.key?(:path)
+        segment = options[:path].to_s.gsub(%r{^/|/$}, '')
+        @prefix = join_path(@prefix, segment)
+        @collection_prefix = join_path(@collection_prefix, segment)
+      end
+      # Module sets the controller prefix for nested resources (like Rails)
+      if options.key?(:module)
+        mod_segment = options[:module].to_s
+        @scope_module = @scope_module.to_s.empty? ? mod_segment : "#{@scope_module}/#{mod_segment}"
+      end
+      @inherited_auth = options[:auth] || @inherited_auth
+      @inherited_tables = (@inherited_tables + Array(options[:tables] || [])).uniq
+      @inherited_controller = options[:controller]&.to_s || @inherited_controller
+
+      instance_eval(&) if block_given?
+
+      @prefix = previous_prefix
+      @collection_prefix = previous_collection_prefix
+      @inherited_tables = previous_tables
+      @inherited_auth = previous_auth
+      @inherited_controller = previous_controller
+      @scope_module = previous_module
     end
 
     def member(&)
@@ -95,17 +195,70 @@ module Belt
     end
 
     %i[get post put delete patch].each do |method|
-      define_method(method) do |path, options = {}|
-        full_path = options[:on] == :collection ? "#{@collection_prefix}#{path}" : "#{@prefix}#{path}"
+      define_method(method) do |path_or_action, options = {}|
+        # Support both symbol (action name = path) and string (explicit path)
+        path, action = normalize_path_and_action(path_or_action, options)
+        base = options[:on] == :collection ? @collection_prefix : @prefix
+        full_path = join_path(base, path)
         options = merge_inherited_options(options)
         route_options = options.except(:on)
+        route_options[:action] ||= action if action
         @gateway.send(:add_route, method, full_path, route_options)
       end
     end
 
     private
 
-    def add_nested_resource_routes(resource_name, param_name, resource_options, actions)
+    # Normalize path/action: symbol means path=action, string means infer action from path
+    def normalize_path_and_action(path_or_action, options)
+      return [options[:path] || '', options[:action]] if path_or_action.nil?
+
+      if path_or_action.is_a?(Symbol)
+        # Symbol: use as both path segment and action name (e.g. :checkout → path: 'checkout', action: :checkout)
+        [path_or_action.to_s, options[:action] || path_or_action]
+      else
+        path = path_or_action.to_s
+        # Infer action from last non-param segment of path (e.g. 'checkout' → :checkout, '/' → nil)
+        inferred_action = options[:action] || infer_action_from_path(path)
+        [path, inferred_action]
+      end
+    end
+
+    # Infer action name from path: 'checkout' → :checkout, 'billing/checkout' → :checkout
+    def infer_action_from_path(path)
+      return nil if path.nil? || path.empty? || path == '/'
+
+      segments = path.gsub(%r{^/|/$}, '').split('/')
+      # Find last segment that's not a parameter (doesn't contain {})
+      last_segment = segments.reverse.find { |s| !s.include?('{') }
+      last_segment&.tr('-', '_')&.to_sym
+    end
+
+    # Join a base path with a relative path, ensuring exactly one `/` separator.
+    # Handles "/" path by returning just the base (no trailing slash).
+    def join_path(base, path)
+      path = path.to_s
+      return base if path.empty? || path == '/'
+      return "#{base}#{path}".chomp('/') if path.start_with?('/')
+
+      "#{base}/#{path}"
+    end
+
+    def determine_actions(options, default: %i[index create show update destroy])
+      if options[:only]
+        Array(options[:only])
+      elsif options[:except]
+        default - Array(options[:except])
+      else
+        default
+      end
+    end
+
+    def add_nested_resource_routes(resource_name, param_name, resource_options, actions, use_param_name: false)
+      # Member routes (show/update/destroy) use {id} by default (Rails convention).
+      # When nested resources or custom member actions exist (use_param_name: true),
+      # use {param_name} instead to avoid API Gateway sibling path parameter conflicts.
+      member_param = use_param_name ? param_name : 'id'
       if actions.include?(:index)
         @gateway.send(:add_route, :get, "#{@prefix}/#{resource_name}",
                       resolve_request_model_for(resource_options, :index))
@@ -115,16 +268,16 @@ module Belt
                       resolve_request_model_for(resource_options, :create))
       end
       if actions.include?(:show)
-        @gateway.send(:add_route, :get, "#{@prefix}/#{resource_name}/{#{param_name}}",
+        @gateway.send(:add_route, :get, "#{@prefix}/#{resource_name}/{#{member_param}}",
                       resolve_request_model_for(resource_options, :show))
       end
       if actions.include?(:update)
-        @gateway.send(:add_route, :put, "#{@prefix}/#{resource_name}/{#{param_name}}",
+        @gateway.send(:add_route, :put, "#{@prefix}/#{resource_name}/{#{member_param}}",
                       resolve_request_model_for(resource_options, :update))
       end
       return unless actions.include?(:destroy)
 
-      @gateway.send(:add_route, :delete, "#{@prefix}/#{resource_name}/{#{param_name}}",
+      @gateway.send(:add_route, :delete, "#{@prefix}/#{resource_name}/{#{member_param}}",
                     resolve_request_model_for(resource_options, :destroy))
     end
 
@@ -150,6 +303,17 @@ module Belt
       result[:lambda] ||= @inherited_lambda if @inherited_lambda
       result
     end
+
+    # Compute controller name from scope_module and resource name
+    # If scope_module is set, returns "module/resource_name" (Rails-like)
+    # Otherwise returns just resource_name
+    def compute_controller_name(resource_name)
+      if @scope_module && !@scope_module.empty?
+        "#{@scope_module}/#{resource_name}"
+      else
+        resource_name
+      end
+    end
   end
 
   class MemberCollectionBuilder
@@ -164,14 +328,52 @@ module Belt
     end
 
     %i[get post put delete patch].each do |method|
-      define_method(method) do |path, options = {}|
-        full_path = "#{@prefix}#{path}"
+      define_method(method) do |path_or_action, options = {}|
+        # Support both symbol (action name = path) and string (explicit path)
+        path, action = normalize_path_and_action(path_or_action, options)
+        full_path = join_path(@prefix, path)
         options = merge_inherited_options(options)
+        options[:action] ||= action if action
         @gateway.send(:add_route, method, full_path, options)
       end
     end
 
     private
+
+    # Normalize path/action: symbol means path=action, string means infer action from path
+    def normalize_path_and_action(path_or_action, options)
+      return ['', options[:action]] if path_or_action.nil?
+
+      if path_or_action.is_a?(Symbol)
+        # Symbol: use as both path segment and action name (e.g. :test → path: 'test', action: :test)
+        [path_or_action.to_s, options[:action] || path_or_action]
+      else
+        path = path_or_action.to_s
+        # Infer action from last non-param segment of path (e.g. 'test' → :test)
+        inferred_action = options[:action] || infer_action_from_path(path)
+        [path, inferred_action]
+      end
+    end
+
+    # Infer action name from path: 'test' → :test, 'deep/nested' → :nested
+    def infer_action_from_path(path)
+      return nil if path.nil? || path.empty? || path == '/'
+
+      segments = path.gsub(%r{^/|/$}, '').split('/')
+      # Find last segment that's not a parameter (doesn't contain {})
+      last_segment = segments.reverse.find { |s| !s.include?('{') && !s.start_with?(':') }
+      last_segment&.tr('-', '_')&.to_sym
+    end
+
+    # Join a base path with a relative path, ensuring exactly one `/` separator.
+    # Handles "/" path by returning just the base (no trailing slash).
+    def join_path(base, path)
+      path = path.to_s
+      return base if path.empty? || path == '/'
+      return "#{base}#{path}".chomp('/') if path.start_with?('/')
+
+      "#{base}/#{path}"
+    end
 
     def merge_inherited_options(options)
       result = options.dup
@@ -220,9 +422,12 @@ module Belt
       resource_options = options.merge(route_type: :resources)
       actions = determine_actions(options)
 
-      add_resource_routes(resource_name, param_name, resource_options, actions)
+      # When there are nested resources, use {param_name} for member routes to avoid
+      # API Gateway sibling path parameter conflicts. Without nested resources, use {id}.
+      has_nested = block_given?
+      add_resource_routes(resource_name, param_name, resource_options, actions, use_param_name: has_nested)
 
-      return unless block_given?
+      return unless has_nested
 
       collection_prefix = "/#{resource_name}"
       member_prefix = "/#{resource_name}/{#{param_name}}"
@@ -230,9 +435,11 @@ module Belt
       inherited_tables = (@default_tables + resource_tables).uniq
       inherited_auth = options[:auth] || @default_auth
       inherited_lambda = options[:lambda]
+      inherited_controller = resource_name
       nested_builder = NestedResourceBuilder.new(self, member_prefix, collection_prefix,
                                                  inherited_tables: inherited_tables,
                                                  inherited_auth: inherited_auth,
+                                                 inherited_controller: inherited_controller,
                                                  inherited_lambda: inherited_lambda)
       nested_builder.instance_eval(&)
     end
@@ -299,7 +506,11 @@ module Belt
       options.merge(tables: [resource_name.to_sym])
     end
 
-    def add_resource_routes(resource_name, param_name, resource_options, actions)
+    def add_resource_routes(resource_name, param_name, resource_options, actions, use_param_name: false)
+      # Member routes (show/update/destroy) use {id} by default (Rails convention).
+      # When nested resources exist (use_param_name: true), use {param_name} instead
+      # to avoid API Gateway sibling path parameter conflicts.
+      member_param = use_param_name ? param_name : 'id'
       if actions.include?(:index)
         add_route(:get, "/#{resource_name}",
                   resolve_request_model_for(resource_options, :index))
@@ -309,16 +520,16 @@ module Belt
                   resolve_request_model_for(resource_options, :create))
       end
       if actions.include?(:show)
-        add_route(:get, "/#{resource_name}/{#{param_name}}",
+        add_route(:get, "/#{resource_name}/{#{member_param}}",
                   resolve_request_model_for(resource_options, :show))
       end
       if actions.include?(:update)
-        add_route(:put, "/#{resource_name}/{#{param_name}}",
+        add_route(:put, "/#{resource_name}/{#{member_param}}",
                   resolve_request_model_for(resource_options, :update))
       end
       return unless actions.include?(:destroy)
 
-      add_route(:delete, "/#{resource_name}/{#{param_name}}", resolve_request_model_for(resource_options, :destroy))
+      add_route(:delete, "/#{resource_name}/{#{member_param}}", resolve_request_model_for(resource_options, :destroy))
     end
 
     def resolve_request_model_for(options, action)
@@ -600,7 +811,11 @@ module Belt
         end
       end
 
-      def add_scoped_resource_routes(resource_name, param_name, resource_options, actions)
+      def add_scoped_resource_routes(resource_name, param_name, resource_options, actions, use_param_name: false)
+        # Member routes (show/update/destroy) use {id} by default (Rails convention).
+        # When nested resources exist (use_param_name: true), use {param_name} instead
+        # to avoid API Gateway sibling path parameter conflicts.
+        member_param = use_param_name ? param_name : 'id'
         if actions.include?(:index)
           @gateway.send(:add_route, :get, build_path("/#{resource_name}"),
                         resolve_request_model_for(resource_options, :index))
@@ -610,16 +825,16 @@ module Belt
                         resolve_request_model_for(resource_options, :create))
         end
         if actions.include?(:show)
-          @gateway.send(:add_route, :get, build_path("/#{resource_name}/{#{param_name}}"),
+          @gateway.send(:add_route, :get, build_path("/#{resource_name}/{#{member_param}}"),
                         resolve_request_model_for(resource_options, :show))
         end
         if actions.include?(:update)
-          @gateway.send(:add_route, :put, build_path("/#{resource_name}/{#{param_name}}"),
+          @gateway.send(:add_route, :put, build_path("/#{resource_name}/{#{member_param}}"),
                         resolve_request_model_for(resource_options, :update))
         end
         return unless actions.include?(:destroy)
 
-        @gateway.send(:add_route, :delete, build_path("/#{resource_name}/{#{param_name}}"),
+        @gateway.send(:add_route, :delete, build_path("/#{resource_name}/{#{member_param}}"),
                       resolve_request_model_for(resource_options, :destroy))
       end
 
@@ -642,7 +857,10 @@ module Belt
         resource_options = options.merge(route_type: :resources, controller: controller)
         actions = determine_scoped_actions(options)
 
-        add_scoped_resource_routes(resource_name, param_name, resource_options, actions)
+        # When there are nested resources, use {param_name} for member routes to avoid
+        # API Gateway sibling path parameter conflicts. Without nested resources, use {id}.
+        has_nested = !block.nil?
+        add_scoped_resource_routes(resource_name, param_name, resource_options, actions, use_param_name: has_nested)
         build_nested_resource_block(resource_name, param_name, options, controller, &block) if block
       end
 

@@ -39,7 +39,14 @@ module Belt
       Belt.controller_paths << controllers_dir
       Dir.children(controllers_dir).each do |child|
         subdir = File.join(controllers_dir, child)
-        Belt.controller_paths << subdir if File.directory?(subdir)
+        next unless File.directory?(subdir)
+
+        Belt.controller_paths << subdir
+
+        # Auto-require application_controller.rb first (like application_record for models)
+        # so other controllers can inherit from it without explicit require_relative
+        app_controller = File.join(subdir, 'application_controller.rb')
+        require app_controller if File.exist?(app_controller)
       end
 
       # Auto-load all models (application_record first, then the rest)

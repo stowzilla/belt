@@ -82,7 +82,9 @@ module Belt
       # `belt deploy` path applies this before invoking the frontend deploy;
       # standalone `belt deploy frontend` must do it too.
       def load_and_apply_env_config!
-        EnvironmentConfig.load(@env, infra_dir: @infra_dir).apply!
+        env_config = EnvironmentConfig.load(@env, infra_dir: @infra_dir)
+        env_config.apply!
+        puts "  🔑 Using AWS profile: #{env_config.aws_profile}" if env_config.aws_profile?
       end
 
       def validate!

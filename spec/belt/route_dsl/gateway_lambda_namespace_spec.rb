@@ -179,7 +179,7 @@ RSpec.describe 'Route DSL: gateway, function, namespace, and scope keywords' do
       routes = gateways.first.routes
       paths = routes.map(&:path)
       expect(paths).to include('/admin/users')
-      expect(paths).to include('/admin/users/{user_id}')
+      expect(paths).to include('/admin/users/{id}')
 
       controllers = routes.map(&:controller).uniq
       expect(controllers).to eq(['admin/users'])

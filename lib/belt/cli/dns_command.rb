@@ -29,6 +29,10 @@ module Belt
           new.remove_environment(args)
         when 'show', 'list'
           new.show(args)
+        when 'doctor'
+          new.doctor(args)
+        when 'sync-validation'
+          new.sync_validation(args)
         when '--help', '-h', 'help'
           puts help
         else
@@ -47,11 +51,16 @@ module Belt
             add <env>           Add an environment's NS records to dns/terraform.tfvars
             remove <env>        Remove an environment's NS records from dns/terraform.tfvars
             show                Show root zone name servers (for registrar configuration)
+            doctor              Diagnose DNS configuration for all environments
+            sync-validation     Sync ACM validation CNAMEs to root zone (for apex domains)
             help                Show this help
 
           Options for generate:
             --aws-profile NAME  AWS profile to use for DNS infrastructure
                                Sets belt.rb config and derives state bucket from account ID
+
+          Options for doctor:
+            --env ENV           Check a specific environment only
 
           Examples:
             belt dns deploy                 # Deploy the root zone
@@ -60,6 +69,8 @@ module Belt
             belt dns add staging            # Add staging's NS records to tfvars
             belt dns remove staging         # Remove staging's NS delegation
             belt dns show                   # Show root name servers to configure at registrar
+            belt dns doctor                 # Check DNS health for all environments
+            belt dns doctor --env prod      # Check DNS health for prod only
 
           The dns directory manages your root domain and delegates subdomains to
           per-environment hosted zones. Each environment (dev, staging, prod) gets
@@ -76,6 +87,11 @@ module Belt
             1. belt destroy environment dev # Destroy the environment
             2. belt dns remove dev          # Remove DNS delegation
             3. belt dns deploy              # Apply the change
+
+          Special handling for prod (apex domain):
+            Prod environments use the apex domain (e.g., example.com, not prod.example.com).
+            ACM certificates for apex domains need validation CNAMEs in the root zone.
+            `belt deploy prod` handles this automatically when infrastructure/dns exists.
         HELP
       end
 
@@ -84,6 +100,150 @@ module Belt
         @quiet = quiet
         @aws_profile = aws_profile
         @state_bucket = nil # Resolved during generate with profile context
+      end
+
+      # --- Doctor ---
+      def doctor(args = [])
+        require 'open3'
+
+        # Parse --env flag
+        env_filter = nil
+        env_index = args.index('--env')
+        if env_index
+          env_filter = args[env_index + 1]
+          args.delete_at(env_index + 1)
+          args.delete_at(env_index)
+        end
+
+        # Load DNS config for shared account credentials
+        dns_config = load_dns_config_if_exists
+
+        # Read domain from tfvars
+        domain = read_domain_from_tfvars
+        unless domain
+          puts 'No domain configured.'
+          puts "\nSet up DNS first:"
+          puts '  belt dns generate'
+          exit 1
+        end
+
+        puts "DNS Health: #{domain}"
+        puts '═' * 60
+        puts ''
+
+        # Check root zone
+        root_zone_ok = check_root_zone(domain, dns_config)
+        puts ''
+
+        # Get list of environments to check
+        environments = discover_environments(env_filter)
+        if environments.empty?
+          puts 'No environments found to check.'
+          puts "\nDeploy an environment first:"
+          puts '  belt deploy dev'
+          return
+        end
+
+        # Check each environment
+        all_ok = root_zone_ok
+        environments.each do |env_name|
+          env_ok = check_environment(env_name, domain, dns_config)
+          all_ok &&= env_ok
+          puts ''
+        end
+
+        # Summary
+        puts '═' * 60
+        if all_ok
+          puts '✓ All DNS checks passed'
+        else
+          puts '⚠ Some DNS issues detected — see details above'
+        end
+      end
+
+      # --- Sync Validation ---
+      # Syncs ACM validation CNAMEs from an environment to the root zone.
+      # Primarily used for prod (apex domain) where the env's zone isn't authoritative.
+      def sync_validation(args = [])
+        require 'open3'
+
+        env_name = args.shift
+        if env_name.nil? || env_name.start_with?('-')
+          puts 'Usage: belt dns sync-validation <env>'
+          puts "\nThis syncs ACM certificate validation CNAMEs from the environment's"
+          puts 'zone to the root zone. Needed when the environment uses the apex domain'
+          puts '(e.g., prod → example.com) because ACM validates against the authoritative'
+          puts "zone, which is the root zone, not the environment's zone."
+          puts "\nExample:"
+          puts '  belt dns sync-validation prod'
+          exit 1
+        end
+
+        unless Dir.exist?(DNS_DIR)
+          puts 'No infrastructure/dns directory found.'
+          puts "\nCreate it first:"
+          puts '  belt dns generate'
+          exit 1
+        end
+
+        env_dir = "infrastructure/#{env_name}"
+        unless Dir.exist?(env_dir)
+          puts "Environment #{env_name} not found at #{env_dir}/"
+          exit 1
+        end
+
+        sync_acm_validation_to_root_zone!(env_name)
+      end
+
+      # Public API for deploy_command to call
+      def self.sync_acm_validation_if_needed(env_name)
+        # Only sync if DNS is configured
+        return unless Dir.exist?(DNS_DIR)
+
+        cmd = new(quiet: true)
+        cmd.sync_acm_validation_to_root_zone!(env_name)
+      end
+
+      # Core logic: sync ACM validation CNAMEs to root zone
+      def sync_acm_validation_to_root_zone!(env_name)
+        require 'open3'
+
+        env_config = EnvironmentConfig.load(env_name)
+        dns_config = load_dns_config_if_exists
+
+        # Get domain from tfvars
+        domain = read_domain_from_tfvars
+        return unless domain
+
+        # Determine if this is an apex environment
+        is_apex = apex_environment?(env_name, domain)
+        unless is_apex
+          puts "  ℹ #{env_name} uses subdomain (#{env_name}.#{domain}) — no root zone sync needed" unless @quiet
+          return
+        end
+
+        puts "  🔄 Syncing ACM validation for #{env_name} (apex domain) to root zone..." unless @quiet
+
+        # Get pending ACM validation records from the environment
+        validation_records = fetch_pending_acm_validation(env_name, env_config)
+        if validation_records.nil? || validation_records.empty?
+          puts '     No pending ACM validation records found' unless @quiet
+          return
+        end
+
+        # Get root zone ID
+        root_zone_id = fetch_root_zone_id(dns_config)
+        unless root_zone_id
+          puts '     ⚠ Could not find root zone ID — run `belt dns deploy` first' unless @quiet
+          return
+        end
+
+        # Create/update the validation CNAMEs in the root zone
+        validation_records.each do |record|
+          create_validation_cname_in_root_zone(root_zone_id, record, dns_config)
+        end
+
+        puts '     ✓ ACM validation CNAMEs synced to root zone' unless @quiet
       end
 
       # --- Generate ---
@@ -344,6 +504,445 @@ module Belt
       end
 
       private
+
+      # ═══════════════════════════════════════════════════════════════════════════
+      # Doctor helpers
+      # ═══════════════════════════════════════════════════════════════════════════
+
+      def check_root_zone(domain, dns_config)
+        require 'open3'
+
+        puts 'Root Zone (shared account)'
+        puts '-' * 40
+
+        env = {}
+        env['AWS_PROFILE'] = dns_config.aws_profile if dns_config&.aws_profile?
+
+        all_ok = true
+
+        # Check if root zone exists
+        zone_id = fetch_root_zone_id(dns_config)
+        if zone_id
+          puts "  ✓ Zone ID: #{zone_id}"
+        else
+          puts '  ✗ Root zone not found'
+          puts '    Run: belt dns deploy'
+          return false
+        end
+
+        # Get NS records from root zone
+        ns_output, ns_status = Open3.capture2e(
+          env,
+          'aws', 'route53', 'list-resource-record-sets',
+          '--hosted-zone-id', zone_id,
+          '--query', "ResourceRecordSets[?Type=='NS' && Name=='#{domain}.'].ResourceRecords[].Value",
+          '--output', 'json'
+        )
+
+        if ns_status.success?
+          ns_records = begin
+            JSON.parse(ns_output)
+          rescue StandardError
+            []
+          end
+          if ns_records.any?
+            puts "  ✓ NS records configured (#{ns_records.size} servers)"
+          else
+            puts '  ⚠ No NS records found'
+          end
+        end
+
+        # Check delegated environments
+        delegated = fetch_delegated_environments(dns_config)
+        if delegated.any?
+          puts "  ✓ Delegated: #{delegated.join(', ')}"
+        else
+          puts '  ⚠ No environments delegated yet'
+          puts '    Run: belt dns add <env>'
+        end
+
+        all_ok
+      end
+
+      def check_environment(env_name, domain, dns_config)
+        require 'open3'
+
+        env_config = EnvironmentConfig.load(env_name)
+        env = {}
+        env['AWS_PROFILE'] = env_config.aws_profile if env_config.aws_profile?
+
+        is_apex = apex_environment?(env_name, domain)
+        env_domain = is_apex ? domain : "#{env_name}.#{domain}"
+
+        puts "#{env_name} (#{env_domain})#{' [apex]' if is_apex}"
+        puts '-' * 40
+
+        all_ok = true
+
+        # Check zone exists
+        zone_id = fetch_env_zone_id(env_name, env_config)
+        if zone_id
+          puts "  ✓ Zone ID: #{zone_id}"
+        else
+          puts '  ✗ Hosted zone not found'
+          puts "    Run: belt deploy #{env_name}"
+          return false
+        end
+
+        # Check NS delegation in root zone
+        delegated = fetch_delegated_environments(dns_config)
+        if delegated.include?(env_name)
+          puts '  ✓ NS delegation in root zone'
+        else
+          puts '  ⚠ Not delegated in root zone'
+          puts "    Run: belt dns add #{env_name} && belt dns deploy"
+          all_ok = false
+        end
+
+        # Check ACM certificate
+        cert_status, cert_domain = fetch_acm_cert_status(env_name, env_config)
+        case cert_status
+        when 'ISSUED'
+          puts "  ✓ ACM certificate: ISSUED (#{cert_domain})"
+        when 'PENDING_VALIDATION'
+          puts "  ⚠ ACM certificate: PENDING_VALIDATION (#{cert_domain})"
+          if is_apex
+            # Check if validation CNAME is in root zone
+            validation_in_root = check_acm_validation_in_root(env_name, env_config, dns_config)
+            if validation_in_root
+              puts '    ✓ Validation CNAME in root zone — waiting for DNS propagation'
+            else
+              puts '    ✗ Validation CNAME NOT in root zone'
+              puts '      Apex domains need validation CNAMEs in the root zone.'
+              puts "      Run: belt dns sync-validation #{env_name} && belt dns deploy"
+            end
+          else
+            puts '    Validation CNAME should be in environment zone — waiting for DNS propagation'
+          end
+          all_ok = false
+        when 'FAILED'
+          puts "  ✗ ACM certificate: FAILED (#{cert_domain})"
+          all_ok = false
+        when nil
+          puts '  ⚠ ACM certificate not found'
+          all_ok = false
+        else
+          puts "  ⚠ ACM certificate: #{cert_status} (#{cert_domain})"
+        end
+
+        # Check API Gateway custom domain
+        api_domain_status = fetch_api_gateway_domain_status(env_name, env_config, domain)
+        case api_domain_status
+        when :available
+          puts '  ✓ API Gateway custom domain: available'
+        when :pending
+          puts '  ⚠ API Gateway custom domain: pending (waiting for cert)'
+        when :not_found
+          puts '  ⚠ API Gateway custom domain: not configured'
+          all_ok = false
+        end
+
+        all_ok
+      end
+
+      def apex_environment?(env_name, _domain)
+        # Convention: 'prod' or 'production' uses the apex domain
+        %w[prod production].include?(env_name)
+      end
+
+      def discover_environments(filter = nil)
+        return [filter] if filter && Dir.exist?("infrastructure/#{filter}")
+
+        env_dirs = Dir.glob('infrastructure/*').select do |path|
+          next false unless File.directory?(path)
+
+          env_name = File.basename(path)
+          next false if %w[modules dns].include?(env_name)
+          next false unless File.exist?(File.join(path, 'main.tf'))
+
+          true
+        end
+        env_dirs.map { |path| File.basename(path) }.sort
+      end
+
+      def read_domain_from_tfvars
+        tfvars_path = "#{DNS_DIR}/terraform.tfvars"
+        return nil unless File.exist?(tfvars_path)
+
+        content = File.read(tfvars_path)
+        match = content.match(/domain\s*=\s*"([^"]+)"/)
+        match[1] if match
+      end
+
+      def load_dns_config_if_exists
+        return nil unless Dir.exist?(DNS_DIR)
+
+        load_dns_config
+      rescue StandardError
+        nil
+      end
+
+      def fetch_root_zone_id(dns_config)
+        require 'open3'
+
+        return nil unless Dir.exist?(DNS_DIR)
+
+        env = {}
+        env['AWS_PROFILE'] = dns_config.aws_profile if dns_config&.aws_profile?
+
+        output, status = Dir.chdir(DNS_DIR) do
+          Open3.capture2e(env, 'terraform', 'output', '-raw', 'root_zone_id')
+        end
+
+        status.success? ? output.strip : nil
+      end
+
+      def fetch_delegated_environments(dns_config)
+        require 'open3'
+
+        return [] unless Dir.exist?(DNS_DIR)
+
+        env = {}
+        env['AWS_PROFILE'] = dns_config.aws_profile if dns_config&.aws_profile?
+
+        output, status = Dir.chdir(DNS_DIR) do
+          Open3.capture2e(env, 'terraform', 'output', '-json', 'delegated_environments')
+        end
+
+        return [] unless status.success?
+
+        begin
+          JSON.parse(output)
+        rescue StandardError
+          []
+        end
+      end
+
+      def fetch_env_zone_id(env_name, env_config)
+        require 'open3'
+
+        env_dir = "infrastructure/#{env_name}"
+        return nil unless Dir.exist?(env_dir)
+
+        env = {}
+        env['AWS_PROFILE'] = env_config.aws_profile if env_config.aws_profile?
+
+        output, status = Dir.chdir(env_dir) do
+          Open3.capture2e(env, 'terraform', 'output', '-raw', 'zone_id')
+        end
+
+        status.success? && !output.strip.empty? ? output.strip : nil
+      end
+
+      def fetch_acm_cert_status(env_name, env_config)
+        require 'open3'
+
+        env_dir = "infrastructure/#{env_name}"
+        return [nil, nil] unless Dir.exist?(env_dir)
+
+        env = {}
+        env['AWS_PROFILE'] = env_config.aws_profile if env_config.aws_profile?
+
+        # Get cert ARN from terraform
+        arn_output, arn_status = Dir.chdir(env_dir) do
+          Open3.capture2e(env, 'terraform', 'output', '-raw', 'certificate_arn')
+        end
+
+        return [nil, nil] unless arn_status.success? && !arn_output.strip.empty?
+
+        cert_arn = arn_output.strip
+
+        # Get cert details from ACM
+        cert_output, cert_status = Open3.capture2e(
+          env,
+          'aws', 'acm', 'describe-certificate',
+          '--certificate-arn', cert_arn,
+          '--output', 'json'
+        )
+
+        return [nil, nil] unless cert_status.success?
+
+        cert_data = begin
+          JSON.parse(cert_output)
+        rescue StandardError
+          nil
+        end
+        return [nil, nil] unless cert_data
+
+        status = cert_data.dig('Certificate', 'Status')
+        domain = cert_data.dig('Certificate', 'DomainName')
+        [status, domain]
+      end
+
+      def fetch_api_gateway_domain_status(env_name, env_config, domain)
+        require 'open3'
+
+        is_apex = apex_environment?(env_name, domain)
+        api_domain = is_apex ? "api.#{domain}" : "api.#{env_name}.#{domain}"
+
+        env = {}
+        env['AWS_PROFILE'] = env_config.aws_profile if env_config.aws_profile?
+
+        output, status = Open3.capture2e(
+          env,
+          'aws', 'apigateway', 'get-domain-name',
+          '--domain-name', api_domain,
+          '--output', 'json'
+        )
+
+        return :not_found unless status.success?
+
+        data = begin
+          JSON.parse(output)
+        rescue StandardError
+          nil
+        end
+        return :not_found unless data
+
+        # Check if it has an endpoint
+        if data['regionalDomainName'] || data['distributionDomainName']
+          :available
+        else
+          :pending
+        end
+      end
+
+      def check_acm_validation_in_root(env_name, env_config, dns_config)
+        require 'open3'
+
+        validation_records = fetch_pending_acm_validation(env_name, env_config)
+        return false if validation_records.nil? || validation_records.empty?
+
+        root_zone_id = fetch_root_zone_id(dns_config)
+        return false unless root_zone_id
+
+        env = {}
+        env['AWS_PROFILE'] = dns_config.aws_profile if dns_config&.aws_profile?
+
+        # Check if the validation CNAME exists in the root zone
+        validation_records.all? do |record|
+          output, status = Open3.capture2e(
+            env,
+            'aws', 'route53', 'list-resource-record-sets',
+            '--hosted-zone-id', root_zone_id,
+            '--query', "ResourceRecordSets[?Name=='#{record[:name]}' && Type=='CNAME']",
+            '--output', 'json'
+          )
+
+          next false unless status.success?
+
+          records = begin
+            JSON.parse(output)
+          rescue StandardError
+            []
+          end
+          records.any?
+        end
+      end
+
+      # ═══════════════════════════════════════════════════════════════════════════
+      # ACM validation sync helpers
+      # ═══════════════════════════════════════════════════════════════════════════
+
+      def fetch_pending_acm_validation(env_name, env_config)
+        require 'open3'
+
+        env_dir = "infrastructure/#{env_name}"
+        return nil unless Dir.exist?(env_dir)
+
+        env = {}
+        env['AWS_PROFILE'] = env_config.aws_profile if env_config.aws_profile?
+
+        # Get cert ARN from terraform
+        arn_output, arn_status = Dir.chdir(env_dir) do
+          Open3.capture2e(env, 'terraform', 'output', '-raw', 'certificate_arn')
+        end
+
+        return nil unless arn_status.success? && !arn_output.strip.empty?
+
+        cert_arn = arn_output.strip
+
+        # Get cert details from ACM
+        cert_output, cert_status = Open3.capture2e(
+          env,
+          'aws', 'acm', 'describe-certificate',
+          '--certificate-arn', cert_arn,
+          '--output', 'json'
+        )
+
+        return nil unless cert_status.success?
+
+        cert_data = begin
+          JSON.parse(cert_output)
+        rescue StandardError
+          nil
+        end
+        return nil unless cert_data
+
+        # Extract validation options
+        validation_options = cert_data.dig('Certificate', 'DomainValidationOptions') || []
+
+        # Return records that need DNS validation
+        validation_options.filter_map do |opt|
+          next unless opt['ValidationMethod'] == 'DNS'
+          next if opt['ValidationStatus'] == 'SUCCESS'
+
+          resource_record = opt['ResourceRecord']
+          next unless resource_record
+
+          {
+            name: resource_record['Name'],
+            type: resource_record['Type'],
+            value: resource_record['Value']
+          }
+        end
+      end
+
+      def create_validation_cname_in_root_zone(root_zone_id, record, dns_config)
+        require 'open3'
+
+        env = {}
+        env['AWS_PROFILE'] = dns_config.aws_profile if dns_config&.aws_profile?
+
+        # Create a change batch to upsert the CNAME
+        change_batch = {
+          'Changes' => [
+            {
+              'Action' => 'UPSERT',
+              'ResourceRecordSet' => {
+                'Name' => record[:name],
+                'Type' => 'CNAME',
+                'TTL' => 300,
+                'ResourceRecords' => [
+                  { 'Value' => record[:value] }
+                ]
+              }
+            }
+          ]
+        }
+
+        require 'tempfile'
+        Tempfile.create(['change-batch', '.json']) do |f|
+          f.write(JSON.generate(change_batch))
+          f.flush
+
+          output, status = Open3.capture2e(
+            env,
+            'aws', 'route53', 'change-resource-record-sets',
+            '--hosted-zone-id', root_zone_id,
+            '--change-batch', "file://#{f.path}"
+          )
+
+          unless status.success?
+            puts "     ⚠ Failed to create validation CNAME: #{record[:name]}" unless @quiet
+            puts "       #{output}" unless @quiet
+          end
+        end
+      end
+
+      # ═══════════════════════════════════════════════════════════════════════════
+      # Original private methods
+      # ═══════════════════════════════════════════════════════════════════════════
 
       def templates
         {

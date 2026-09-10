@@ -3,6 +3,7 @@
 require 'fileutils'
 require 'open3'
 require 'yaml'
+require_relative 'nested_environment'
 
 module Belt
   module CLI
@@ -164,11 +165,40 @@ module Belt
       end
 
       def read_tf_output(name)
-        return nil unless Dir.exist?(@env_dir)
+        dirs_for(name).each do |dir|
+          value = read_tf_output_from(dir, name)
+          return value if value
+        end
+        nil
+      end
 
+      # Nested envs share the parent Cognito pool. Cognito terraform outputs
+      # (pool id, client id, issuer, domain) are read from the parent so the
+      # SPA logs in with the same users. API/frontend URLs still come from the
+      # nested env itself.
+      def dirs_for(name)
+        dirs = []
+        dirs << parent_env_dir if cognito_output?(name) && parent_env_dir
+        dirs << @env_dir
+        dirs.compact.uniq.select { |dir| Dir.exist?(dir) }
+      end
+
+      def cognito_output?(name)
+        name.to_s.downcase.include?('cognito')
+      end
+
+      def parent_env_dir
+        return @parent_env_dir if defined?(@parent_env_dir)
+
+        infra_dir = File.dirname(@env_dir)
+        nested = NestedEnvironment.for(@env_name, infra_dir: infra_dir)
+        @parent_env_dir = nested&.parent_dir
+      end
+
+      def read_tf_output_from(dir, name)
         output, status = Open3.capture2(
           'terraform', 'output', '-raw', name,
-          chdir: @env_dir,
+          chdir: dir,
           err: File::NULL
         )
         return nil unless status.success?

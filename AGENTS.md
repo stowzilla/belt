@@ -9,7 +9,7 @@ For end-user docs, see [README.md](README.md). For release notes, see [CHANGELOG
 
 Belt is a Rails-inspired framework for serverless Ruby on AWS Lambda. This repository is the **core gem** (`gem "belt"`), which includes:
 
-- Runtime: `BeltController`, `Belt::LambdaHandler`, `Belt::ActionRouter`, params, rendering, observability
+- Runtime: `BeltController`, `Belt::LambdaHandler`, `Belt::ActionRouter`, `Belt::Authentication`, params, rendering, observability
 - CLI: `exe/belt` → `lib/belt/cli.rb` and commands under `lib/belt/cli/`
 - App / plugin scaffolds: ERB templates under `lib/templates/`
 

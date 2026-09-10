@@ -148,7 +148,13 @@ module Belt
       # -- keyword options for destroy flags
       def initialize(generator, name, fields, force: false, skip_terraform: false, full: false, frontend_name: nil)
         @generator = generator
-        @name = name&.downcase&.gsub(/[^a-z0-9_]/, '_')
+        # Environment names preserve hyphens (matching `belt g environment`);
+        # other generators normalize to underscores for valid Ruby identifiers.
+        @name = if generator == 'environment'
+                  name&.downcase&.gsub(/[^a-z0-9_-]/, '')
+                else
+                  name&.downcase&.gsub(/[^a-z0-9_]/, '_')
+                end
         @fields = fields
         @force = force
         @skip_terraform = skip_terraform

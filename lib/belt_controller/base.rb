@@ -3,6 +3,7 @@
 require 'json'
 require 'cgi'
 require_relative '../belt/parameters'
+require_relative '../belt/authentication'
 require_relative '../belt/helpers/response'
 require_relative '../belt/helpers/error_logging'
 require_relative '../belt/helpers/cors_origin'
@@ -14,6 +15,9 @@ module BeltController
     include Belt::Helpers::Response
     include Belt::Rendering
     include ImplicitResponse
+    # Cognito identity: current_user, authenticate_user!, cognito_admin?.
+    # Inert unless the app declares `cognito_authenticatable` on a model.
+    include Belt::Authentication::Controller
 
     attr_reader :event, :body
 
