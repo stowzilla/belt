@@ -171,8 +171,8 @@ module Belt
         if env_name.nil? || env_name.start_with?('-')
           puts 'Usage: belt dns sync-validation <env>'
           puts "\nThis syncs ACM certificate validation CNAMEs from the environment's"
-          puts "zone to the root zone. Needed when the environment uses the apex domain"
-          puts "(e.g., prod → example.com) because ACM validates against the authoritative"
+          puts 'zone to the root zone. Needed when the environment uses the apex domain'
+          puts '(e.g., prod → example.com) because ACM validates against the authoritative'
           puts "zone, which is the root zone, not the environment's zone."
           puts "\nExample:"
           puts '  belt dns sync-validation prod'
@@ -518,13 +518,15 @@ module Belt
         env = {}
         env['AWS_PROFILE'] = dns_config.aws_profile if dns_config&.aws_profile?
 
+        all_ok = true
+
         # Check if root zone exists
         zone_id = fetch_root_zone_id(dns_config)
         if zone_id
           puts "  ✓ Zone ID: #{zone_id}"
         else
           puts '  ✗ Root zone not found'
-          puts "    Run: belt dns deploy"
+          puts '    Run: belt dns deploy'
           return false
         end
 
@@ -556,10 +558,10 @@ module Belt
           puts "  ✓ Delegated: #{delegated.join(', ')}"
         else
           puts '  ⚠ No environments delegated yet'
-          puts "    Run: belt dns add <env>"
+          puts '    Run: belt dns add <env>'
         end
 
-        true
+        all_ok
       end
 
       def check_environment(env_name, domain, dns_config)
@@ -572,7 +574,7 @@ module Belt
         is_apex = apex_environment?(env_name, domain)
         env_domain = is_apex ? domain : "#{env_name}.#{domain}"
 
-        puts "#{env_name} (#{env_domain})#{is_apex ? ' [apex]' : ''}"
+        puts "#{env_name} (#{env_domain})#{' [apex]' if is_apex}"
         puts '-' * 40
 
         all_ok = true
@@ -611,7 +613,7 @@ module Belt
               puts '    ✓ Validation CNAME in root zone — waiting for DNS propagation'
             else
               puts '    ✗ Validation CNAME NOT in root zone'
-              puts "      Apex domains need validation CNAMEs in the root zone."
+              puts '      Apex domains need validation CNAMEs in the root zone.'
               puts "      Run: belt dns sync-validation #{env_name} && belt dns deploy"
             end
           else
@@ -643,7 +645,7 @@ module Belt
         all_ok
       end
 
-      def apex_environment?(env_name, domain)
+      def apex_environment?(env_name, _domain)
         # Convention: 'prod' or 'production' uses the apex domain
         %w[prod production].include?(env_name)
       end
@@ -651,7 +653,7 @@ module Belt
       def discover_environments(filter = nil)
         return [filter] if filter && Dir.exist?("infrastructure/#{filter}")
 
-        Dir.glob('infrastructure/*').select do |path|
+        env_dirs = Dir.glob('infrastructure/*').select do |path|
           next false unless File.directory?(path)
 
           env_name = File.basename(path)
@@ -659,7 +661,8 @@ module Belt
           next false unless File.exist?(File.join(path, 'main.tf'))
 
           true
-        end.map { |path| File.basename(path) }.sort
+        end
+        env_dirs.map { |path| File.basename(path) }.sort
       end
 
       def read_domain_from_tfvars
