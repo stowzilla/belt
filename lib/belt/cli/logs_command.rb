@@ -2,6 +2,8 @@
 
 require 'json'
 require 'open3'
+require_relative 'environment_config'
+require_relative 'terraform_command'
 
 module Belt
   module CLI
@@ -76,6 +78,8 @@ module Belt
         @env ||= detect_environment
         abort 'Error: Cannot determine environment. Pass -e ENV or set BELT_ENV.' unless @env
 
+        apply_env_config!
+
         @app_name = detect_app_name
         abort 'Error: Cannot determine app name.' unless @app_name
 
@@ -87,6 +91,13 @@ module Belt
       end
 
       private
+
+      def apply_env_config!
+        infra_dir = TerraformCommand.find_infrastructure_dir || find_infra_dir
+        env_config = EnvironmentConfig.load(@env, infra_dir: infra_dir)
+        env_config.apply!
+        puts "  🔑 Using AWS profile: #{env_config.aws_profile}" if env_config.aws_profile?
+      end
 
       def parse_args(args)
         i = 0

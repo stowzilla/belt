@@ -75,6 +75,12 @@ module Belt
 
       private
 
+      # Load infrastructure/<env>/belt.rb and apply its aws_profile + env vars
+      # to the current process. Without this, `terraform output` can't reach the
+      # S3 state backend (403), fetch_tf_output returns nil, and the deploy aborts
+      # with a misleading "Could not determine S3 bucket" error. The full
+      # `belt deploy` path applies this before invoking the frontend deploy;
+      # standalone `belt deploy frontend` must do it too.
       def load_and_apply_env_config!
         env_config = EnvironmentConfig.load(@env, infra_dir: @infra_dir)
         env_config.apply!
