@@ -4,6 +4,18 @@
 
 ### Bug Fix
 
+- **`belt setup tables` no longer silently clobbers hand-added tables/GSIs.**
+  Regenerating `dynamodb.tf` is a full overwrite from `lambda/models/*.rb`, so a
+  table or `global_secondary_index` added straight into the `.tf` file — one the
+  models don't declare — used to vanish on the next run. Dropping a live GSI is
+  not harmless: queries against it start failing. The generator now diffs the
+  existing file and, when the regen would remove infrastructure it can't
+  re-derive, it warns and lists exactly what would disappear. An interactive run
+  prompts before overwriting; a generator auto-sync refuses and leaves the file
+  untouched. Pass `--force` (`-f`/`--yes`/`-y`) to overwrite anyway. The
+  `dynamodb.tf` header comment now spells out this behavior too. (Fixes the
+  misleading "harmless diff" framing in the 0.4.0 notes below.)
+
 - **Apply environment AWS profile in `belt deploy frontend`, `belt frontend env`, `belt logs`, and `belt server`**:
   Standalone frontend deployment (`belt deploy frontend <env>`), frontend env generation (`belt frontend env <env>`),
   log viewing (`belt logs`), and the local dev server (`belt server`) now load `infrastructure/<env>/belt.rb`

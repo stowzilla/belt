@@ -15,7 +15,12 @@ module Belt
         # dynamodb.tf lives in infrastructure/modules/app and uses var.environment.
         EnvResolver.resolve(args)
 
-        new.run
+        # `--force`/`-y` overwrites dynamodb.tf even when the regen would drop a
+        # hand-added table or GSI. Without it, an interactive run prompts before
+        # clobbering and a quiet (generator) run refuses.
+        force = args.intersect?(%w[--force -f --yes -y])
+
+        new(force: force).run
       end
 
       # Automatically sync dynamodb.tf in the app module.
@@ -26,8 +31,9 @@ module Belt
         new(quiet: true).run
       end
 
-      def initialize(quiet: false)
+      def initialize(quiet: false, force: false)
         @quiet = quiet
+        @force = force
       end
 
       def run
@@ -166,6 +172,16 @@ module Belt
         # Skip if content is unchanged
         return if existing_content == new_content
 
+        # Regenerating dynamodb.tf is a full overwrite. Anything hand-added to the
+        # file that the generator can't re-derive from the models — a GSI added
+        # straight into the .tf, or a table for a model that no longer exists — would
+        # silently vanish. Detect that and refuse (quiet) or prompt (interactive)
+        # unless --force was passed.
+        if existing_content
+          dropped = detect_dropped_infrastructure(existing_content, new_content)
+          return if dropped.any? && !safe_to_overwrite?(dest, dropped)
+        end
+
         File.write(dest, new_content)
 
         if @quiet
@@ -179,10 +195,104 @@ module Belt
         end
       end
 
+      # Compare the existing dynamodb.tf against the freshly rendered content and
+      # return a list of human-readable descriptions of infrastructure that exists
+      # today but wouldn't be regenerated — i.e. would be dropped by the overwrite.
+      #
+      # We only surface *removals*, since additions and edits are the whole point of
+      # re-running the generator. A removal, on the other hand, is usually a mistake:
+      # a GSI someone added by hand that the model doesn't declare.
+      def detect_dropped_infrastructure(existing_content, new_content)
+        dropped = []
+
+        old_tables = table_labels(existing_content)
+        new_tables = table_labels(new_content)
+        dropped.concat((old_tables - new_tables).map { |label| "table \"#{label}\"" })
+
+        # Only compare GSIs on tables that survive — a dropped table already
+        # accounts for its indexes, no need to list them twice.
+        (old_tables & new_tables).each do |label|
+          old_gsis = gsi_names(existing_content, label)
+          new_gsis = gsi_names(new_content, label)
+          dropped.concat((old_gsis - new_gsis).map { |gsi| "GSI \"#{gsi}\" on table \"#{label}\"" })
+        end
+
+        dropped
+      end
+
+      # Resource labels for every aws_dynamodb_table block in the content.
+      def table_labels(content)
+        content.scan(/resource\s+"aws_dynamodb_table"\s+"([^"]+)"/).flatten
+      end
+
+      # GSI names declared inside the given table's resource block.
+      def gsi_names(content, label)
+        block = table_block(content, label)
+        return [] unless block
+
+        block.scan(/global_secondary_index\s*\{[^}]*?name\s*=\s*"([^"]+)"/m).flatten
+      end
+
+      # Extract the body of a single aws_dynamodb_table resource block by brace
+      # matching, so we can scope GSI lookups to one table.
+      def table_block(content, label)
+        marker = /resource\s+"aws_dynamodb_table"\s+"#{Regexp.escape(label)}"\s*\{/
+        match = content.match(marker)
+        return nil unless match
+
+        start = match.end(0)
+        depth = 1
+        idx = start
+        while idx < content.length && depth.positive?
+          case content[idx]
+          when '{' then depth += 1
+          when '}' then depth -= 1
+          end
+          idx += 1
+        end
+        content[start...(idx - 1)]
+      end
+
+      # Decide whether it's safe to overwrite dynamodb.tf when the regen would drop
+      # hand-added infrastructure. Returns true to proceed, false to abort the write.
+      def safe_to_overwrite?(dest, dropped)
+        return true if @force
+
+        warn_dropped(dest, dropped)
+
+        # A generator auto-sync must never silently destroy custom infra. Refuse and
+        # tell the user to resolve it deliberately.
+        if @quiet
+          puts '  ⚠ skipped dynamodb.tf — would drop hand-added infrastructure ' \
+               '(run `belt setup tables` to review)'
+          return false
+        end
+
+        print "\nOverwrite anyway and drop the above? [y/N] "
+        response = $stdin.gets&.strip&.downcase
+        return true if %w[y yes].include?(response)
+
+        puts '✗ Aborted. dynamodb.tf left unchanged.'
+        puts '  Move the custom definition into a model, or re-run with --force to overwrite.'
+        false
+      end
+
+      def warn_dropped(dest, dropped)
+        puts "\n⚠ Regenerating #{dest} would DROP infrastructure not derived from your models:"
+        dropped.each { |d| puts "    • #{d}" }
+        puts "\n  This usually means a table or GSI was added to dynamodb.tf by hand."
+        puts '  Belt only tracks tables and indexes it can read from lambda/models/*.rb,'
+        puts '  so a hand-added definition is invisible to the generator and gets overwritten.'
+      end
+
       def render_dynamodb(models)
         blocks = models.map { |m| render_table(m) }
-        "# Auto-generated by Belt from model definitions\n" \
-          "# Do not edit manually — re-run `belt setup tables`\n\n#{blocks.join("\n\n")}\n"
+        "# Auto-generated by Belt from model definitions in lambda/models/*.rb\n" \
+          "#\n" \
+          "# Do NOT edit manually. `belt setup tables` overwrites this whole file from\n" \
+          "# your models. Any table or GSI added here by hand (that a model doesn't\n" \
+          "# declare) will be DROPPED on the next regeneration. Define indexes on the\n" \
+          "# model via indexes(), belongs_to, or cognito_authenticatable instead.\n\n#{blocks.join("\n\n")}\n"
       end
 
       def render_table(model)
