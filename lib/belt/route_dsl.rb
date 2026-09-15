@@ -788,14 +788,25 @@ module Belt
       private
 
       def build_path(path)
-        @scope_prefix.empty? ? path : "/#{@scope_prefix}#{path}"
+        path = path.to_s
+        sep = @scope_prefix.empty? || path.empty? || path.start_with?('/') ? '' : '/'
+        prefix = @scope_prefix.empty? ? '' : "/#{@scope_prefix}"
+        # Normalize Rails-style `:param` → API Gateway `{param}` so a gateway-level
+        # `scope path:` with a param (e.g. "accounts/:account_id") emits valid paths.
+        "#{prefix}#{sep}#{path}".gsub(/:([a-zA-Z_]\w*)/) { "{#{::Regexp.last_match(1)}}" }
+      end
+
+      # Strip param segments (`:param` / `{param}`) from a scope prefix before using it
+      # as a controller module: `scope path:` affects the URL, not the module.
+      def controller_module_from_prefix(prefix)
+        prefix.to_s.split('/').reject { |s| s.empty? || s.start_with?(':', '{') }.join('/')
       end
 
       def determine_scoped_controller(resource_name)
         if @scope_module && !@scope_module.empty?
           "#{@scope_module}/#{resource_name}"
-        elsif !@scope_prefix.empty?
-          "#{@scope_prefix}/#{resource_name}"
+        elsif !@scope_prefix.empty? && !(mod = controller_module_from_prefix(@scope_prefix)).empty?
+          "#{mod}/#{resource_name}"
         else
           resource_name
         end
