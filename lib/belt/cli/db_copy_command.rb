@@ -25,7 +25,7 @@ module Belt
       end
 
       def initialize(args)
-        @options = { force: false }
+        @options = { force: false, remap_identity: true }
         parse_options(args)
       end
 
@@ -53,6 +53,7 @@ module Belt
           from_profile: from_profile,
           to_profile: to_profile,
           force: @options[:force],
+          remap_identity: @options[:remap_identity],
           label: "#{@from_env} → #{@to_env}"
         ).run
 
@@ -79,6 +80,12 @@ module Belt
 
           opts.on('--force', 'Overwrite destination tables that already have data') do
             @options[:force] = true
+          end
+
+          opts.on('--no-remap-identity',
+                  'Copy Cognito-sub foreign keys verbatim instead of re-anchoring ' \
+                  "them to the destination environment's users by email") do
+            @options[:remap_identity] = false
           end
 
           opts.on('--from-profile PROFILE', 'AWS profile to read the source environment with') do |profile|
@@ -110,6 +117,16 @@ module Belt
           By default, destination tables that already contain data are
           skipped (safe to re-run). Use --force to overwrite them.
 
+          Cognito identities are per-environment: each environment has its own
+          user pool, so the same person has a different `sub` in each one. By
+          default db:copy re-anchors Cognito-sub foreign keys (e.g. a
+          membership's cognito_sub) to the destination environment's user with
+          the same email, and leaves the destination's own `users` table
+          untouched. Without this, copied rows would point at subs that don't
+          exist in the destination pool and silently disappear (a copied
+          project you can't see, etc.). Pass --no-remap-identity to copy those
+          references verbatim.
+
           AWS profiles are resolved from each environment's
           infrastructure/<env>/belt.rb (config.aws_profile), or overridden
           with --from-profile / --to-profile — useful when source and
@@ -117,6 +134,7 @@ module Belt
 
           Options:
             --force                    Overwrite destination tables with existing data
+            --no-remap-identity        Copy Cognito-sub foreign keys verbatim
             --from-profile PROFILE     AWS profile for reading the source environment
             --to-profile PROFILE       AWS profile for writing the destination environment
             -h, --help                 Show this help
