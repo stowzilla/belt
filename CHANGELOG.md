@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.5
+
+### Feature
+
+- **Nested `resources` blocks infer the controller module from the nesting hierarchy (Rails convention).**
+  Previously, `resources :items` nested inside `resources :customers` would resolve to the flat
+  `"items"` controller — requiring an explicit `scope module: 'customers'` to reach the namespaced
+  `OpsControllers::Customers::ItemsController`. Now the parent resource name is automatically
+  propagated as the scope module, so bare nesting matches Rails behaviour:
+  `resources :customers { resources :items }` → controller `"customers/items"`.
+  This also chains correctly for deeper nesting:
+  `resources :customers { resources :orders { resources :line_items } }` → `"customers/orders/line_items"`.
+  An explicit `controller:` option on the nested resource still overrides inference.
+
 ## 0.4.3
 
 ### Bug Fix

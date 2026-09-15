@@ -14,6 +14,100 @@ RSpec.describe 'NestedResourceBuilder scope and action inference' do
     routes.api_gateways.first.routes
   end
 
+  describe 'Rails-style nested resource module inference' do
+    it 'infers controller module from nesting without explicit scope module:' do
+      routes = build_routes do
+        resources :customers do
+          resources :items
+        end
+      end
+
+      create_route = routes.find { |r| r.path == '/customers/{customer_id}/items' && r.method == 'POST' }
+      expect(create_route).not_to be_nil
+      expect(create_route.controller).to eq('customers/items')
+
+      index_route = routes.find { |r| r.path == '/customers/{customer_id}/items' && r.method == 'GET' }
+      expect(index_route.controller).to eq('customers/items')
+    end
+
+    it 'applies to all CRUD routes on the nested resource' do
+      routes = build_routes do
+        resources :customers do
+          resources :items
+        end
+      end
+
+      item_routes = routes.select { |r| r.path.include?('/customers/') && r.path.include?('/items') }
+      expect(item_routes).not_to be_empty
+      item_routes.each do |route|
+        expect(route.controller).to eq('customers/items')
+      end
+    end
+
+    it 'handles two levels of nesting' do
+      routes = build_routes do
+        resources :customers do
+          resources :orders do
+            resources :line_items
+          end
+        end
+      end
+
+      line_item_create = routes.find { |r| r.path.include?('line_items') && r.method == 'POST' }
+      expect(line_item_create).not_to be_nil
+      expect(line_item_create.controller).to eq('customers/orders/line_items')
+
+      order_create = routes.find { |r| r.path =~ %r{/customers/\{customer_id\}/orders$} && r.method == 'POST' }
+      expect(order_create.controller).to eq('customers/orders')
+    end
+
+    it 'explicit controller: option overrides inference' do
+      routes = build_routes do
+        resources :customers do
+          resources :items, controller: 'ops/items'
+        end
+      end
+
+      create_route = routes.find { |r| r.path.include?('/items') && r.method == 'POST' }
+      expect(create_route.controller).to eq('ops/items')
+    end
+
+    it 'does not affect top-level resources (no module prefix)' do
+      routes = build_routes do
+        resources :customers
+        resources :items
+      end
+
+      # Top-level resources have no controller module — controller is nil (inferred from route at dispatch time)
+      customer_route = routes.find { |r| r.path == '/customers' && r.method == 'GET' }
+      expect(customer_route.controller).to be_nil
+
+      item_route = routes.find { |r| r.path == '/items' && r.method == 'GET' }
+      expect(item_route.controller).to be_nil
+    end
+
+    it 'member/collection routes on a nested resource inherit the inferred controller' do
+      routes = build_routes do
+        resources :customers do
+          resources :items do
+            member do
+              post :approve
+            end
+            collection do
+              get :pending
+            end
+          end
+        end
+      end
+
+      approve_route = routes.find { |r| r.path.include?('approve') }
+      expect(approve_route.controller).to eq('customers/items')
+
+      pending_route = routes.find { |r| r.path.include?('pending') }
+      expect(pending_route.controller).to eq('customers/items')
+    end
+  end
+
   describe 'scope inside nested resources' do
     it 'allows scope inside resources block with path and controller' do
       routes = build_routes do
@@ -91,7 +185,7 @@ RSpec.describe 'NestedResourceBuilder scope and action inference' do
   end
 
   describe 'namespace inside nested resources (Rails-like)' do
-    it 'adds path prefix and controller module prefix' do
+    it 'adds path prefix and controller module prefix, scoped under the parent resource' do
       routes = build_routes do
         resources :projects do
           namespace :admin do
@@ -103,7 +197,8 @@ RSpec.describe 'NestedResourceBuilder scope and action inference' do
       admin_route = routes.find { |r| r.path.include?('admin/users') }
       expect(admin_route).not_to be_nil
       expect(admin_route.path).to eq('/projects/{project_id}/admin/users')
-      expect(admin_route.controller).to eq('admin/users')
+      # Rails convention: nested namespace inherits parent module → projects/admin/users
+      expect(admin_route.controller).to eq('projects/admin/users')
     end
 
     it 'allows nested namespaces' do
@@ -119,7 +214,8 @@ RSpec.describe 'NestedResourceBuilder scope and action inference' do
 
       route = routes.find { |r| r.path.include?('settings') }
       expect(route.path).to eq('/projects/{project_id}/admin/v2/settings')
-      expect(route.controller).to eq('admin/v2/settings')
+      # Rails convention: full module path includes parent resource
+      expect(route.controller).to eq('projects/admin/v2/settings')
     end
 
     it 'inherits auth and tables' do
@@ -149,11 +245,12 @@ RSpec.describe 'NestedResourceBuilder scope and action inference' do
 
       show_route = routes.find { |r| r.path == '/projects/{project_id}/settings/profile' && r.method == 'GET' }
       expect(show_route).not_to be_nil
-      expect(show_route.controller).to eq('settings/profile')
+      # Rails convention: parent resource module is included
+      expect(show_route.controller).to eq('projects/settings/profile')
 
       update_route = routes.find { |r| r.path == '/projects/{project_id}/settings/profile' && r.method == 'PUT' }
       expect(update_route).not_to be_nil
-      expect(update_route.controller).to eq('settings/profile')
+      expect(update_route.controller).to eq('projects/settings/profile')
     end
 
     it 'supports member/collection blocks inside namespaced resources' do
@@ -174,11 +271,11 @@ RSpec.describe 'NestedResourceBuilder scope and action inference' do
 
       activate_route = routes.find { |r| r.path.include?('activate') }
       expect(activate_route.path).to eq('/projects/{project_id}/admin/users/{user_id}/activate')
-      expect(activate_route.controller).to eq('admin/users')
+      expect(activate_route.controller).to eq('projects/admin/users')
 
       pending_route = routes.find { |r| r.path.include?('pending') }
       expect(pending_route.path).to eq('/projects/{project_id}/admin/users/pending')
-      expect(pending_route.controller).to eq('admin/users')
+      expect(pending_route.controller).to eq('projects/admin/users')
     end
 
     it 'does not leak namespace to sibling routes' do
@@ -192,10 +289,11 @@ RSpec.describe 'NestedResourceBuilder scope and action inference' do
       end
 
       admin_route = routes.find { |r| r.path.include?('admin/users') }
-      expect(admin_route.controller).to eq('admin/users')
+      expect(admin_route.controller).to eq('projects/admin/users')
 
+      # Comments are a plain nested resource — infers projects/comments
       comments_route = routes.find { |r| r.path.include?('comments') }
-      expect(comments_route.controller).to eq('comments')
+      expect(comments_route.controller).to eq('projects/comments')
     end
   end
 
@@ -416,7 +514,8 @@ RSpec.describe 'NestedResourceBuilder scope and action inference' do
       teams_route = routes.find { |r| r.path == '/projects/{project_id}/surfaces/teams' }
       expect(teams_route).not_to be_nil
       expect(teams_route.action).to eq(:teams)
-      expect(teams_route.controller).to eq('surfaces')
+      # Rails convention: nested resource inherits parent module
+      expect(teams_route.controller).to eq('projects/surfaces')
 
       assign_route = routes.find { |r| r.path == '/projects/{project_id}/surfaces/{surface_id}/assign' }
       expect(assign_route).not_to be_nil

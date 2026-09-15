@@ -83,13 +83,15 @@ module Belt
 
       nested_member_prefix = "#{@prefix}/#{resource_name}/{#{param_name}}"
       nested_collection_prefix = "#{@prefix}/#{resource_name}"
-      # Pass scope_module to nested builder so nested resources inherit it
+      # Pass controller_name as scope_module so deeply nested resources inherit the full module path.
+      # e.g. resources :customers { resources :items { resources :details } }
+      # → customers/items → scope_module "customers/items" → details gets "customers/items/details"
       nested_builder = NestedResourceBuilder.new(@gateway, nested_member_prefix, nested_collection_prefix,
                                                  inherited_tables: Array(options[:tables] || []),
                                                  inherited_auth: options[:auth] || @inherited_auth,
                                                  inherited_controller: controller_name,
                                                  inherited_lambda: @inherited_lambda,
-                                                 scope_module: @scope_module)
+                                                 scope_module: controller_name)
       nested_builder.instance_eval(&block)
     end
 
@@ -436,11 +438,14 @@ module Belt
       inherited_auth = options[:auth] || @default_auth
       inherited_lambda = options[:lambda]
       inherited_controller = resource_name
+      # Infer scope_module from the parent resource name (Rails convention):
+      # resources :customers { resources :items } → items controller is "customers/items"
       nested_builder = NestedResourceBuilder.new(self, member_prefix, collection_prefix,
                                                  inherited_tables: inherited_tables,
                                                  inherited_auth: inherited_auth,
                                                  inherited_controller: inherited_controller,
-                                                 inherited_lambda: inherited_lambda)
+                                                 inherited_lambda: inherited_lambda,
+                                                 scope_module: resource_name)
       nested_builder.instance_eval(&)
     end
 
@@ -881,11 +886,15 @@ module Belt
         resource_tables = Array(options[:tables] || [])
         inherited_tables = (@gateway.default_tables + resource_tables).uniq
         inherited_auth = options[:auth] || @gateway.default_auth
+        # Use controller as scope_module so nested resources infer the correct module path.
+        # e.g. scope module: 'v2' { resources :customers { resources :items } }
+        # → controller = "v2/customers", items gets scope_module "v2/customers" → "v2/customers/items"
         nested_builder = NestedResourceBuilder.new(@gateway, member_prefix, collection_prefix,
                                                    inherited_tables: inherited_tables,
                                                    inherited_auth: inherited_auth,
                                                    inherited_controller: controller,
-                                                   inherited_lambda: @lambda_target)
+                                                   inherited_lambda: @lambda_target,
+                                                   scope_module: controller)
         nested_builder.instance_eval(&)
       end
 
