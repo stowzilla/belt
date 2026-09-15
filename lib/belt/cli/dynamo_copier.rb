@@ -19,19 +19,44 @@ module Belt
       BATCH_SIZE = 25
       MAX_RETRIES = 8
 
+      # Belt's `cognito_authenticatable` convention: the identity table is
+      # `<app>-<env>-users`, its primary key attribute is `id` (the Cognito
+      # `sub`), and it carries an `email` attribute. A Cognito `sub` is unique
+      # *per user pool*, and each environment has its own pool — so the same
+      # human has a different `id` in every environment. Any row that
+      # references a user by sub therefore has a stale reference the moment it
+      # crosses an environment boundary.
+      #
+      # `cognito_sub` is the conventional foreign-key attribute name for that
+      # reference (see FeatureParity's Membership, Belt's invitation pattern).
+      # When a referencing row also carries an `email`, we can re-anchor it to
+      # the destination environment's user with the same email.
+      IDENTITY_TABLE_SUFFIX = 'users'
+      IDENTITY_ID_ATTR = 'id'
+      IDENTITY_EMAIL_ATTR = 'email'
+      IDENTITY_FK_ATTR = 'cognito_sub'
+
       # from_prefixes / to_prefixes: array of candidate table-name prefixes
       #   (the source/destination env's tables are matched against these).
       # from_profile / to_profile: AWS_PROFILE to use when reading the source
       #   / writing the destination, respectively (nil = use current
       #   credentials / AWS_PROFILE already in the environment).
       # label: short description used in log output (e.g. "dev01 → dev01-pr").
-      def initialize(from_prefixes:, to_prefixes:, from_profile: nil, to_profile: nil, force: false, label: nil)
+      # remap_identity: when true, re-anchor Cognito-sub foreign keys to the
+      #   destination environment's users by email (see IDENTITY_* above). The
+      #   users table itself is left untouched so the destination keeps its own
+      #   pool's identities. Defaults to true — copying identity-referencing
+      #   rows verbatim across environments silently hides the data (the row
+      #   points at a sub that doesn't exist in the destination pool).
+      def initialize(from_prefixes:, to_prefixes:, from_profile: nil, to_profile: nil,
+                     force: false, label: nil, remap_identity: true)
         @from_prefixes = Array(from_prefixes)
         @to_prefixes = Array(to_prefixes)
         @from_profile = from_profile
         @to_profile = to_profile
         @force = force
         @label = label
+        @remap_identity = remap_identity
         @errors = []
       end
 
@@ -67,6 +92,16 @@ module Belt
       def copy_pair(source_table, dest_table)
         short = suffix_for(dest_table, @to_prefixes)
 
+        # The identity (users) table is left alone when remapping: the
+        # destination environment's Cognito pool is authoritative for who its
+        # users are and what `sub` each one has. Overwriting it with the
+        # source pool's identities would create user rows that can never
+        # authenticate here (their sub belongs to the other pool).
+        if @remap_identity && identity_table?(short)
+          puts "    skip  #{short} (identity table — destination pool is authoritative)"
+          return :skipped
+        end
+
         unless table_exists?(dest_table, profile: @to_profile)
           puts "    ⚠  #{short}: destination table missing — skip"
           return :skipped
@@ -88,16 +123,90 @@ module Belt
           return :skipped
         end
 
+        items, remapped, dropped = remap_identity_refs(items) if @remap_identity
+
         begin
           wipe_table(dest_table, profile: @to_profile) if @force
           write_items(dest_table, items, profile: @to_profile)
-          puts "    copy  #{short} (#{items.size} item#{'s' if items.size != 1})"
+          suffix = ''
+          if @remap_identity && (remapped.to_i.positive? || dropped.to_i.positive?)
+            parts = []
+            parts << "#{remapped} re-anchored" if remapped.to_i.positive?
+            parts << "#{dropped} unmatched" if dropped.to_i.positive?
+            suffix = ", #{parts.join(', ')}"
+          end
+          puts "    copy  #{short} (#{items.size} item#{'s' if items.size != 1}#{suffix})"
           :copied
         rescue StandardError => e
           wipe_table(dest_table, profile: @to_profile)
           fail_table(short, e.message)
           :failed
         end
+      end
+
+      def identity_table?(suffix)
+        suffix == IDENTITY_TABLE_SUFFIX
+      end
+
+      # Re-anchors Cognito-sub foreign keys to the destination environment's
+      # users. For each item that carries both an email and a `cognito_sub`,
+      # the sub is rewritten to the destination user with the same email. Items
+      # whose email has no destination user keep their attributes but have the
+      # stale sub cleared, so they surface as unclaimed (e.g. a pending
+      # invitation) rather than pointing at a nonexistent identity.
+      #
+      # Returns [items, remapped_count, dropped_count].
+      def remap_identity_refs(items)
+        map = destination_email_to_id
+        remapped = 0
+        dropped = 0
+
+        rewritten = items.map do |item|
+          fk = item[IDENTITY_FK_ATTR]
+          email_attr = item[IDENTITY_EMAIL_ATTR]
+          # Only touch rows that actually reference an identity by sub AND
+          # carry an email to re-anchor on. Everything else passes through.
+          next item unless fk.is_a?(Hash) && fk.key?('S') && !fk['S'].to_s.empty?
+          next item unless email_attr.is_a?(Hash) && !email_attr['S'].to_s.empty?
+
+          email = email_attr['S'].to_s.downcase
+          dest_id = map[email]
+
+          if dest_id
+            next item if dest_id == fk['S']
+
+            remapped += 1
+            item.merge(IDENTITY_FK_ATTR => { 'S' => dest_id })
+          else
+            dropped += 1
+            item.reject { |key, _| key == IDENTITY_FK_ATTR }
+          end
+        end
+
+        [rewritten, remapped, dropped]
+      end
+
+      # email (downcased) => destination user id (Cognito sub), built from the
+      # destination environment's users table as it exists right now.
+      def destination_email_to_id
+        @destination_email_to_id ||= begin
+          table = dest_identity_table
+          map = {}
+          if table
+            items = scan_items(table, profile: @to_profile) || []
+            items.each do |item|
+              email = item.dig(IDENTITY_EMAIL_ATTR, 'S')
+              id = item.dig(IDENTITY_ID_ATTR, 'S')
+              map[email.to_s.downcase] = id if email && id
+            end
+          end
+          map
+        end
+      end
+
+      def dest_identity_table
+        dest_tables = tables_with_prefixes(@to_prefixes, profile: @to_profile)
+        dest_tables.find { |name| suffix_for(name, @to_prefixes) == IDENTITY_TABLE_SUFFIX }
       end
 
       def table_pairs

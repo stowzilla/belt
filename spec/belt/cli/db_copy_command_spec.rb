@@ -45,6 +45,7 @@ RSpec.describe Belt::CLI::DbCopyCommand do
       from_profile: 'prod-readonly',
       to_profile: 'dev',
       force: false,
+      remap_identity: true,
       label: 'prod → dev'
     ).and_return(copier)
 
@@ -59,10 +60,26 @@ RSpec.describe Belt::CLI::DbCopyCommand do
       from_profile: 'custom-from',
       to_profile: 'custom-to',
       force: true,
+      remap_identity: true,
       label: 'prod → dev'
     ).and_return(copier)
 
     described_class.run(%w[prod dev --force --from-profile custom-from --to-profile custom-to])
+  end
+
+  it 'passes remap_identity: false through when --no-remap-identity is given' do
+    copier = instance_double(Belt::CLI::DynamoCopier, run: true)
+    expect(Belt::CLI::DynamoCopier).to receive(:new).with(
+      from_prefixes: ['myapp-prod-'],
+      to_prefixes: ['myapp-dev-'],
+      from_profile: 'custom-from',
+      to_profile: 'custom-to',
+      force: false,
+      remap_identity: false,
+      label: 'prod → dev'
+    ).and_return(copier)
+
+    described_class.run(%w[prod dev --no-remap-identity --from-profile custom-from --to-profile custom-to])
   end
 
   it 'aborts with a non-zero exit when the copier reports failure' do

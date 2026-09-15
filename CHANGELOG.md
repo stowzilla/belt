@@ -18,6 +18,8 @@
 
 ## Unreleased
 
+## 0.4.5
+
 ### Feature
 
 - **`belt db:copy <from-env> <to-env>` — copy DynamoDB data between environments on demand.**
@@ -31,6 +33,17 @@
   (`config.aws_profile`), or overridden with `--from-profile` / `--to-profile` —
   needed when source and destination live in different AWS accounts (e.g. prod vs.
   dev). See `belt explain data_seeding`.
+
+  Cognito identities are per-environment (each environment has its own user pool,
+  so the same person has a different `sub` in each), so `db:copy` re-anchors
+  Cognito-sub foreign keys (e.g. a membership's `cognito_sub`) to the destination
+  environment's user with the matching email, and leaves the destination's own
+  `users` table untouched. Without this a copied row points at a `sub` that doesn't
+  exist in the destination pool and silently vanishes (a copied project you can't
+  see). Rows whose email has no destination user yet have the stale sub cleared so
+  they read as unclaimed (e.g. a pending invitation) rather than dangling. The same
+  re-anchoring now runs in the nested-env deploy hook. Pass `--no-remap-identity` to
+  copy those references verbatim.
 
 - **`belt db:seed [environment]` — Rails-style `config/seeds.rb`.**
   Loads `config/seeds.rb` in the same booted context `belt console` uses (models,
