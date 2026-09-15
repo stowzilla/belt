@@ -18,6 +18,8 @@
 
 ## Unreleased
 
+## 0.4.4
+
 ### Bug Fix
 
 - **Gateway-level `scope path:` with a param segment no longer emits malformed paths.**
