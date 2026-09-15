@@ -1,0 +1,24 @@
+# frozen_string_literal: true
+
+# Seed data for <%= @app_name %>. Run with:
+#
+#   belt db:seed              # seeds dev (or BELT_ENV)
+#   belt db:seed prod         # explicit environment (prompts for confirmation)
+#   BELT_ENV=dev01 belt db:seed
+#
+# This file is loaded in the same booted context as `belt console` — your
+# models (ActiveItem) are available, and they target the resolved
+# environment's DynamoDB tables (<%= @app_name %>-<env>-*).
+#
+# `belt db:seed` refuses to run against an environment that already has
+# data, to avoid clobbering something real. Pass --force to seed anyway.
+# Keep this file idempotent if you expect to re-run it (e.g. find_or_create
+# rather than create).
+#
+# Example:
+#
+#   post = Post.create!(
+#     title: "Hello, world",
+#     body: "This post was created by config/seeds.rb"
+#   )
+#   puts "Created post: #{post.id}"

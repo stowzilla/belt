@@ -701,6 +701,36 @@ These are set via Terraform variables in each environment's `terraform.tfvars`. 
 
 The backup phase reads table names from Terraform outputs. On a brand-new environment that has never been deployed, there are no outputs yet — Belt will warn and skip the backup phase gracefully. After the first successful deploy, backups run normally on subsequent deploys.
 
+## Data Seeding
+
+Two ways to get realistic data into an environment without hand-crafting rows.
+
+### `belt db:copy` — copy data between environments
+
+```bash
+belt db:copy prod dev            # copy prod's DynamoDB data into dev
+belt db:copy prod dev --force    # overwrite dev tables even if non-empty
+```
+
+Matches tables by name after stripping each environment's `<app>-<env>-` prefix. Destination tables that already have data are skipped by default (safe to re-run). AWS profiles are resolved per-environment from `infrastructure/<env>/belt.rb`, or overridden with `--from-profile` / `--to-profile` — useful when source and destination live in different AWS accounts (e.g. prod vs. dev).
+
+### `belt db:seed` — Rails-style seed file
+
+```bash
+belt db:seed              # seeds dev, or $BELT_ENV if set
+belt db:seed dev01
+```
+
+Loads `config/seeds.rb` in the same booted context `belt console` uses — models are available, targeting the resolved environment's tables:
+
+```ruby
+# config/seeds.rb
+post = Post.create!(title: "Hello, world", body: "Seeded post")
+puts "Created post: #{post.id}"
+```
+
+Refuses to run against an environment that already has data (pass `--force` to override). `belt new` scaffolds a starter `config/seeds.rb`. See `belt explain data_seeding` for details.
+
 ## Plugins
 
 Belt is designed to stay lean. Optional capabilities ship as **separate gems** that plug into the CLI and runtime the same way Rails engines and generators do.

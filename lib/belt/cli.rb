@@ -24,6 +24,8 @@ require_relative 'cli/contracts_command'
 require_relative 'cli/lambda_config_command'
 require_relative 'cli/tasks_command'
 require_relative 'cli/console_command'
+require_relative 'cli/db_copy_command'
+require_relative 'cli/db_seed_command'
 require_relative 'cli/logs_command'
 require_relative 'cli/doctor_command'
 require_relative 'cli/plugin_command'
@@ -39,6 +41,8 @@ module Belt
       'contracts' => Belt::CLI::ContractsCommand,
       'lambda-config' => Belt::CLI::LambdaConfigCommand,
       %w[console c] => Belt::CLI::ConsoleCommand,
+      'db:copy' => Belt::CLI::DbCopyCommand,
+      'db:seed' => Belt::CLI::DbSeedCommand,
       'logs' => Belt::CLI::LogsCommand,
       %w[tasks --tasks -T] => Belt::CLI::TasksCommand,
       'setup' => Belt::CLI::SetupCommand,
@@ -125,6 +129,8 @@ module Belt
 
           console                                     Start an interactive console (IRB)
           c                                           Alias for console
+          db:copy <from-env> <to-env> [--force]        Copy DynamoDB data between environments
+          db:seed [environment] [--force]              Run config/seeds.rb against an environment
           logs [lambda] [-f] [-s 5m] [-e env]         View Lambda function logs
           tasks [-g PATTERN] [-a]                     List available rake tasks
           -T [-g PATTERN] [-a]                        Alias for tasks
@@ -170,6 +176,10 @@ module Belt
           belt tasks                    # list all rake tasks
           belt lambda:build_layer       # run a rake task directly
           belt plugin new messaging     # scaffold a belt-messaging style plugin gem
+          belt db:copy prod dev         # copy prod's DynamoDB data into dev
+          belt db:copy prod dev --force # overwrite dev tables even if non-empty
+          belt db:seed                  # run config/seeds.rb against dev (or BELT_ENV)
+          belt db:seed dev01
       USAGE
     end
 
