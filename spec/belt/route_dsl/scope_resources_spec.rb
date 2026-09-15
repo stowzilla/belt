@@ -156,4 +156,74 @@ RSpec.describe 'RouteBuilder#resources inside scope' do
       expect(paths).to include(['DELETE', '/admin/profile'])
     end
   end
+
+  describe 'scope path with a param segment (fizzy-1383)' do
+    it 'normalizes :param segments to API Gateway {param} form' do
+      routes = build_routes do
+        scope path: 'accounts/:account_id' do
+          resources :changes
+        end
+      end
+
+      paths = routes.map { |r| [r.method, r.path] }
+      expect(paths).to include(['GET', '/accounts/{account_id}/changes'])
+      expect(paths).to include(['POST', '/accounts/{account_id}/changes'])
+      expect(paths).to include(['GET', '/accounts/{account_id}/changes/{id}'])
+      expect(paths).to include(['PUT', '/accounts/{account_id}/changes/{id}'])
+      expect(paths).to include(['DELETE', '/accounts/{account_id}/changes/{id}'])
+    end
+
+    it 'does not leak the raw :param or {param} segment into any path' do
+      routes = build_routes do
+        scope path: 'accounts/:account_id' do
+          resources :changes
+        end
+      end
+
+      expect(routes.map(&:path)).to all(satisfy { |p| !p.include?(':account_id') })
+    end
+
+    it 'excludes param segments from the derived controller module' do
+      routes = build_routes do
+        scope path: 'accounts/:account_id' do
+          resources :changes
+        end
+      end
+
+      # Static segment "accounts" stays as the module; "{account_id}" is stripped.
+      expect(routes.map(&:controller).uniq).to eq(['accounts/changes'])
+    end
+
+    it 'derives a clean controller when the scope path is only a param' do
+      routes = build_routes do
+        scope path: ':account_id' do
+          resources :changes
+        end
+      end
+
+      expect(routes.map(&:path)).to all(eq('/{account_id}/changes').or(eq('/{account_id}/changes/{id}')))
+      expect(routes.map(&:controller).uniq).to eq(['changes'])
+    end
+
+    it 'accepts a param already in {param} form' do
+      routes = build_routes do
+        scope path: 'accounts/{account_id}' do
+          resources :changes
+        end
+      end
+
+      expect(routes.map { |r| [r.method, r.path] }).to include(['GET', '/accounts/{account_id}/changes'])
+      expect(routes.map(&:controller).uniq).to eq(['accounts/changes'])
+    end
+
+    it 'normalizes params for plain member/collection routes too' do
+      routes = build_routes do
+        scope path: 'accounts/:account_id' do
+          get 'summary'
+        end
+      end
+
+      expect(routes.map(&:path)).to eq(['/accounts/{account_id}/summary'])
+    end
+  end
 end

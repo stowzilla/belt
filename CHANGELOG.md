@@ -18,7 +18,22 @@
 
 ## Unreleased
 
+## 0.4.4
+
 ### Bug Fix
+
+- **Gateway-level `scope path:` with a param segment no longer emits malformed paths.**
+  A gateway-level `scope path: 'accounts/:account_id'` used to leak the raw Rails-style
+  `:account_id` segment straight into route paths (`/accounts/:account_id/changes`)
+  instead of the API Gateway `{account_id}` form, and — worse — a bare-param scope with a
+  path that didn't start with `/` (e.g. `get 'summary'`) produced fused garbage like
+  `/accounts/{account_idsummary}`. It also folded the param segment into the derived
+  controller module (`accounts/:account_id/changes`). Now `build_path` joins the scope
+  prefix and route path with exactly one `/` and normalizes `:param` → `{param}`, and
+  the controller module is derived only from the scope's *static* segments (matching
+  Rails, where `scope path:` shapes the URL, not the module). Static-only scopes
+  (`scope path: 'admin'` → `admin/users`) are unchanged. A scope nested inside a
+  `resources` block was already fine; only the gateway-level case was broken.
 
 - **`belt setup tables` no longer silently clobbers hand-added tables/GSIs.**
   Regenerating `dynamodb.tf` is a full overwrite from `lambda/models/*.rb`, so a
