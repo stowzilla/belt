@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Bug Fix
+
+- **`belt deploy frontend` now explains *why* the S3 bucket lookup failed.**
+  Previously any nil bucket output produced the same misleading
+  `Could not determine S3 bucket. Run belt apply <env> first.` — even when the env
+  had simply never been applied, or when the AWS profile/SSO session had expired.
+  `fetch_tf_output` swallows terraform's stderr, so the real cause was invisible.
+  The frontend deploy now re-probes terraform with stderr captured and emits a
+  targeted message for three cases: no Terraform state yet (provision the backend
+  first), a credential/SSO failure (fix the `aws_profile` / run `aws sso login`),
+  or an applied backend that's missing the frontend's bucket output (check
+  `config/frontends.yml`). This surfaces most often during ephemeral environment
+  setup, where the frontend step can run before the backend is applied.
+
 ## 0.4.3
 
 ### Bug Fix
