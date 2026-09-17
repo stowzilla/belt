@@ -778,7 +778,26 @@ module Belt
 
         puts "\n━━━ nested environment (parent: #{nested.parent}) ━━━"
         CognitoSharer.new(nested).run
-        DynamoCopier.new(nested, app_name: detect_app_name_for_backup).run
+
+        app_name = detect_app_name_for_backup
+        parent_profile = EnvironmentConfig.load(nested.parent, infra_dir: @infra_dir).aws_profile
+        child_profile = EnvironmentConfig.load(nested.env, infra_dir: @infra_dir).aws_profile
+
+        DynamoCopier.new(
+          from_prefixes: prefixes_for(app_name, nested.parent),
+          to_prefixes: prefixes_for(app_name, nested.env),
+          from_profile: parent_profile,
+          to_profile: child_profile,
+          label: "#{nested.parent} → #{nested.env}"
+        ).run
+      end
+
+      # Both the raw and S3/DNS-safe (underscore→dash, lowercased) forms of the
+      # table-name prefix, since app names may contain underscores.
+      def prefixes_for(app_name, env_name)
+        raw = "#{app_name}-#{env_name}-"
+        sanitized = raw.tr('_', '-').downcase
+        [raw, sanitized].uniq
       end
 
       def deploy_frontend_if_exists

@@ -44,7 +44,14 @@ module Belt
         'irb' => 'console',
         'repl' => 'console',
         'frontends' => 'frontend',
-        'spa' => 'frontend'
+        'spa' => 'frontend',
+        'seeds' => 'data_seeding',
+        'seed' => 'data_seeding',
+        'seeding' => 'data_seeding',
+        'db:seed' => 'data_seeding',
+        'db:copy' => 'data_seeding',
+        'copy' => 'data_seeding',
+        'db_copy' => 'data_seeding'
       }.freeze
 
       def self.run(args)
@@ -105,6 +112,8 @@ module Belt
             backup                    → backups
             plugin                    → plugins
             irb, repl                 → console
+            seeds, seed, db:seed      → data_seeding
+            db:copy, copy             → data_seeding
 
           Examples:
             belt explain routing

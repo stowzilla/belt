@@ -168,6 +168,7 @@ module Belt
           'lambda/lib/routes/routes.rb.erb' => "#{@app_name}/lambda/lib/routes/api_routes.rb",
           'config/routes.rb.erb' => "#{@app_name}/config/routes.rb",
           'config/contracts.rb.erb' => "#{@app_name}/config/contracts.rb",
+          'config/seeds.rb.erb' => "#{@app_name}/config/seeds.rb",
           'config/lambda/api.yml.erb' => "#{@app_name}/config/lambda/api.yml",
           'README.md.erb' => "#{@app_name}/README.md",
           'AGENTS.md.erb' => "#{@app_name}/AGENTS.md",

@@ -34,6 +34,42 @@
 
 ## Unreleased
 
+## 0.4.5
+
+### Feature
+
+- **`belt db:copy <from-env> <to-env>` — copy DynamoDB data between environments on demand.**
+  Promotes the `DynamoCopier` used by nested (PR-preview) deploys into a standalone
+  command, so you can pull one environment's data into another whenever you want
+  (e.g. prod data into dev for realistic seed data), not just on a nested-env deploy.
+  Matches tables by name suffix after stripping each environment's `<app>-<env>-`
+  prefix. Destination tables that already have data are skipped by default (safe to
+  re-run); pass `--force` to overwrite them. Source/destination AWS profiles are
+  resolved independently from each environment's `infrastructure/<env>/belt.rb`
+  (`config.aws_profile`), or overridden with `--from-profile` / `--to-profile` —
+  needed when source and destination live in different AWS accounts (e.g. prod vs.
+  dev). See `belt explain data_seeding`.
+
+  Cognito identities are per-environment (each environment has its own user pool,
+  so the same person has a different `sub` in each), so `db:copy` re-anchors
+  Cognito-sub foreign keys (e.g. a membership's `cognito_sub`) to the destination
+  environment's user with the matching email, and leaves the destination's own
+  `users` table untouched. Without this a copied row points at a `sub` that doesn't
+  exist in the destination pool and silently vanishes (a copied project you can't
+  see). Rows whose email has no destination user yet have the stale sub cleared so
+  they read as unclaimed (e.g. a pending invitation) rather than dangling. The same
+  re-anchoring now runs in the nested-env deploy hook. Pass `--no-remap-identity` to
+  copy those references verbatim.
+
+- **`belt db:seed [environment]` — Rails-style `config/seeds.rb`.**
+  Loads `config/seeds.rb` in the same booted context `belt console` uses (models,
+  ActiveItem, `ENVIRONMENT` set), targeting the resolved environment's tables.
+  Honours `BELT_ENV` or an explicit environment argument, and prompts for
+  confirmation against `prod` like `belt console` does. Refuses to run if the
+  target environment already has data in any matching table — pass `--force` to
+  seed anyway (seeds.rb is responsible for its own idempotency if re-run).
+  `belt new` now scaffolds a starter `config/seeds.rb` with usage notes.
+
 ## 0.4.4
 
 ### Bug Fix
