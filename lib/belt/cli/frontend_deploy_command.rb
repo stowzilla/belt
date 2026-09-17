@@ -119,7 +119,7 @@ module Belt
 
       def sync_to_s3
         bucket = fetch_bucket_name
-        abort "Error: Could not determine S3 bucket. Run `belt apply #{@env}` first." unless bucket
+        abort(bucket_lookup_failure_message) unless bucket
 
         dist = @frontend.dist_dir
         unless Dir.exist?(dist)
@@ -159,6 +159,63 @@ module Belt
 
       def fetch_bucket_name
         fetch_tf_output(@frontend.bucket_output)
+      end
+
+      # The bucket output came back nil. Figure out *why* instead of always
+      # blaming a missing apply. `terraform output` swallows its own stderr in
+      # fetch_tf_output, so re-run it once with stderr captured and translate the
+      # failure into something actionable:
+      #   - no state at all      → env was never applied (or wrong dir)
+      #   - credential/SSO error → the AWS profile/session is the problem
+      #   - output just missing  → applied, but this frontend's output isn't there
+      def bucket_lookup_failure_message
+        _out, err, _status = Open3.capture3(
+          'terraform', 'output', '-raw', @frontend.bucket_output.to_s,
+          chdir: @env_dir
+        )
+        stderr = err.to_s.strip
+        first_line = stderr.lines.first&.strip
+
+        if credential_error?(stderr)
+          [
+            "Error: Could not reach Terraform state for '#{@env}' — AWS credentials failed.",
+            "  #{first_line}",
+            "  Check the aws_profile in infrastructure/#{@env}/belt.rb and that its SSO " \
+            'session is active (`aws sso login --profile <profile>`).'
+          ].join("\n")
+        elsif no_state?(stderr) || !state_present?
+          [
+            "Error: No Terraform state for '#{@env}' yet — nothing to deploy the frontend against.",
+            "  Run `belt deploy #{@env}` to provision the backend first, then retry the frontend deploy."
+          ].join("\n")
+        else
+          lines = [
+            "Error: Terraform output `#{@frontend.bucket_output}` not found for '#{@env}'.",
+            "  The backend is applied but this frontend's bucket output is missing. " \
+            'Check config/frontends.yml and that the frontend module is included in terraform.'
+          ]
+          lines << "  terraform: #{first_line}" if first_line
+          lines.join("\n")
+        end
+      rescue Errno::ENOENT
+        "Error: `terraform` not found on PATH. Install Terraform, then run `belt deploy #{@env}` first."
+      end
+
+      def credential_error?(stderr)
+        stderr.match?(/credential|sso|token|AccessDenied|not authorized|403/i)
+      end
+
+      def no_state?(stderr)
+        stderr.match?(
+          /No state file|no outputs|state.*not.*found|Backend initialization required|not been initialized/i
+        )
+      end
+
+      # A locally-applied env has a terraform.tfstate; a remote-backed one has an
+      # initialized .terraform dir. Absence of both means it was never applied here.
+      def state_present?
+        File.exist?(File.join(@env_dir, 'terraform.tfstate')) ||
+          Dir.exist?(File.join(@env_dir, '.terraform'))
       end
 
       def fetch_distribution_id
