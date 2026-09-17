@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.6
+
 ### Bug Fix
 
 - **`belt deploy frontend` now explains *why* the S3 bucket lookup failed.**
