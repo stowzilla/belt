@@ -12,6 +12,9 @@ on:
       - "references/**"
       - ".github/workflows/validate-skill.yml"
 
+permissions:
+  contents: read
+
 jobs:
   validate:
     runs-on: ubuntu-latest
