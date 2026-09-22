@@ -19,7 +19,7 @@ Gem::Specification.new do |spec|
   spec.metadata['changelog_uri'] = "#{spec.homepage}/blob/master/CHANGELOG.md"
   spec.metadata['rubygems_mfa_required'] = 'true'
 
-  spec.files = Dir['lib/**/*', 'exe/*', 'LICENSE.txt', 'README.md', 'CHANGELOG.md']
+  spec.files = Dir['lib/**/*', 'exe/*', 'LICENSE.txt', 'README.md', 'CHANGELOG.md', 'SKILL.md', 'references/**/*']
   spec.bindir = 'exe'
   spec.executables = ['belt']
   spec.require_paths = ['lib']

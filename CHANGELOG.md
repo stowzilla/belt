@@ -1,6 +1,20 @@
 # Changelog
 
-## Unreleased
+## 0.4.6
+
+### Added
+
+- **Agent Skill (`SKILL.md`) — installable via `npx skills add stowzilla/belt`.**
+  A root-level `SKILL.md` with trigger-rich frontmatter, a lean activation body
+  (core patterns + decision guide), and on-demand `references/` docs (CLI, routing,
+  controllers, models+auth, deploy/ops, plugins). A CI workflow validates the
+  frontmatter and that every reference link resolves.
+- **`SKILL.md` + `references/` now ship inside the `belt` gem.** The gemspec
+  `files` manifest was extended so a `gem install belt` lands the skill on disk
+  alongside the runtime. The `skills` CLI resolves git repos and local paths (not
+  RubyGems), so a gem install won't *auto-register* the skill — but the files are
+  present and can be picked up via a local-path install
+  (`npx skills add <gem-install-dir>`), and belt.dev tooling can vendor them.
 
 ### Bug Fix
 
