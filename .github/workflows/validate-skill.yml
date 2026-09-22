@@ -1,0 +1,59 @@
+name: validate-skill
+
+on:
+  push:
+    paths:
+      - "SKILL.md"
+      - "references/**"
+      - ".github/workflows/validate-skill.yml"
+  pull_request:
+    paths:
+      - "SKILL.md"
+      - "references/**"
+      - ".github/workflows/validate-skill.yml"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate SKILL.md frontmatter
+        run: |
+          if [ ! -f SKILL.md ]; then
+            echo "::error::SKILL.md not found at repo root"
+            exit 1
+          fi
+
+          # Extract frontmatter (between the first two --- lines)
+          FM=$(sed -n '2,/^---$/p' SKILL.md | head -n -1)
+
+          if ! echo "$FM" | grep -q '^name:'; then
+            echo "::error::SKILL.md frontmatter missing 'name'"
+            exit 1
+          fi
+          if ! echo "$FM" | grep -q '^description:'; then
+            echo "::error::SKILL.md frontmatter missing 'description'"
+            exit 1
+          fi
+
+          NAME=$(echo "$FM" | grep '^name:' | head -1 | sed 's/^name:[[:space:]]*//' | tr -d '"')
+          if ! echo "$NAME" | grep -Eq '^[a-z0-9]+(-[a-z0-9]+)*$'; then
+            echo "::error::name '$NAME' must be lowercase kebab-case (a-z, 0-9, hyphens)"
+            exit 1
+          fi
+
+          echo "SKILL.md is valid (name: $NAME)"
+
+      - name: Check reference links resolve
+        run: |
+          # Every references/*.md linked from SKILL.md must exist
+          MISSING=0
+          for link in $(grep -oE 'references/[A-Za-z0-9._-]+\.md' SKILL.md | sort -u); do
+            if [ ! -f "$link" ]; then
+              echo "::error::SKILL.md links to missing file: $link"
+              MISSING=1
+            fi
+          done
+          [ "$MISSING" -eq 0 ] && echo "All reference links resolve"
+          exit $MISSING
