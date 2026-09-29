@@ -62,6 +62,12 @@ module Belt
         # Sync ACM validation first (cert must validate before CloudFront works)
         sync_acm_validation(root_zone_id, targets[:domain])
 
+        # Sync SES DKIM CNAMEs so the email domain identity can verify. Like the
+        # apex A records, these must live in the ROOT zone (the registrar delegates
+        # the apex there) — writing them to the prod account's own zone leaves them
+        # invisible and the SES identity stuck at PENDING/HOST_NOT_FOUND.
+        sync_dkim_cnames(root_zone_id, targets[:domain])
+
         # Sync A alias records
         sync_alias_records(root_zone_id, targets)
 
@@ -300,6 +306,75 @@ module Belt
           puts '    ✓ ACM validation CNAME synced (cert pending)' unless @quiet
         else
           puts '    ⚠ Failed to sync ACM validation CNAME' unless @quiet
+        end
+      end
+
+      # Publish the SES Easy-DKIM CNAMEs for the apex email domain into the root
+      # zone. SES issues three tokens per domain identity; each maps to a CNAME
+      # "<token>._domainkey.<domain>" -> "<token>.dkim.amazonses.com". Publishing
+      # them where the domain is actually delegated (the root zone) is what flips
+      # the identity from PENDING/HOST_NOT_FOUND to verified so sends are accepted.
+      # No-ops quietly when the domain has no SES identity (email not enabled).
+      def sync_dkim_cnames(root_zone_id, domain)
+        return unless domain
+
+        tokens = fetch_dkim_tokens(domain)
+        return if tokens.empty?
+
+        changes = build_dkim_changes(domain, tokens)
+        upsert_dkim_cnames(root_zone_id, changes, tokens.size)
+      end
+
+      # Read the domain identity's DKIM tokens from SES under the PROD profile
+      # (that's the account that owns the identity). Returns [] if there's no
+      # identity or SES call fails, so email-less apps skip silently.
+      def fetch_dkim_tokens(domain)
+        env = aws_env_for(@env_config)
+
+        output, status = Open3.capture2e(
+          env,
+          'aws', 'sesv2', 'get-email-identity',
+          '--email-identity', domain,
+          '--output', 'json'
+        )
+        return [] unless status.success?
+
+        data = parse_json(output) || {}
+        data.dig('DkimAttributes', 'Tokens') || []
+      end
+
+      def build_dkim_changes(domain, tokens)
+        tokens.map do |token|
+          {
+            Action: 'UPSERT',
+            ResourceRecordSet: {
+              Name: "#{token}._domainkey.#{domain}",
+              Type: 'CNAME',
+              TTL: 300,
+              ResourceRecords: [{ Value: "#{token}.dkim.amazonses.com" }]
+            }
+          }
+        end
+      end
+
+      def upsert_dkim_cnames(root_zone_id, changes, count)
+        change_batch = {
+          Comment: 'Belt SES DKIM sync',
+          Changes: changes
+        }
+
+        dns_env = aws_env_for(@dns_config)
+        _, status = Open3.capture2e(
+          dns_env,
+          'aws', 'route53', 'change-resource-record-sets',
+          '--hosted-zone-id', root_zone_id,
+          '--change-batch', JSON.generate(change_batch)
+        )
+
+        if status.success?
+          puts "    ✓ SES DKIM CNAMEs synced (#{count})" unless @quiet
+        else
+          puts '    ⚠ Failed to sync SES DKIM CNAMEs' unless @quiet
         end
       end
 

@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.7
+
+### Bug Fix
+
+- **`apex_dns_sync` now publishes SES DKIM CNAMEs to the root zone.** Apex
+  environments delegate the bare domain to the shared-services root zone, so DNS
+  records written only to the prod-account zone never reach the internet.
+  `ApexDnsSync` already mirrored apex/www/api A aliases and ACM validation CNAMEs
+  into the root zone, but not the 3 SES DKIM CNAMEs — leaving SES domain email at
+  the apex stuck in `PENDING` / `HOST_NOT_FOUND` with every send rejected.
+  `#run` now reads the domain identity's DKIM tokens from SES (under the prod
+  profile) and upserts `<token>._domainkey.<domain>` → `<token>.dkim.amazonses.com`
+  into the root zone via the same cross-account write path. No-ops silently when
+  the domain has no SES identity, so email-less apps are unaffected.
+
 ## 0.4.6
 
 ### Added
