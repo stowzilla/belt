@@ -22,6 +22,7 @@ belt destroy messaging     # remove what the generator created
 |-----|---------|
 | `belt-messaging` | Two-way SMS via AWS End User Messaging |
 | `belt-pay` | Stripe payments & subscriptions |
+| `belt-jobs` | Active Job on SQS + Lambda with delayed and recurring schedules |
 
 ## Creating a Plugin
 

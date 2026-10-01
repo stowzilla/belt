@@ -741,6 +741,7 @@ Belt is designed to stay lean. Optional capabilities ship as **separate gems** t
 |-----|---------|--------|
 | [`belt-messaging`](https://github.com/stowzilla/belt-messaging) | Two-way SMS via AWS End User Messaging (Pinpoint) | Early (not production-hardened) |
 | [`belt-pay`](https://github.com/stowzilla/belt-pay) | Stripe payments & subscriptions | Early (not production-hardened) |
+| [`belt-jobs`](https://github.com/stowzilla/belt-jobs) | Active Job on SQS + Lambda with delayed and recurring schedules | 0.0.1 |
 
 Install a plugin in a Belt app:
 

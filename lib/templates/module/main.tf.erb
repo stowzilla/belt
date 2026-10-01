@@ -25,7 +25,7 @@ resource "conveyor_belt" "main" {
   source            = "${path.module}/../../../config/routes.rb"
   app_name          = var.app_name
   lambda_source_dir = "${path.module}/../../../lambda"
-  lambda_shared_dirs = ["controllers", "helpers", "lib", "models", "views"]
+  lambda_shared_dirs = ["controllers", "helpers", "jobs", "lib", "models", "views"]
 <% if @frontend -%>
   # CloudFront first so SPA→API CORS works out of the box (tutorial footgun fixed).
   # localhost stays via env frontend_urls for local `belt server` dev.

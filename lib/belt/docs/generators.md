@@ -141,6 +141,8 @@ Gems that follow the Belt plugin contract are auto-discovered:
 ```bash
 belt generate messaging     # from belt-messaging gem
 belt generate pay           # from belt-pay gem
+belt generate jobs          # install belt-jobs infrastructure
+belt generate job cleanup   # generate an Active Job class
 belt generate --help        # lists all available generators
 ```
 
