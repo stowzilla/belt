@@ -63,6 +63,10 @@
 
 ## Unreleased
 
+### Feature
+
+- **Belt apps now boot and package `lambda/jobs`.** New app modules include `jobs` in `lambda_shared_dirs`, and generated environment boot files load `application_job.rb` before concrete jobs. `belt plugin new` is also correctly available outside an existing Belt app, matching its documented standalone workflow.
+
 ## 0.4.5
 
 ### Feature

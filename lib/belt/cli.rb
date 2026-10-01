@@ -63,7 +63,7 @@ module Belt
     TERRAFORM_ACTIONS = Belt::CLI::TerraformCommand::ACTIONS
 
     # Commands that can run without being inside a Belt project
-    STANDALONE_COMMANDS = %w[new version --version -v doctor explain].freeze
+    STANDALONE_COMMANDS = %w[new version --version -v doctor explain plugin].freeze
 
     def self.start(args)
       command = args.shift

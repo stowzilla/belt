@@ -16,3 +16,11 @@ app_record = all_models.find { |f| File.basename(f) == 'application_record.rb' }
 rest = all_models - [app_record].compact
 require app_record if app_record
 rest.each { |f| require f }
+
+# Load Active Job base and concrete jobs when a jobs plugin is installed.
+jobs_dir = File.join(__dir__, '..', 'jobs')
+all_jobs = Dir[File.join(jobs_dir, '**', '*.rb')].sort
+application_job = all_jobs.find { |f| File.basename(f) == 'application_job.rb' }
+remaining_jobs = all_jobs - [application_job].compact
+require application_job if application_job
+remaining_jobs.each { |f| require f }
