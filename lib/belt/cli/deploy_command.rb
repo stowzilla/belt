@@ -736,9 +736,7 @@ module Belt
         return if stderr_buffer.nil? # Success
 
         # If ACM for_each error, auto-bootstrap and retry
-        if acm_for_each_error?(stderr_buffer)
-          return if run_acm_bootstrap # Returns true if bootstrap + retry succeeded
-        end
+        return if acm_for_each_error?(stderr_buffer) && acm_bootstrap_succeeded?
 
         abort "\n✗ terraform plan failed"
       end
@@ -779,7 +777,7 @@ module Belt
       end
 
       # Returns true if bootstrap succeeded and retry plan passed
-      def run_acm_bootstrap
+      def acm_bootstrap_succeeded?
         puts ''
         puts '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
         puts '  ACM CERTIFICATE BOOTSTRAP'
