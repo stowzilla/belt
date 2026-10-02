@@ -731,9 +731,87 @@ module Belt
 
       def run_plan
         puts '━━━ terraform plan ━━━'
-        success = system('terraform', 'plan', '-out=tfplan', *@extra_args)
-        abort "\n✗ terraform plan failed" unless success
+
+        stderr_buffer = run_terraform_plan
+        return if stderr_buffer.nil? # Success
+
+        # If ACM for_each error, auto-bootstrap and retry
+        return if acm_for_each_error?(stderr_buffer) && acm_bootstrap_succeeded?
+
+        abort "\n✗ terraform plan failed"
+      end
+
+      # Returns nil on success, stderr buffer on failure
+      def run_terraform_plan
+        require 'open3'
+        stderr_buffer = +''
+
+        Open3.popen3('terraform', 'plan', '-out=tfplan', *@extra_args) do |_stdin, stdout, stderr, wait_thr|
+          stdout_thread = Thread.new do
+            while (line = stdout.gets)
+              print line
+            end
+          end
+
+          stderr_thread = Thread.new do
+            while (line = stderr.gets)
+              stderr_buffer << line
+              $stderr.print line
+            end
+          end
+
+          stdout_thread.join
+          stderr_thread.join
+
+          return nil if wait_thr.value.success?
+        end
+
+        stderr_buffer
+      end
+
+      def acm_for_each_error?(output)
+        # Detect the ACM certificate for_each chicken-and-egg error
+        output.include?('for_each') &&
+          output.include?('domain_validation_options') &&
+          output.include?('cannot be determined until apply')
+      end
+
+      # Returns true if bootstrap succeeded and retry plan passed
+      def acm_bootstrap_succeeded?
         puts ''
+        puts '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+        puts '  ACM CERTIFICATE BOOTSTRAP'
+        puts '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+        puts ''
+        puts '  First-time deploy detected. Terraform needs the ACM certificate'
+        puts '  to exist before it can create DNS validation records.'
+        puts ''
+        puts '  Creating certificate now...'
+        puts ''
+
+        # Phase 1: Create the certificate only
+        success = system('terraform', 'apply', '-target=module.app.aws_acm_certificate.app', '-auto-approve')
+        unless success
+          puts ''
+          puts '  ✗ Certificate creation failed.'
+          return false
+        end
+
+        puts ''
+        puts '  ✓ Certificate created. Re-running plan...'
+        puts ''
+
+        # Phase 2: Retry the plan
+        stderr_buffer = run_terraform_plan
+        if stderr_buffer.nil?
+          puts ''
+          return true # Success!
+        end
+
+        # Still failing - something else is wrong
+        puts ''
+        puts '  ✗ Plan still failing after bootstrap. Check the errors above.'
+        false
       end
 
       def confirm_apply?

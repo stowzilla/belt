@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.8
+
+### Added
+
+- **`belt deploy` auto-bootstraps the ACM certificate on first deploy.** First-time
+  deploys hit the classic ACM chicken-and-egg problem: `terraform plan` fails because
+  `domain_validation_options` aren't known until the certificate is applied. Belt now
+  detects that error pattern, runs
+  `terraform apply -target=module.app.aws_acm_certificate.app` to create the certificate,
+  and re-runs the plan automatically. No manual terraform commands needed — first-time
+  deploys just work. This is a one-time bootstrap; subsequent deploys run normally since
+  the certificate already exists.
+
 ## 0.4.7
 
 ### Bug Fix
