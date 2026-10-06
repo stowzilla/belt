@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.5.0
+
+### Added
+
+- **In-process e2e test harness (`require 'belt/testing'`).** Belt now ships the real
+  request path as a reusable test tier: a synthetic API Gateway event routed through the
+  real `Belt::ActionRouter` — no AWS, no HTTP server, no browser. It sits between
+  controller unit tests (which dispatch an action directly and never touch routing) and
+  full cloud e2e. `Belt::Testing::E2E::Client` wraps one router and returns a parsed
+  `Response` (`status` / `headers` / `body` / `json`, with `ok?` and `[]`);
+  `Belt::Testing::E2E::Helpers` mixes `api_get` / `api_post` / `api_put` / `api_patch` /
+  `api_delete` / `api_request` and a `cognito_claims` builder into `Minitest::Test` or
+  RSpec example groups; and `Belt::Testing::E2E.manifest_from_belt_routes(app_root:)`
+  builds the router manifest from the app's own `belt routes -f json` so the harness can't
+  drift from Belt's route-building internals. The module is opt-in and never loaded by
+  `require 'belt'`, so it stays out of the production Lambda path. App-specific seams
+  (DynamoDB Local, Cognito claims, external services like Bedrock/Stripe/S3) stay in the
+  app's own test boot — Belt owns only the generic request mechanics. See
+  `belt explain testing`.
+
 ## 0.4.8
 
 ### Added

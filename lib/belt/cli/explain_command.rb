@@ -51,7 +51,13 @@ module Belt
         'db:seed' => 'data_seeding',
         'db:copy' => 'data_seeding',
         'copy' => 'data_seeding',
-        'db_copy' => 'data_seeding'
+        'db_copy' => 'data_seeding',
+        'e2e' => 'testing',
+        'test' => 'testing',
+        'tests' => 'testing',
+        'harness' => 'testing',
+        'spec' => 'testing',
+        'specs' => 'testing'
       }.freeze
 
       def self.run(args)
@@ -114,6 +120,7 @@ module Belt
             irb, repl                 → console
             seeds, seed, db:seed      → data_seeding
             db:copy, copy             → data_seeding
+            e2e, test, harness        → testing
 
           Examples:
             belt explain routing

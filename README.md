@@ -731,6 +731,46 @@ puts "Created post: #{post.id}"
 
 Refuses to run against an environment that already has data (pass `--force` to override). `belt new` scaffolds a starter `config/seeds.rb`. See `belt explain data_seeding` for details.
 
+## Testing
+
+Belt ships an in-process **end-to-end harness** that drives the real router — no AWS, no HTTP server, no browser. It's the tier between controller unit tests (dispatch an action directly, never touch routing) and full cloud e2e (needs a deployed stack).
+
+Opt-in — it is **not** loaded by `require 'belt'`, so it never ships in the production Lambda path:
+
+```ruby
+require "belt"
+require "belt/testing"
+```
+
+The harness builds a synthetic API Gateway event and routes it through the real `Belt::ActionRouter`, exactly as API Gateway delivers it: the router finds the route, extracts path params, instantiates the real controller, and runs the real `before_action` chain. Router, controllers, models, validations, and authorization are **real**; DynamoDB (e.g. DynamoDB Local), Cognito (a claims hash), and external services stay seams you wire in your own test boot.
+
+```ruby
+# e2e_helper.rb — after booting your app (ENV, require 'belt', models, controllers, DynamoDB Local)
+router = Belt::ActionRouter.new(
+  routes:  Belt::Testing::E2E.manifest_from_belt_routes(app_root: APP_ROOT),
+  gateway: "api"
+)
+Belt::Testing::E2E.client = Belt::Testing::E2E::Client.new(router: router)
+```
+
+```ruby
+class ProjectsE2ETest < Minitest::Test
+  include Belt::Testing::E2E::Helpers
+
+  def test_creates_a_project
+    res = api_post("/projects", body: { slug: "alpha" }, claims: cognito_claims(groups: "admins"))
+    assert_equal 201, res.status
+    assert_equal "alpha", res["project"]["slug"]
+  end
+
+  def test_rejects_anonymous
+    assert_equal 401, api_get("/projects").status
+  end
+end
+```
+
+`api_get` / `api_post` / `api_put` / `api_patch` / `api_delete` (and `api_request`) accept `body:`, `claims:`, `token:`, `headers:`, and `query:`. The returned `Response` exposes `status`, `headers`, `body`, `json`, `ok?`, and `[]` (a top-level key from the parsed JSON body). Full details — the real-vs-seamed boundary, per-test clients, and keeping the tier out of your normal suite — in `belt explain testing`.
+
 ## Plugins
 
 Belt is designed to stay lean. Optional capabilities ship as **separate gems** that plug into the CLI and runtime the same way Rails engines and generators do.
