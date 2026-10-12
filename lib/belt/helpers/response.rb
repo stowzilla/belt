@@ -28,8 +28,18 @@ module Belt
       end
 
       # JSON success. Status accepts Integer or Symbol (:created, :ok, …).
+      #
+      # The body is deep-serialized the same way implicit assigns are, so handing
+      # it a model (or a hash/array containing models) produces real JSON instead
+      # of the model's #to_s. This keeps `success_response(thing: @thing)` and the
+      # implicit `@thing = ...` path consistent — without it, an explicit
+      # success_response silently falls through to `JSON.generate` on the bare
+      # object and emits "#<Thing:0x...>". Falls back to the raw body when the
+      # serializer isn't mixed in (e.g. the lambda handler, which only ever passes
+      # plain hashes).
       def success_response(body, status_code = 200)
-        { statusCode: resolve_status(status_code), headers: cors_headers, body: JSON.generate(body) }
+        serialized = respond_to?(:serialize_for_response, true) ? serialize_for_response(body) : body
+        { statusCode: resolve_status(status_code), headers: cors_headers, body: JSON.generate(serialized) }
       end
 
       # JSON error. Status accepts Integer or Symbol (:unprocessable_entity, :not_found, …).
