@@ -62,6 +62,12 @@ module Belt
         USAGE
       end
 
+      # Structured log keys already rendered elsewhere or too noisy to repeat per line.
+      HIDDEN_CONTEXT_KEYS = %w[
+        level message timestamp time ts request_id function_name function_version
+        action path backtrace error_class error_message
+      ].freeze
+
       def initialize(args)
         @lambda_name = nil
         @env = nil
@@ -496,7 +502,7 @@ module Belt
 
       def format_error_log(json, message, timestamp, prefix_str)
         puts "#{prefix_str}#{c(:gray)}#{timestamp}#{c(:reset)} " \
-             "#{c(:red)}ERROR#{c(:reset)} #{c(:bold)}#{message}#{c(:reset)}"
+             "#{c(:red)}ERROR#{c(:reset)} #{c(:bold)}#{message}#{c(:reset)}#{format_context(json)}"
         puts "  #{c(:dim)}Action:#{c(:reset)} #{json['action']}" if json['action']
         if json['error_class']
           puts "  #{c(:dim)}Error:#{c(:reset)}  " \
@@ -507,7 +513,8 @@ module Belt
       end
 
       def format_warn_log(json, message, timestamp, prefix_str)
-        puts "#{prefix_str}#{c(:gray)}#{timestamp}#{c(:reset)} #{c(:yellow)}WARN#{c(:reset)} #{message}"
+        puts "#{prefix_str}#{c(:gray)}#{timestamp}#{c(:reset)} " \
+             "#{c(:yellow)}WARN#{c(:reset)} #{message}#{format_context(json)}"
         if json['error_class']
           puts "  #{c(:dim)}Error:#{c(:reset)} " \
                "#{c(:red)}#{json['error_class']}#{c(:reset)}: #{json['error_message']}"
@@ -530,9 +537,20 @@ module Belt
                "#{c(:cyan)}Completed#{c(:reset)} #{c(sc_color)}#{sc}#{c(:reset)} #{path}"
         else
           level = json['level']
-          level_col = level_color_for(level)
-          puts "#{prefix_str}#{c(:gray)}#{timestamp}#{c(:reset)} #{level_col}#{level}#{c(:reset)} #{message}" if level
+          return unless level
+
+          puts "#{prefix_str}#{c(:gray)}#{timestamp}#{c(:reset)} " \
+               "#{level_color_for(level)}#{level}#{c(:reset)} #{message}#{format_context(json)}"
         end
+      end
+
+      # Renders extra structured fields (e.g. sku, mode) as dim key=value pairs.
+      def format_context(json)
+        pairs = json.reject { |k, v| HIDDEN_CONTEXT_KEYS.include?(k) || v.nil? }
+        return '' if pairs.empty?
+
+        formatted = pairs.map { |k, v| "#{k}=#{v.is_a?(String) ? v : v.to_json}" }.join(' ')
+        " #{c(:dim)}#{formatted}#{c(:reset)}"
       end
 
       def format_aws_error(json, prefix: nil)
