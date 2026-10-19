@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.2
+
+### Added
+
+- **`belt logs` now surfaces extra structured fields on each log line.** Any custom
+  keys passed to the structured logger (e.g. `sku`, `mode`, `user_id`) are rendered as
+  dim `key=value` pairs appended to ERROR, WARN, and generic leveled log lines. Keys
+  already shown elsewhere or too noisy to repeat (`level`, `message`, `timestamp`,
+  `request_id`, `action`, `backtrace`, etc.) are filtered out, and `nil` values are
+  skipped. Non-string values are JSON-encoded so structured context stays readable.
+
 ## 0.5.0
 
 ### Added
