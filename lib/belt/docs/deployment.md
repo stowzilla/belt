@@ -67,12 +67,25 @@ The Lambda entry point is specified in `config/lambda/<name>.yml`:
 
 ```yaml
 handler: lambda/<name>.lambda_handler
-runtime: ruby3.3
 timeout: 30
 memory: 256
 environment:
   ENVIRONMENT: ${var.environment}
 ```
+
+The Ruby version is set once per environment, on the conveyor-belt provider in
+`infrastructure/<env>/main.tf` — it drives both the Lambda runtime and the image
+gems are compiled in:
+
+```hcl
+provider "conveyor-belt" {
+  environment  = var.environment
+  aws_region   = var.aws_region
+  ruby_version = "4.0" # → runtime ruby4.0, build image build-ruby4.0
+}
+```
+
+See [UPGRADING.md](../../../UPGRADING.md#ruby-34--40) to move an existing app.
 
 ## Route Manifests
 

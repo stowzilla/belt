@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.6.0
+
+### Added
+
+- **Ruby 4.0.** New apps and environments now run on the `ruby4.0` Lambda runtime.
+  The generated `infrastructure/<env>/main.tf` sets `ruby_version = "4.0"` on the
+  conveyor-belt provider (one setting for runtime + gem build image), and both
+  generated `main.tf` files now pin conveyor-belt `~> 0.0.16`, the first release that
+  migrates already-deployed functions when `ruby_version` changes. Belt, activeitem,
+  lambda_loadout, belt-pay and belt-messaging all pass their suites on Ruby 4.0. CI now
+  tests 3.3, 3.4 and 4.0. Existing apps: see [UPGRADING.md](UPGRADING.md#ruby-34--40).
+
+### Fixed
+
+- **`belt deploy <env> --rebuild` builds gems for the runtime the function actually
+  runs.** It used to look for `ruby_version` in `terraform state show conveyor_belt.main`,
+  but that's a provider setting and never appears in resource state, so `--rebuild`
+  always compiled in `build-ruby3.4`. On a `ruby4.0` function that ships a
+  `vendor/bundle/ruby/3.4.0` bundle Ruby 4 can't load. Image selection is now: resource
+  `docker_build_image` → the live function's runtime → `ruby_version` in the env's
+  `main.tf` → `build-ruby3.4`.
+- Removed `runtime: ruby3.3` from the `config/lambda/*.yml` examples in the docs.
+  conveyor-belt ignores that key; the runtime comes from the provider's `ruby_version`.
+
 ## 0.5.3
 
 ### Fixed

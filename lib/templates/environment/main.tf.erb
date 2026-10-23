@@ -10,7 +10,7 @@ terraform {
     }
     conveyor-belt = {
       source  = "stowzilla/conveyor-belt"
-      version = "~> 0.0.1"
+      version = "~> 0.0.16"
     }
   }
 }
@@ -30,6 +30,10 @@ provider "aws" {
 provider "conveyor-belt" {
   environment = var.environment
   aws_region  = var.aws_region
+
+  # Lambda runtime (ruby<version>) and the Docker image gems are compiled in.
+  # Changing it on a deployed environment migrates every function on the next apply.
+  ruby_version = "<%= Belt::LAMBDA_RUBY_VERSION %>"
 }
 
 module "app" {
