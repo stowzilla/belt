@@ -490,7 +490,7 @@ module Belt
         begin
           puts '  📦 Building Lambda package...'
           assemble_package(lambda_dir, build_dir)
-          build_gems(build_dir)
+          build_gems(build_dir, function_name)
           zip_file = create_zip(build_dir)
 
           puts '  🚀 Deploying to AWS...'
@@ -572,13 +572,13 @@ module Belt
         puts ''
       end
 
-      def build_gems(build_dir)
+      def build_gems(build_dir, function_name)
         puts '    🐳 Building gems in Docker (Lambda-compatible)...'
 
         uid = Process.uid
         gid = Process.gid
 
-        image = detect_docker_build_image
+        image = detect_docker_build_image(function_name)
 
         docker_cmd = [
           'docker', 'run', '--rm',
@@ -606,35 +606,58 @@ module Belt
         puts '    ✅ Gems installed'
       end
 
-      # Reads docker_build_image from the conveyor_belt Terraform resource state.
-      # Falls back to DEFAULT_DOCKER_BUILD_IMAGE if state is unavailable or attribute not set.
-      def detect_docker_build_image
+      # Picks the image gems are compiled in. Native extensions and the
+      # vendor/bundle/ruby/<abi> path must match the function's runtime, so:
+      #   1. docker_build_image on the conveyor_belt resource (fully custom)
+      #   2. the live function's runtime (ruby4.0 → build-ruby4.0)
+      #   3. ruby_version in the env's conveyor-belt provider block
+      #   4. DEFAULT_DOCKER_BUILD_IMAGE
+      def detect_docker_build_image(function_name)
         env_dir = File.join(@infra_dir, @env)
-        return DEFAULT_DOCKER_BUILD_IMAGE unless Dir.exist?(File.join(env_dir, '.terraform'))
+
+        image = docker_build_image_from_state(env_dir)
+        if image
+          puts "    📦 Using custom build image: #{image}"
+          return image
+        end
+
+        version = ruby_version_from_lambda(function_name) || ruby_version_from_provider(env_dir)
+        return DEFAULT_DOCKER_BUILD_IMAGE unless version
+
+        image = "public.ecr.aws/sam/build-ruby#{version}:latest-x86_64"
+        puts "    📦 Using build image for Ruby #{version}: #{image}"
+        image
+      end
+
+      def docker_build_image_from_state(env_dir)
+        return nil unless Dir.exist?(File.join(env_dir, '.terraform'))
 
         Dir.chdir(env_dir) do
           output, status = Open3.capture2('terraform', 'state', 'show', 'conveyor_belt.main')
-          if status.success?
-            # Prefer explicit docker_build_image if set
-            image_match = output.match(/docker_build_image\s*=\s*"([^"]+)"/)
-            if image_match
-              image = image_match[1]
-              puts "    📦 Using custom build image: #{image}"
-              return image
-            end
+          return nil unless status.success?
 
-            # Otherwise derive from ruby_version
-            version_match = output.match(/ruby_version\s*=\s*"([^"]+)"/)
-            if version_match
-              version = version_match[1]
-              image = "public.ecr.aws/sam/build-ruby#{version}:latest-x86_64"
-              puts "    📦 Using build image for Ruby #{version}: #{image}"
-              return image
-            end
-          end
+          output[/docker_build_image\s*=\s*"([^"]+)"/, 1]
         end
+      end
 
-        DEFAULT_DOCKER_BUILD_IMAGE
+      # "ruby4.0" → "4.0"
+      def ruby_version_from_lambda(function_name)
+        output, status = Open3.capture2(
+          'aws', 'lambda', 'get-function-configuration',
+          '--function-name', function_name,
+          '--query', 'Runtime',
+          '--output', 'text'
+        )
+        return nil unless status.success?
+
+        output.strip[/\Aruby(\d+\.\d+)\z/, 1]
+      end
+
+      def ruby_version_from_provider(env_dir)
+        main_tf = File.join(env_dir, 'main.tf')
+        return nil unless File.exist?(main_tf)
+
+        File.read(main_tf)[/^\s*ruby_version\s*=\s*"([^"]+)"/, 1]
       end
 
       def strip_vendor_fat(build_dir)

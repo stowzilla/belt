@@ -4,6 +4,7 @@ require 'fileutils'
 require 'erb'
 require_relative 'app_detection'
 require_relative 'environment_config'
+require_relative '../version'
 require_relative 'frontend_registry'
 require_relative 'frontend_setup_command'
 

@@ -67,7 +67,6 @@ Configure via `config/lambda/<name>.yml`:
 
 ```yaml
 handler: lambda/api.lambda_handler
-runtime: ruby3.3
 timeout: 30
 memory: 256
 layers:

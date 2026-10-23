@@ -5,6 +5,7 @@ require 'erb'
 require 'json'
 require 'open3'
 require_relative 'setup_command'
+require_relative '../version'
 
 module Belt
   module CLI
