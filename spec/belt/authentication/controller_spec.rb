@@ -171,8 +171,6 @@ RSpec.describe Belt::Authentication::Controller do
       expect(response[:statusCode]).to eq(200)
     end
 
-    # Belt discards before_action return values, so the filter has to raise for the
-    # action to actually be skipped.
     it 'halts an anonymous request with a 401' do
       response = controller({}, klass: SpecAuthGuardedController).dispatch(:show)
 

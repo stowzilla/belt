@@ -71,8 +71,8 @@ end
 ```
 
 `authenticate_user!` raises `Belt::Authentication::NotAuthenticated`, which Belt already
-maps to **401**. It has to raise: `before_action` cannot halt the chain by returning a
-response — return values are discarded and the action runs anyway.
+maps to **401**. (Your own guards can also halt by calling a response helper, e.g.
+`error_response('Forbidden', 403) unless admin?`.)
 
 | Method | |
 |---|---|

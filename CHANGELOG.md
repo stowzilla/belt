@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.1
+
+### Fixed
+
+- **`before_action` now halts the request when it produces a response.** The docs said
+  a callback could halt by calling `error_response`, but `dispatch` ignored callback
+  output and ran the action anyway, so the action's response replaced the error. A
+  guard like `error_response('Forbidden', 403) unless admin?` let everyone through.
+  Now, once a callback calls a response helper (`error_response`, `success_response`,
+  `html_response`, `head`, `render`) or returns a response, the remaining callbacks, the
+  action and the `after_action`s are skipped and that response is returned
+  (Rails-style). Apps that worked around this with inline guards in each action keep
+  working; the inline checks are now redundant.
+
 ## 0.6.0
 
 ### Added

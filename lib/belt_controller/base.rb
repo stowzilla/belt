@@ -9,12 +9,15 @@ require_relative '../belt/helpers/error_logging'
 require_relative '../belt/helpers/cors_origin'
 require_relative '../belt/rendering'
 require_relative 'implicit_response'
+require_relative 'callback_halting'
 
 module BeltController
   class Base
     include Belt::Helpers::Response
     include Belt::Rendering
     include ImplicitResponse
+    # Must come after Belt::Helpers::Response / Belt::Rendering (wraps their helpers).
+    include CallbackHalting
     # Cognito identity: current_user, authenticate_user!, cognito_admin?.
     # Inert unless the app declares `cognito_authenticatable` on a model.
     include Belt::Authentication::Controller
@@ -139,7 +142,11 @@ module BeltController
         raise Belt::ActionNotFound, "The action '#{action_sym}' could not be found for #{self.class.name}"
       end
 
-      run_before_actions(action_sym)
+      # A before_action that produced a response halts the request (Rails-style):
+      # the action and after_actions don't run.
+      halted = run_before_actions(action_sym)
+      return halted if halted
+
       # Snapshot ivars so we only auto-serialize assigns set by the action (Rails-style)
       @__assigns_before = instance_variables
       result = send(action_sym)
@@ -178,14 +185,17 @@ module BeltController
 
     private
 
+    # Returns the halting response if a callback produced one, else nil.
     def run_before_actions(action_sym)
       self.class.all_before_actions.each do |callback|
         next if callback[:only] && !callback[:only].include?(action_sym)
         next if callback[:except]&.include?(action_sym)
         next if should_skip_callback?(callback[:method], action_sym)
 
-        send(callback[:method])
+        response = run_halting_callback(callback[:method])
+        return response if response
       end
+      nil
     end
 
     def run_after_actions(action_sym)
