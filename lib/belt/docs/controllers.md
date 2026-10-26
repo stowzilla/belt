@@ -96,8 +96,19 @@ class ApplicationController < BeltController::Base
 end
 ```
 
-Callbacks run in definition order. `before_action` can halt the request by
-calling a response helper (e.g., `error_response`).
+Callbacks run in definition order. A `before_action` halts the request by
+calling a response helper (`error_response`, `success_response`, `head`,
+`render`, …). The remaining callbacks, the action and the `after_action`s are
+skipped, and that response is returned:
+
+```ruby
+def require_admin!
+  error_response('Forbidden', 403) unless admin?
+end
+```
+
+Raising works too: the exception goes through `rescue_from` as usual (e.g.
+`Belt::AuthenticationError` → 401).
 
 ## Strong Parameters
 

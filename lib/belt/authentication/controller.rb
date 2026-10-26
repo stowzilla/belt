@@ -88,9 +88,7 @@ module Belt
         false
       end
 
-      # before_action guard. Raises, because Belt discards before_action return values
-      # (see BeltController::Base#run_before_actions) — returning a response hash would
-      # let the action run anyway. Belt maps the error to 401.
+      # before_action guard. Raises NotAuthenticated, which Belt maps to 401.
       def authenticate_user!
         raise NotAuthenticated, 'Authentication required' unless user_signed_in?
       end
