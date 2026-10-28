@@ -5,6 +5,39 @@ change list, see [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## ACM validation record (0.6.2)
+
+Only needed if you're adding a new standalone env with a `domain` to an existing app
+(or want to). `belt new` writes `infrastructure/modules/app/dns.tf` once, so older
+apps keep the old `cert_validation` record, and the first plan of a new env fails:
+
+```
+Error: Invalid for_each argument
+  on ../modules/app/dns.tf line 72, in resource "aws_route53_record" "cert_validation"
+```
+
+**Fix:** replace the `cert_validation` resource and the `aws_acm_certificate_validation`
+block in your `infrastructure/modules/app/dns.tf` with the `acm_validation` resource,
+`locals`, `removed` block and validation block from
+[`lib/templates/module/dns.tf.erb`](lib/templates/module/dns.tf.erb). The module needs
+Terraform >= 1.7 for `removed`.
+
+On existing envs, the next plan shows the old record being *removed from state* (not
+destroyed) and `acm_validation` being created. That create upserts the same CNAME
+(`allow_overwrite = true`), so the record never goes away and the cert stays valid.
+`aws_acm_certificate_validation` may also plan a replace, because the new record's
+FQDN isn't known until apply. It's a wait-for-issued marker, so replacing it doesn't
+touch the cert and finishes immediately.
+
+**Workaround without upgrading:** apply the cert first, then deploy.
+
+```bash
+belt apply <env> -target=module.app.aws_acm_certificate.app -target=module.app.aws_route53_zone.app
+belt deploy <env>
+```
+
+---
+
 ## Ruby 3.4 → 4.0
 
 Belt 0.6.0 generates new apps on Ruby 4.0. Existing apps stay on 3.4 until you opt

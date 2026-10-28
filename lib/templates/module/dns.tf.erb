@@ -62,33 +62,45 @@ resource "aws_acm_certificate" "app" {
   }
 }
 
-# DNS validation record for the certificate
-# Key by resource_record_name (not domain_name) because ACM uses the same
-# validation CNAME for both base domain and wildcard — keying by domain_name
-# creates duplicate records that Route 53 rejects.
-# Use ellipsis (...) to group duplicates, then take the first element since
-# they're identical anyway.
-resource "aws_route53_record" "cert_validation" {
-  for_each = local.dns_enabled && !local.is_nested ? {
-    for dvo in aws_acm_certificate.app[0].domain_validation_options : dvo.resource_record_name => {
-      name   = dvo.resource_record_name
-      type   = dvo.resource_record_type
-      record = dvo.resource_record_value
-    }...
-  } : {}
+# DNS validation record for the certificate.
+# ACM issues one identical validation CNAME for both the base domain and the
+# wildcard, so one record covers the cert. Key it by app_domain (known at plan)
+# rather than by anything from domain_validation_options: those values are
+# unknown until the cert exists, and for_each over them fails the first plan
+# of a new env with "Invalid for_each argument".
+resource "aws_route53_record" "acm_validation" {
+  for_each = local.dns_enabled && !local.is_nested ? toset([local.app_domain]) : toset([])
 
   zone_id         = aws_route53_zone.app[0].zone_id
-  name            = each.value[0].name
-  type            = each.value[0].type
+  name            = local.acm_validation_options[each.key].resource_record_name
+  type            = local.acm_validation_options[each.key].resource_record_type
   ttl             = 300
-  records         = [each.value[0].record]
+  records         = [local.acm_validation_options[each.key].resource_record_value]
   allow_overwrite = true
+}
+
+locals {
+  acm_validation_options = local.dns_enabled && !local.is_nested ? {
+    for dvo in aws_acm_certificate.app[0].domain_validation_options : dvo.domain_name => dvo
+  } : {}
+}
+
+# Older Belt modules created this record as cert_validation, keyed by the
+# validation CNAME name. Forget those instances without deleting them:
+# acm_validation upserts the same CNAME (allow_overwrite), and a delete would
+# pull the record ACM needs for renewal. No-op for envs that never had it.
+removed {
+  from = aws_route53_record.cert_validation
+
+  lifecycle {
+    destroy = false
+  }
 }
 
 resource "aws_acm_certificate_validation" "app" {
   count                   = local.dns_enabled && !local.is_nested ? 1 : 0
   certificate_arn         = aws_acm_certificate.app[0].arn
-  validation_record_fqdns = [for record in aws_route53_record.cert_validation : record.fqdn]
+  validation_record_fqdns = [for record in aws_route53_record.acm_validation : record.fqdn]
 }
 
 # =============================================================================

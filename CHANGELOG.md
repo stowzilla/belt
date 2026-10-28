@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.2
+
+### Fixed
+
+- **First deploy of a new env with a `domain` no longer fails at plan.** The generated
+  module keyed `aws_route53_record.cert_validation` by the ACM validation CNAME name,
+  which is unknown until the cert exists, so `belt plan`/`belt deploy` on a brand-new
+  standalone env failed with `Invalid for_each argument` and needed a `-target` apply
+  of the cert first. The record is now `aws_route53_record.acm_validation`, keyed by
+  the env's domain (known at plan). A `removed` block forgets old `cert_validation`
+  instances without deleting the live CNAME. The module now needs Terraform >= 1.7.
+  Existing apps: see [UPGRADING.md](UPGRADING.md#acm-validation-record-062).
+
 ## 0.6.1
 
 ### Fixed
