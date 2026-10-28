@@ -2,6 +2,9 @@
 # Environments call this module with different variables.
 
 terraform {
+  # >= 1.7 for the removed block in dns.tf
+  required_version = ">= 1.7"
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
