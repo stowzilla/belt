@@ -64,6 +64,18 @@ belt db:seed [env] [--force]     # run config/seeds.rb in the booted console con
 `db:copy` skips non-empty destination tables by default. `db:seed` refuses to
 run against an env that already has data unless `--force`.
 
+## Data migrations
+
+```bash
+belt db:migrate [env] [--yes]    # run pending db/migrate/<timestamp>_<name>.rb
+belt db:migrate:status [env]     # up/down per version
+```
+
+`belt deploy` runs pending migrations after apply (`--skip-migrations` to
+opt out). Each version runs once per env, recorded in SSM at
+`/belt/<app>/<env>/schema_migrations/<version>`. Write them idempotent and
+batch-safe: see `belt explain migrations`.
+
 ## Observability
 
 `Belt::LambdaHandler` wires these global facades automatically:

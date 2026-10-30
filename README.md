@@ -731,6 +731,29 @@ puts "Created post: #{post.id}"
 
 Refuses to run against an environment that already has data (pass `--force` to override). `belt new` scaffolds a starter `config/seeds.rb`. See `belt explain data_seeding` for details.
 
+### `belt db:migrate` — data migrations
+
+For changes to rows that already exist (backfilling an attribute, populating a new GSI for old records), add a migration to `db/migrate/`:
+
+```ruby
+# db/migrate/20261030120000_index_usernames.rb
+class IndexUsernames < Belt::Migration
+  def up
+    PoshNosh::MatchStore.new.index_usernames!
+  end
+end
+```
+
+`belt deploy <env>` runs pending migrations after terraform apply, once per environment (nested envs included). Applied versions are recorded in SSM under `/belt/<app>/<env>/schema_migrations/`.
+
+```bash
+belt db:migrate dev01            # run pending migrations by hand
+belt db:migrate:status prod      # which have run
+belt deploy dev --skip-migrations
+```
+
+Migrations must be idempotent and batch-safe. See `belt explain migrations`.
+
 ## Testing
 
 Belt ships an in-process **end-to-end harness** that drives the real router — no AWS, no HTTP server, no browser. It's the tier between controller unit tests (dispatch an action directly, never touch routing) and full cloud e2e (needs a deployed stack).

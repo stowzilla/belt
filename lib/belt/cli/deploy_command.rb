@@ -16,11 +16,13 @@ require_relative 'cognito_sharer'
 require_relative 'dynamo_copier'
 require_relative 'dns_command'
 require_relative 'apex_dns_sync'
+require_relative 'db_migrate_command'
 
 module Belt
   module CLI
     class DeployCommand
       DEFAULT_DOCKER_BUILD_IMAGE = 'public.ecr.aws/sam/build-ruby3.4:latest-x86_64'
+      BELT_EXE = File.expand_path('../../../exe/belt', __dir__)
       def self.run(args)
         # Handle `belt deploy frontend <env>` as before
         if args.first == 'frontend'
@@ -33,6 +35,7 @@ module Belt
         rebuild = false
         skip_backup = false
         backup_only = false
+        skip_migrations = false
         filtered_args = []
 
         args.each do |arg|
@@ -45,6 +48,8 @@ module Belt
             skip_backup = true
           when '--backup-only'
             backup_only = true
+          when '--skip-migrations'
+            skip_migrations = true
           when '-h', '--help'
             puts help_text
             exit 0
@@ -79,12 +84,13 @@ module Belt
           end
         end
 
+        options = { auto_approve: auto_approve, skip_migrations: skip_migrations, extra_args: filtered_args }
         if backup_only
-          new(env, auto_approve: auto_approve, skip_backup: false, extra_args: filtered_args).run_backup_only
+          new(env, **options, skip_backup: false).run_backup_only
         elsif rebuild
-          new(env, auto_approve: auto_approve, skip_backup: skip_backup, extra_args: filtered_args).run_rebuild
+          new(env, **options, skip_backup: skip_backup).run_rebuild
         else
-          new(env, auto_approve: auto_approve, skip_backup: skip_backup, extra_args: filtered_args).run
+          new(env, **options, skip_backup: skip_backup).run
         end
       end
 
@@ -105,6 +111,7 @@ module Belt
             7. Prompt for confirmation (unless --auto)
             8. terraform apply   (deploy changes)
             9. Nested envs: share parent Cognito + copy DynamoDB if empty
+           10. Run pending data migrations in db/migrate (see `belt db:migrate`)
 
           Options:
             --auto, --yes, -y    Skip confirmation prompt (auto-approve)
@@ -114,6 +121,7 @@ module Belt
             --skip-backup        Skip pre-deploy backup phase
             --no-backup          Alias for --skip-backup
             --backup-only        Run backups only, do not deploy
+            --skip-migrations    Don't run pending db/migrate data migrations
             -h, --help           Show this help
 
           Environment:
@@ -144,10 +152,11 @@ module Belt
         HELP
       end
 
-      def initialize(env, auto_approve: false, skip_backup: false, extra_args: [])
+      def initialize(env, auto_approve: false, skip_backup: false, skip_migrations: false, extra_args: [])
         @env = env
         @auto_approve = auto_approve
         @skip_backup = skip_backup
+        @skip_migrations = skip_migrations
         @extra_args = extra_args
         @infra_dir = TerraformCommand.find_infrastructure_dir
         @project_root = find_project_root
@@ -188,9 +197,12 @@ module Belt
 
         run_nested_env_hooks
 
+        migrations_ok = run_migrations
+
         deploy_frontend_if_exists
 
         puts "\n   Run `belt server` to view your app locally (auto-connects to the deployed API)."
+        exit 1 unless migrations_ok
       end
 
       def run_backup_only
@@ -232,6 +244,7 @@ module Belt
         ensure_lockfile_consistent!
         generate_routes(lambda_dir)
         build_and_deploy(lambda_dir, function_name)
+        exit 1 unless run_migrations
       end
 
       private
@@ -899,6 +912,22 @@ module Belt
         raw = "#{app_name}-#{env_name}-"
         sanitized = raw.tr('_', '-').downcase
         [raw, sanitized].uniq
+      end
+
+      # Runs pending db/migrate data migrations in a child `belt db:migrate`
+      # so the app's code is booted in its own process, not the deployer's.
+      # Runs after the nested-env DynamoDB copy so copied rows get migrated
+      # too. Returns false on failure: the infra is already live, so the rest
+      # of the deploy continues and the exit status reports the failure.
+      def run_migrations # rubocop:disable Naming/PredicateMethod
+        return true if @skip_migrations || !DbMigrateCommand.migrations?(@project_root)
+
+        puts "\n━━━ data migrations ━━━"
+        return true if system(Gem.ruby, BELT_EXE, 'db:migrate', @env, '--yes', chdir: @project_root)
+
+        puts "\n  ⚠ Data migrations failed for #{@env}. The deploy itself succeeded."
+        puts "    Fix the migration and run `belt db:migrate #{@env}` to retry."
+        false
       end
 
       def deploy_frontend_if_exists

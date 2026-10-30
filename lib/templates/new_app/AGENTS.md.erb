@@ -137,6 +137,7 @@ belt output <env>                                      # terraform output
 belt routes [-g PATTERN] [-f json]                     # Show route definitions
 belt contracts [-g PATTERN] [-f json]                  # Show API contracts
 belt console <env>                                     # Interactive Ruby console
+belt db:migrate <env>                                  # Run pending db/migrate data migrations (deploy does this too)
 belt logs <lambda> [-f] [-s 5m] [-e env]               # View Lambda logs
 belt doctor                                            # Check dependencies
 ```
@@ -269,7 +270,8 @@ belt deploy <env>                 # Deploy everything (init → plan → apply)
 | `rails routes` | `belt routes` |
 | `rails console` | `belt console <env>` |
 | `config/routes.rb` → URL paths | `config/routes.rb` → URL paths + infrastructure |
-| Migrations | `belt setup tables <env>` |
+| Schema migrations | `belt setup tables <env>` |
+| Data migrations (`rails db:migrate`) | `db/migrate/*.rb` + `belt db:migrate <env>` (run by `belt deploy`) |
 | `has_many` / `belongs_to` | Manual (no joins in DynamoDB) |
 | Template rendering | JSON responses (default) |
 

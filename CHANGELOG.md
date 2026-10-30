@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Data migrations.** `db/migrate/<timestamp>_<name>.rb` files define `Belt::Migration`
+  subclasses whose `up` runs in the booted app context (same as `belt console`).
+  `belt deploy <env>` runs pending ones after terraform apply and the nested-env data copy
+  (also after `--rebuild`; opt out with `--skip-migrations`). Each version runs once per
+  environment, nested envs included, recorded in SSM at
+  `/belt/<app>/<env>/schema_migrations/<version>`. A failed migration stays pending, the
+  deploy carries on and exits non-zero. New `belt db:migrate [env]` and
+  `belt db:migrate:status [env]` run or check them by hand. See `belt explain migrations`.
+
 ## 0.6.2
 
 ### Fixed

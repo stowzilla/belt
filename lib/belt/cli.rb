@@ -26,6 +26,7 @@ require_relative 'cli/tasks_command'
 require_relative 'cli/console_command'
 require_relative 'cli/db_copy_command'
 require_relative 'cli/db_seed_command'
+require_relative 'cli/db_migrate_command'
 require_relative 'cli/logs_command'
 require_relative 'cli/doctor_command'
 require_relative 'cli/plugin_command'
@@ -43,6 +44,8 @@ module Belt
       %w[console c] => Belt::CLI::ConsoleCommand,
       'db:copy' => Belt::CLI::DbCopyCommand,
       'db:seed' => Belt::CLI::DbSeedCommand,
+      'db:migrate' => Belt::CLI::DbMigrateCommand,
+      'db:migrate:status' => ->(args) { Belt::CLI::DbMigrateCommand.run(args, status: true) },
       'logs' => Belt::CLI::LogsCommand,
       %w[tasks --tasks -T] => Belt::CLI::TasksCommand,
       'setup' => Belt::CLI::SetupCommand,
@@ -131,6 +134,8 @@ module Belt
           c                                           Alias for console
           db:copy <from-env> <to-env> [--force]        Copy DynamoDB data between environments
           db:seed [environment] [--force]              Run config/seeds.rb against an environment
+          db:migrate [environment] [--yes]             Run pending db/migrate data migrations
+          db:migrate:status [environment]              Show which data migrations have run
           logs [lambda] [-f] [-s 5m] [-e env]         View Lambda function logs
           tasks [-g PATTERN] [-a]                     List available rake tasks
           -T [-g PATTERN] [-a]                        Alias for tasks
@@ -180,6 +185,8 @@ module Belt
           belt db:copy prod dev --force # overwrite dev tables even if non-empty
           belt db:seed                  # run config/seeds.rb against dev (or BELT_ENV)
           belt db:seed dev01
+          belt db:migrate prod          # run pending data migrations against prod
+          belt db:migrate:status dev01
       USAGE
     end
 

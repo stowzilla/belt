@@ -8,7 +8,7 @@ description: >-
   Belt routing DSL, writing BeltController actions, modeling DynamoDB data
   with ActiveItem, wiring Cognito auth, configuring the Lambda handler,
   running `belt` CLI commands (new, generate, deploy, console, routes, logs,
-  server, setup, plugin, explain, db:copy/db:seed), Terraform via belt,
+  server, setup, plugin, explain, db:copy/db:seed/db:migrate), Terraform via belt,
   backups, observability, or authoring Belt plugins. Triggers on "belt new",
   "belt deploy", "belt generate", "belt routes", "BeltController", "ActiveItem",
   "Belt::LambdaHandler", "belt console", "belt server", "conveyor-belt". Do NOT
