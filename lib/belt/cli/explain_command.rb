@@ -52,6 +52,10 @@ module Belt
         'db:copy' => 'data_seeding',
         'copy' => 'data_seeding',
         'db_copy' => 'data_seeding',
+        'migration' => 'migrations',
+        'migrate' => 'migrations',
+        'db:migrate' => 'migrations',
+        'data_migrations' => 'migrations',
         'e2e' => 'testing',
         'test' => 'testing',
         'tests' => 'testing',
@@ -120,6 +124,7 @@ module Belt
             irb, repl                 → console
             seeds, seed, db:seed      → data_seeding
             db:copy, copy             → data_seeding
+            migrate, db:migrate       → migrations
             e2e, test, harness        → testing
 
           Examples:

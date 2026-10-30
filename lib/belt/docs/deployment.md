@@ -11,6 +11,7 @@ belt deploy <env>              # init → plan → apply (interactive)
 belt deploy prod --auto        # skip confirmation prompt
 belt deploy prod --skip-backup # skip pre-deploy backup
 belt deploy --backup-only      # create recovery point without deploying
+belt deploy dev --skip-migrations # don't run pending db/migrate migrations
 ```
 
 ## First-Time Setup
@@ -147,6 +148,14 @@ end
 Backups run automatically before each deploy (DynamoDB snapshots, Cognito
 exports, S3 syncs). See `belt explain backups` for full documentation.
 
+## Data Migrations
+
+After terraform apply (and the nested-env data copy), `belt deploy` runs any
+pending `db/migrate/<timestamp>_<name>.rb` data migrations against the env,
+each exactly once per environment. A failing migration doesn't roll back the
+deploy; it's reported and the command exits non-zero. Run them by hand with
+`belt db:migrate <env>`. See `belt explain migrations`.
+
 ## Environment Variables
 
 Set `BELT_ENV` to avoid typing the environment every time:
@@ -176,4 +185,5 @@ deploys every configured frontend after terraform apply.
 
 - `belt explain routing` — how routes map to infrastructure
 - `belt explain backups` — pre-deploy backup configuration
+- `belt explain migrations` — data migrations run after deploy
 - `belt doctor` — check system dependencies before deploying

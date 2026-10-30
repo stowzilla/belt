@@ -126,4 +126,5 @@ file, no generator required.
 
 - `belt explain backups` — recovery-point snapshots, not data seeding
 - `belt explain console` — the app-booting mechanism `db:seed` reuses
+- `belt explain migrations` — changing rows already in a deployed env
 - `belt explain deployment` — nested environments and the parent → child copy hook

@@ -21,13 +21,15 @@ default environment so you can omit the `<env>` argument.
 | `belt doctor` | Check system deps + AWS config. |
 | `belt plugin new <name>` | Scaffold a Belt plugin gem. |
 | `belt explain <topic>` | Explain a concept (see topic list below). |
-| `belt deploy [env] [--auto] [--skip-backup] [--backup-only]` | Deploy to AWS (init → plan → apply, runs backups first if configured). |
+| `belt deploy [env] [--auto] [--skip-backup] [--backup-only] [--skip-migrations]` | Deploy to AWS (init → plan → apply, runs backups first if configured, data migrations after). |
 | `belt deploy frontend <env> [--frontend NAME]` | Build + deploy frontend(s). |
 | `belt dns <deploy\|add <env>\|show>` | Manage the root DNS zone. |
 | `belt frontend <env <env>\|list>` | Write `<frontend>/.env` from TF outputs, or list frontends. |
 | `belt server [--frontend NAME]` (alias `s`) | Start local dev server. |
 | `belt db:copy <from> <to> [--force]` | Copy DynamoDB data between environments. |
 | `belt db:seed [env] [--force]` | Run `config/seeds.rb` against an environment. |
+| `belt db:migrate [env] [--yes]` | Run pending `db/migrate` data migrations (also runs after `belt deploy`). |
+| `belt db:migrate:status [env]` | Show which data migrations have run against an environment. |
 | `belt version` | Show Belt version. |
 
 ### Terraform shorthand
