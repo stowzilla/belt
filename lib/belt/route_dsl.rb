@@ -9,7 +9,7 @@ module Belt
 
   class Route
     attr_reader :method, :path, :auth, :lambda, :cors, :tables, :route_type,
-                :controller, :action, :request_model, :response_model, :response_context
+                :controller, :action, :request_model, :response_model, :response_context, :throttle
 
     def initialize(method, path, options = {})
       @method = method.to_s.upcase
@@ -17,6 +17,7 @@ module Belt
       @auth = options[:auth]
       @lambda = options[:lambda]
       @cors = options.fetch(:cors, true)
+      @throttle = self.class.normalize_throttle(options[:throttle])
       @tables = options[:tables] || []
       @route_type = options[:route_type] || :action
       @controller = options[:controller]
@@ -24,6 +25,31 @@ module Belt
       @request_model = options[:request_model]&.to_s
       @response_model = options[:response_model]&.to_s
       @response_context = options[:response_context]&.to_s
+    end
+
+    # Per-route API Gateway limit: `throttle: { rate: 2, burst: 5 }` (requests per
+    # second, token bucket). Emitted by `belt routes -f json` and applied by the
+    # conveyor-belt provider (0.0.20+) as stage method settings; it wins over the
+    # Lambda's `throttle:` in config/lambda/<fn>.yml. Returns nil when unset.
+    def self.normalize_throttle(raw)
+      return nil if raw.nil?
+
+      unless raw.is_a?(Hash)
+        raise ArgumentError, "throttle must be a Hash like { rate: 2, burst: 5 } (got #{raw.inspect})"
+      end
+
+      rate = raw[:rate] || raw['rate']
+      burst = raw[:burst] || raw['burst']
+      raise ArgumentError, 'throttle needs rate (requests/second) and burst' if rate.nil? || burst.nil?
+
+      unless rate.is_a?(Numeric) && rate.positive?
+        raise ArgumentError, "throttle rate must be a number > 0 (got #{rate.inspect})"
+      end
+      unless burst.is_a?(Integer) && burst.positive?
+        raise ArgumentError, "throttle burst must be an integer > 0 (got #{burst.inspect})"
+      end
+
+      { rate: rate, burst: burst }
     end
 
     def resource?
@@ -494,7 +520,8 @@ module Belt
         action: action,
         request_model: options[:request_model],
         response_model: options[:response_model],
-        response_context: options[:response_context]
+        response_context: options[:response_context],
+        throttle: options[:throttle]
       }
 
       @routes << Belt::Route.new(method, path, route_options)

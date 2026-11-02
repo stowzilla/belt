@@ -209,6 +209,15 @@ end
 
 **Key point:** `namespace` and `scope` are purely organizational — they affect URL paths and controller module resolution but never change which Lambda handles the request. Use `function` when you need routes to go to a different Lambda.
 
+**Per-route throttling:** any route or resource accepts `throttle: { rate:, burst: }` (steady-state requests per second plus the burst the token bucket absorbs). `belt routes -f json` emits it and the conveyor-belt provider (0.0.20+) applies it as API Gateway stage method settings. A route's `throttle` wins over the serving Lambda's `throttle:` in `config/lambda/<fn>.yml`, which in turn wins over the provider's stage-level `throttle` block.
+
+```ruby
+gateway :api, auth: :none do
+  post '/connect/chat', to: 'chat#create', throttle: { rate: 2, burst: 5 }
+  resources :leads, only: [:create], throttle: { rate: 1, burst: 3 }
+end
+```
+
 ### Nested Resource DSL
 
 Inside a `resources` block, you can use Rails-like `member`, `collection`, `scope`, and singular `resource` for DRYer route definitions:
