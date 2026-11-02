@@ -131,17 +131,20 @@ module Belt
 
         dist_prefix = dist.end_with?('/') ? dist : "#{dist}/"
 
-        # Hashed assets get immutable cache headers
-        run!('aws', 's3', 'sync', dist_prefix, "s3://#{bucket}", '--delete',
-             '--size-only', '--cache-control', 'public, max-age=31536000, immutable',
-             '--exclude', 'index.html')
-
         index = File.join(dist, 'index.html')
         abort "Error: #{index} not found after build." unless File.exist?(index)
 
-        # index.html always revalidates
-        run!('aws', 's3', 'cp', index, "s3://#{bucket}/index.html",
-             '--cache-control', 'no-cache')
+        # Hashed assets get immutable cache headers
+        run!('aws', 's3', 'sync', dist_prefix, "s3://#{bucket}", '--delete',
+             '--size-only', '--cache-control', 'public, max-age=31536000, immutable',
+             '--exclude', '*.html')
+
+        # Every HTML page always revalidates — index.html and any prerendered page
+        # (dist/docs.html, dist/blog/post/index.html, ...). Not --size-only: a page whose
+        # only change is the hashed asset names inside it keeps the same size, and skipping
+        # it would leave it pointing at assets the sync above just deleted.
+        run!('aws', 's3', 'sync', dist_prefix, "s3://#{bucket}", '--delete',
+             '--exclude', '*', '--include', '*.html', '--cache-control', 'no-cache')
       end
 
       def invalidate_cloudfront

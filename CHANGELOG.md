@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.6
+
+### Fixed
+
+- **`belt deploy frontend` serves every HTML file like `index.html`.** Only the root
+  `index.html` used to get `Cache-Control: no-cache`; any other `.html` in `dist/` (a
+  prerendered page such as `dist/docs.html` or `dist/_pages/pricing.html`) was synced with
+  the hashed assets' year-long `immutable` header *and* `--size-only`. A rebuilt page whose
+  only change was its hashed asset names kept the same size, so it was never re-uploaded and
+  went on loading assets the same sync had deleted. All `*.html` now sync with `no-cache` and
+  are compared by content, not size. (Fizzy #1760)
+
 ## 0.6.5
 
 ### Added
