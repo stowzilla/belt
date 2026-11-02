@@ -13,6 +13,19 @@
   deploy carries on and exits non-zero. New `belt db:migrate [env]` and
   `belt db:migrate:status [env]` run or check them by hand. See `belt explain migrations`.
 
+### Fixed
+
+- **The data-migrations step of `belt deploy` no longer fails with "You have already
+  activated json X, but your Gemfile requires json Y".** The child `belt db:migrate` now
+  starts with the app's bundle loaded (`BUNDLE_GEMFILE` + `-rbundler/setup`), so the belt
+  CLI's own `require 'json'` can't activate a newer json than the app's lockfile pins.
+- **A fresh environment's Lambdas missing their `config/lambda/*.yml` `env_vars`** (nested
+  envs especially, since they are always created fresh) is fixed in conveyor-belt 0.0.19:
+  the provider's create path read only the HCL `lambda_config` map and ignored
+  `lambda_config_dir`, so the YAML env vars, `iam_policy_arns` and triggers landed only on
+  a second deploy. Existing apps on `version = "~> 0.0.16"` pick it up with
+  `terraform init -upgrade` in the env's infrastructure directory.
+
 ## 0.6.2
 
 ### Fixed

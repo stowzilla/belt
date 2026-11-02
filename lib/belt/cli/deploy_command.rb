@@ -923,11 +923,25 @@ module Belt
         return true if @skip_migrations || !DbMigrateCommand.migrations?(@project_root)
 
         puts "\n━━━ data migrations ━━━"
-        return true if system(Gem.ruby, BELT_EXE, 'db:migrate', @env, '--yes', chdir: @project_root)
+        return true if system(migration_child_env, Gem.ruby, BELT_EXE, 'db:migrate', @env, '--yes',
+                              chdir: @project_root)
 
         puts "\n  ⚠ Data migrations failed for #{@env}. The deploy itself succeeded."
         puts "    Fix the migration and run `belt db:migrate #{@env}` to retry."
         false
+      end
+
+      # Load the app's bundle before the belt CLI does. Otherwise the CLI's own
+      # `require 'json'` activates the newest installed json, and db:migrate's
+      # `bundler/setup` then fails with "You have already activated json X,
+      # but your Gemfile requires json Y" (Fizzy #1734).
+      def migration_child_env
+        gemfile = File.join(@project_root, 'Gemfile')
+        return {} unless File.exist?(gemfile)
+
+        rubyopt = ENV.fetch('RUBYOPT', '')
+        rubyopt = "-rbundler/setup #{rubyopt}".strip unless rubyopt.include?('bundler/setup')
+        { 'BUNDLE_GEMFILE' => gemfile, 'RUBYOPT' => rubyopt }
       end
 
       def deploy_frontend_if_exists
