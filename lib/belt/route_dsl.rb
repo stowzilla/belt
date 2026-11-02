@@ -33,13 +33,21 @@ module Belt
     # Lambda's `throttle:` in config/lambda/<fn>.yml. Returns nil when unset.
     def self.normalize_throttle(raw)
       return nil if raw.nil?
-      raise ArgumentError, "throttle must be a Hash like { rate: 2, burst: 5 } (got #{raw.inspect})" unless raw.is_a?(Hash)
+
+      unless raw.is_a?(Hash)
+        raise ArgumentError, "throttle must be a Hash like { rate: 2, burst: 5 } (got #{raw.inspect})"
+      end
 
       rate = raw[:rate] || raw['rate']
       burst = raw[:burst] || raw['burst']
       raise ArgumentError, 'throttle needs rate (requests/second) and burst' if rate.nil? || burst.nil?
-      raise ArgumentError, "throttle rate must be a number > 0 (got #{rate.inspect})" unless rate.is_a?(Numeric) && rate.positive?
-      raise ArgumentError, "throttle burst must be an integer > 0 (got #{burst.inspect})" unless burst.is_a?(Integer) && burst.positive?
+
+      unless rate.is_a?(Numeric) && rate.positive?
+        raise ArgumentError, "throttle rate must be a number > 0 (got #{rate.inspect})"
+      end
+      unless burst.is_a?(Integer) && burst.positive?
+        raise ArgumentError, "throttle burst must be an integer > 0 (got #{burst.inspect})"
+      end
 
       { rate: rate, burst: burst }
     end
