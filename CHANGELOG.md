@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **Non-prod deploys auto-approve by default.** `belt deploy <env>` no longer
+  prompts for confirmation when the environment isn't `prod`/`production` — the
+  Terraform plan is applied straight away. `prod` still prompts unless you pass
+  `--auto`. Pass `--confirm` (alias `--no-auto`) to force the prompt on any
+  environment. No more typing `--auto` on every dev deploy.
+
 ## 0.6.6
 
 ### Added

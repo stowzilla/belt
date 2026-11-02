@@ -32,6 +32,7 @@ module Belt
         end
 
         auto_approve = false
+        force_confirm = false
         rebuild = false
         skip_backup = false
         backup_only = false
@@ -42,6 +43,8 @@ module Belt
           case arg
           when '--auto', '--yes', '-y'
             auto_approve = true
+          when '--confirm', '--no-auto'
+            force_confirm = true
           when '--rebuild'
             rebuild = true
           when '--skip-backup', '--no-backup'
@@ -69,13 +72,14 @@ module Belt
             puts 'Usage: belt deploy [environment] [options]'
             puts "\nDefaults to BELT_ENV or the first available environment."
             puts "\nOptions:"
-            puts '  --auto, --yes, -y    Skip confirmation prompt (auto-approve)'
+            puts '  --auto, --yes, -y    Skip confirmation prompt (prod only; non-prod auto-approves)'
+            puts '  --confirm, --no-auto Force the confirmation prompt even for non-prod envs'
             puts '  --rebuild            Rebuild and push Lambda code directly (bypasses Terraform)'
             puts '  -h, --help           Show this help'
             puts "\nExamples:"
-            puts '  belt deploy                # Deploy dev (or BELT_ENV)'
-            puts '  belt deploy prod           # Deploy to prod'
-            puts '  belt deploy dev --auto     # Deploy without confirmation'
+            puts '  belt deploy                # Deploy dev (or BELT_ENV), no prompt'
+            puts '  belt deploy prod           # Deploy to prod (prompts)'
+            puts '  belt deploy prod --auto    # Deploy prod without confirmation'
             puts '  belt deploy --rebuild      # Fast code push (no infra changes)'
             puts '  belt deploy frontend dev              # Deploy frontend(s)'
             puts '  belt deploy frontend dev --frontend ops'
@@ -83,6 +87,10 @@ module Belt
             exit 1
           end
         end
+
+        # Non-prod environments auto-approve by default — prod always prompts
+        # unless --auto is explicit. Pass --confirm to force the prompt anywhere.
+        auto_approve = true if !force_confirm && !%w[prod production].include?(env)
 
         options = { auto_approve: auto_approve, skip_migrations: skip_migrations, extra_args: filtered_args }
         if backup_only
@@ -108,13 +116,16 @@ module Belt
             4. Build sidecar Lambda zips Terraform needs at plan time
             5. terraform init    (initialize providers/modules)
             6. terraform plan    (preview changes)
-            7. Prompt for confirmation (unless --auto)
+            7. Prompt for confirmation (prod only; non-prod auto-approves)
             8. terraform apply   (deploy changes)
             9. Nested envs: share parent Cognito + copy DynamoDB if empty
            10. Run pending data migrations in db/migrate (see `belt db:migrate`)
 
           Options:
-            --auto, --yes, -y    Skip confirmation prompt (auto-approve)
+            --auto, --yes, -y    Skip confirmation prompt (auto-approve). Non-prod
+                                 environments auto-approve by default, so this is only
+                                 needed for prod.
+            --confirm, --no-auto Force the confirmation prompt even for non-prod envs
             --rebuild            Rebuild and push Lambda code directly (bypasses Terraform).
                                  Much faster for code-only changes — packages gems via Docker,
                                  zips, and pushes with `aws lambda update-function-code`.
@@ -140,9 +151,10 @@ module Belt
               end
 
           Examples:
-            belt deploy                # Deploy dev (or BELT_ENV)
-            belt deploy prod           # Deploy to prod
-            belt deploy dev --auto     # Deploy without confirmation (CI mode)
+            belt deploy                # Deploy dev (or BELT_ENV), no prompt
+            belt deploy prod           # Deploy to prod (prompts for confirmation)
+            belt deploy prod --auto    # Deploy to prod without confirmation (CI mode)
+            belt deploy dev --confirm  # Force the confirmation prompt on dev
             belt deploy --rebuild      # Fast code push to dev (no infra changes)
             belt deploy prod --rebuild # Fast code push to prod
             belt deploy prod --skip-backup  # Skip backups for this deploy
