@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.6.6
+
+### Added
+
+- **SEO/AEO by default for React frontends.** `belt generate frontend react` now
+  prerenders every public page listed in `src/seo.js` at build time (React SSR via
+  `src/entry-server.jsx` + `scripts/prerender.js`), so crawlers and AI answer engines
+  that don't run JavaScript get real content plus a per-page `<title>`, description,
+  canonical URL, Open Graph tags and JSON-LD. The build also writes `robots.txt`,
+  `sitemap.xml` and `llms.txt`. Only `prod` is indexable by default; every other
+  environment ships `Disallow: /` + `noindex`. `belt explain seo`. (Fizzy #1385)
+- **`belt deploy frontend` uploads prerendered pages** to their extensionless S3 keys
+  as `text/html`, passes `BELT_ENV` and `VITE_SITE_URL` to the build, and serves HTML,
+  `robots.txt`, `sitemap.xml` and `llms.txt` with `no-cache` instead of the immutable
+  header meant for hashed assets.
+
 ## 0.6.5
 
 ### Added

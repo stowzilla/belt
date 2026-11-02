@@ -259,6 +259,23 @@ belt setup tables <env>           # Generate DynamoDB table resources
 belt deploy <env>                 # Deploy everything (init → plan → apply)
 ```
 
+## SEO / AEO (public pages)
+
+If the app has a React frontend, its public pages are prerendered for search and AI
+answer engines (`belt explain frontend`). When you add or change a public page:
+
+- Add it to `frontend/src/seo.js` → `pages` with a specific `title` and a one- or
+  two-sentence `description` that names what the page is and who it's for.
+- Put login-gated routes in `privatePaths` (they're disallowed in `robots.txt`).
+- Keep the page's content in the rendered markup — no `window`/`document`/
+  `localStorage` during render (use `useEffect`), and no content that only appears
+  after an API call if crawlers need to see it.
+- Use one `<h1>` per page and real links (`<Link>`/`<a href>`), not click handlers.
+- Check `npm run build` output: `SEO: prerendered N page(s)` with no warnings, and
+  `dist/<page>.html` contains the content.
+
+Only `prod` is indexable; other environments ship `noindex`.
+
 ## Key Differences from Rails
 
 | Rails | Belt |

@@ -45,6 +45,8 @@ module Belt
         'repl' => 'console',
         'frontends' => 'frontend',
         'spa' => 'frontend',
+        'seo' => 'frontend',
+        'aeo' => 'frontend',
         'seeds' => 'data_seeding',
         'seed' => 'data_seeding',
         'seeding' => 'data_seeding',
