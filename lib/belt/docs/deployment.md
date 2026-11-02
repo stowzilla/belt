@@ -7,12 +7,20 @@ Lambda packaging, and pre-deploy backups.
 ## Quick Deploy
 
 ```bash
-belt deploy <env>              # init → plan → apply (interactive)
-belt deploy prod --auto        # skip confirmation prompt
+belt deploy <env>              # init → plan → apply
+belt deploy prod               # prod prompts for confirmation
+belt deploy prod --auto        # skip prod's confirmation prompt (CI)
+belt deploy dev                # non-prod auto-approves — no prompt
+belt deploy dev --confirm      # force the prompt on a non-prod env
 belt deploy prod --skip-backup # skip pre-deploy backup
 belt deploy --backup-only      # create recovery point without deploying
 belt deploy dev --skip-migrations # don't run pending db/migrate migrations
 ```
+
+Non-prod environments auto-approve the Terraform plan by default — only `prod`
+(and `production`) prompt. Pass `--confirm` (alias `--no-auto`) to force the
+prompt anywhere; `--auto` still works everywhere and is what you want in CI for
+prod.
 
 ## First-Time Setup
 
