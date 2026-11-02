@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'json'
 require 'shellwords'
 require 'open3'
 require_relative 'app_detection'
@@ -13,6 +14,10 @@ module Belt
   module CLI
     class FrontendDeployCommand
       include AppDetection
+
+      PAGES_MANIFEST = '.belt-pages.json'
+      # Uploaded with no-cache instead of the immutable header hashed assets get
+      REVALIDATED_FILES = %w[*.html robots.txt sitemap.xml llms.txt].freeze
 
       def self.run(args)
         frontend_name = FrontendRegistry.extract_flag!(args, '--frontend')
@@ -109,12 +114,19 @@ module Belt
         run!(env, 'npm', 'run', 'build', chdir: @frontend.path)
       end
 
+      # BELT_ENV and VITE_SITE_URL drive the SEO prerender step (scripts/prerender.js):
+      # only indexable environments get crawled, and canonical/sitemap URLs need the
+      # site's origin. The env map or the shell can override either.
       def frontend_build_env
-        FrontendEnvMap.new(
+        env = FrontendEnvMap.new(
           @env,
           env_dir: @env_dir,
           frontend_path: @frontend.path
         ).process_env
+        env['BELT_ENV'] ||= @env
+        site_url = ENV['VITE_SITE_URL'] || fetch_frontend_url
+        env['VITE_SITE_URL'] ||= site_url if site_url
+        env
       end
 
       def sync_to_s3
@@ -130,18 +142,49 @@ module Belt
         puts "☁️  Deploying to S3... (#{bucket})"
 
         dist_prefix = dist.end_with?('/') ? dist : "#{dist}/"
+        pages = prerendered_pages(dist)
 
-        # Hashed assets get immutable cache headers
+        # Hashed assets get immutable cache headers. Prerendered page keys are
+        # excluded so --delete doesn't remove them before they're re-uploaded.
         run!('aws', 's3', 'sync', dist_prefix, "s3://#{bucket}", '--delete',
              '--size-only', '--cache-control', 'public, max-age=31536000, immutable',
-             '--exclude', 'index.html')
+             *[*REVALIDATED_FILES, PAGES_MANIFEST].flat_map { |f| ['--exclude', f] },
+             *pages.keys.flat_map { |key| ['--exclude', key] })
 
         index = File.join(dist, 'index.html')
         abort "Error: #{index} not found after build." unless File.exist?(index)
 
-        # index.html always revalidates
-        run!('aws', 's3', 'cp', index, "s3://#{bucket}/index.html",
-             '--cache-control', 'no-cache')
+        # HTML and crawler files (robots.txt, sitemap.xml, llms.txt) always revalidate
+        run!('aws', 's3', 'sync', dist_prefix, "s3://#{bucket}", '--delete',
+             '--cache-control', 'no-cache', '--exclude', '*',
+             *REVALIDATED_FILES.flat_map { |f| ['--include', f] })
+
+        upload_prerendered_pages(dist, bucket, pages)
+      end
+
+      # scripts/prerender.js writes dist/.belt-pages.json mapping each page's S3 key
+      # to its file ({ "about" => "about.html" }). CloudFront has no directory
+      # indexes, so /about must be an object named `about` served as text/html.
+      def prerendered_pages(dist)
+        manifest = File.join(dist, PAGES_MANIFEST)
+        return {} unless File.file?(manifest)
+
+        pages = JSON.parse(File.read(manifest))
+        pages.is_a?(Hash) ? pages : {}
+      rescue JSON::ParserError => e
+        warn "⚠️  Ignoring #{manifest}: #{e.message}"
+        {}
+      end
+
+      def upload_prerendered_pages(dist, bucket, pages)
+        return if pages.empty?
+
+        puts "🔎 Uploading #{pages.size} prerendered page(s)..."
+        pages.each do |key, file|
+          run!('aws', 's3', 'cp', File.join(dist, file), "s3://#{bucket}/#{key}",
+               '--content-type', 'text/html; charset=utf-8', '--cache-control', 'no-cache',
+               '--only-show-errors')
+        end
       end
 
       def invalidate_cloudfront

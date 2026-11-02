@@ -5,6 +5,28 @@ change list, see [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## SEO/AEO prerendering for React frontends (0.6.6)
+
+Optional, but recommended for any app with public pages. New React frontends
+prerender their public pages for search and AI answer engines (`belt explain seo`).
+To add it to an existing `frontend/` (Vite + React Router):
+
+1. Copy `src/seo.js`, `src/entry-server.jsx` and `scripts/prerender.js` from
+   [`lib/templates/frontend/react`](lib/templates/frontend/react) (fill in `seo.js`;
+   it's an ERB template in the gem).
+2. Move `<BrowserRouter>` out of `App.jsx` into `main.jsx`, and make `main.jsx`
+   hydrate prerendered pages — copy the template's `main.jsx` and `App.jsx` shape.
+3. Set the build script in `package.json`:
+   `"build": "vite build && vite build --ssr src/entry-server.jsx --outDir dist-ssr && node scripts/prerender.js"`
+   and add `dist-ssr` to `.gitignore`.
+4. Delete any hand-written `public/robots.txt` (the build writes one per environment).
+5. `npm run build` and check for `SEO: prerendered N page(s)` with no warnings.
+
+`belt deploy frontend` 0.6.6+ uploads the prerendered pages and serves HTML and
+crawler files with `no-cache`. Frontends without prerendering deploy as before.
+
+---
+
 ## ACM validation record (0.6.2)
 
 Only needed if you're adding a new standalone env with a `domain` to an existing app

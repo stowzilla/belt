@@ -1,0 +1,27 @@
+// SEO/AEO config — what search engines and AI answer engines (Google, Bing,
+// ChatGPT, Claude, Perplexity) see. Most of those crawlers don't run JavaScript,
+// so `npm run build` prerenders every page listed here to real HTML.
+//
+// For each page the build writes static HTML with its own <title>, description,
+// canonical URL, Open Graph tags and JSON-LD, plus robots.txt, sitemap.xml and
+// llms.txt for the whole site (scripts/prerender.js).
+//
+// Rules of thumb:
+//   - Every public route gets an entry in `pages` with a specific title and a
+//     one- or two-sentence description that says plainly what the page is.
+//   - Login-gated or app-only routes go in `privatePaths` (disallowed in robots.txt).
+//   - Only `indexableEnvironments` are indexable. Every other environment, and
+//     local builds, ship `Disallow: /` and <meta name="robots" content="noindex">
+//     so dev and ephemeral environments never end up in search results.
+export default {
+  siteName: '<%= @module_name %>',
+  description: '<%= @module_name %> — say what this app does and who it is for in one or two plain sentences.',
+  // Canonical production URL, e.g. 'https://example.com'. `belt deploy frontend`
+  // injects VITE_SITE_URL from terraform, which wins when set.
+  siteUrl: '',
+  indexableEnvironments: ['prod'],
+  pages: [
+    { path: '/', title: '<%= @module_name %>', description: '' }
+  ],
+  privatePaths: ['/login', '/signup', '/confirm']
+}

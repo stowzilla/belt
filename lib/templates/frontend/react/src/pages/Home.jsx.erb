@@ -211,7 +211,7 @@ function Home() {
   if (loading) {
     return (
       <div className="belt-welcome">
-        <style>{welcomeStyles}</style>
+        <style dangerouslySetInnerHTML={{ __html: welcomeStyles }} />
         <main className="status-main">
           <p className="muted">Connecting to API…</p>
         </main>
@@ -222,7 +222,7 @@ function Home() {
   if (error) {
     return (
       <div className="belt-welcome">
-        <style>{welcomeStyles}</style>
+        <style dangerouslySetInnerHTML={{ __html: welcomeStyles }} />
         <main className="status-main">
           <h1><%= @module_name %></h1>
           <p className="error">Could not load welcome data from the API.</p>
@@ -242,7 +242,7 @@ function Home() {
 
   return (
     <div className="belt-welcome">
-      <style>{welcomeStyles}</style>
+      <style dangerouslySetInnerHTML={{ __html: welcomeStyles }} />
 
       <div className="hero">
         {welcome.background_image ? (

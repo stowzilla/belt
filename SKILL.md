@@ -56,6 +56,7 @@ belt doctor            # check deps + AWS config
 | Deploy to AWS | `belt deploy <env>` (`--auto` to skip prompt) |
 | Poke at data live | `belt console <env>` |
 | Run a local frontend | `belt server` (see references for env targeting) |
+| Make a public page findable (SEO/AEO) | Add it to `frontend/src/seo.js` → `pages`; see `belt explain seo` |
 | Add Cognito auth | `belt generate auth` → `cognito_authenticatable` in a model |
 | Build a plugin | `belt plugin new <name>` |
 | Learn a concept | `belt explain <topic>` |
