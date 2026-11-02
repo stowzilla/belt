@@ -1,17 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.6.4
 
 ### Added
 
-- **Data migrations.** `db/migrate/<timestamp>_<name>.rb` files define `Belt::Migration`
-  subclasses whose `up` runs in the booted app context (same as `belt console`).
-  `belt deploy <env>` runs pending ones after terraform apply and the nested-env data copy
-  (also after `--rebuild`; opt out with `--skip-migrations`). Each version runs once per
-  environment, nested envs included, recorded in SSM at
-  `/belt/<app>/<env>/schema_migrations/<version>`. A failed migration stays pending, the
-  deploy carries on and exits non-zero. New `belt db:migrate [env]` and
-  `belt db:migrate:status [env]` run or check them by hand. See `belt explain migrations`.
+- **Plugins can register top-level commands.** A gem that ships
+  `lib/belt/commands/<name>_command.rb` defining `Belt::Commands::<Name>Command.run(args)`
+  gets `belt <name> ...` (underscores in the file name become hyphens), listed under
+  "Plugin Commands" in `belt --help`. Discovery mirrors `GeneratorRegistry`
+  (`Belt::CLI::CommandRegistry`). Optional `.description` for help text and `.standalone?`
+  to run outside a Belt project. Built-in commands and terraform actions win on a name
+  clash. `belt help` / `belt --help` / `belt -h` now print usage and exit 0.
 
 ### Fixed
 
@@ -25,6 +24,19 @@
   `lambda_config_dir`, so the YAML env vars, `iam_policy_arns` and triggers landed only on
   a second deploy. Existing apps on `version = "~> 0.0.16"` pick it up with
   `terraform init -upgrade` in the env's infrastructure directory.
+
+## 0.6.3
+
+### Added
+
+- **Data migrations.** `db/migrate/<timestamp>_<name>.rb` files define `Belt::Migration`
+  subclasses whose `up` runs in the booted app context (same as `belt console`).
+  `belt deploy <env>` runs pending ones after terraform apply and the nested-env data copy
+  (also after `--rebuild`; opt out with `--skip-migrations`). Each version runs once per
+  environment, nested envs included, recorded in SSM at
+  `/belt/<app>/<env>/schema_migrations/<version>`. A failed migration stays pending, the
+  deploy carries on and exits non-zero. New `belt db:migrate [env]` and
+  `belt db:migrate:status [env]` run or check them by hand. See `belt explain migrations`.
 
 ## 0.6.2
 
