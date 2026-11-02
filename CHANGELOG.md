@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Per-route throttling in `routes.rb`.** Any route or resource accepts
+  `throttle: { rate: 2, burst: 5 }` (requests/second + burst). `belt routes -f json` emits it
+  as `throttle` on the route and conveyor-belt 0.0.20+ applies it as API Gateway stage method
+  settings, winning over the Lambda's `throttle:` in `config/lambda/<fn>.yml`. Malformed values
+  raise at load time. (Fizzy #1756)
+
 ## 0.6.4
 
 ### Added

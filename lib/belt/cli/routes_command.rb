@@ -165,6 +165,7 @@ module Belt
         }
         rc = route.response_context.to_s
         hash[:response_context] = rc unless rc.empty?
+        hash[:throttle] = route.throttle if route.throttle
         hash
       end
 
