@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.6.7
+
 ### Changed
 
 - **Non-prod deploys auto-approve by default.** `belt deploy <env>` no longer
