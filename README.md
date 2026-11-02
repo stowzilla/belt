@@ -830,6 +830,8 @@ No central registry file, no initializer hook. Belt discovers generators by scan
 
 That is the whole contract. After `bundle install`, `belt generate <name>` and `belt destroy <name>` just work.
 
+Plugins can also add a top-level command: a file at `lib/belt/commands/<name>_command.rb` defining `Belt::Commands::<Name>Command.run(args)` becomes `belt <name> ...` and shows up under "Plugin Commands" in `belt --help`. Optional `.description` and `.standalone?` (run outside a project). Built-in commands win on a name clash. See `Belt::CLI::CommandRegistry` and `belt explain plugins`.
+
 See `Belt::CLI::GeneratorRegistry` and the CHANGELOG entry for **0.1.13 Generator Extension API**.
 
 ### Plugin layout (canonical)

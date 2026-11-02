@@ -4,6 +4,14 @@
 
 ### Added
 
+- **Plugins can register top-level commands.** A gem that ships
+  `lib/belt/commands/<name>_command.rb` defining `Belt::Commands::<Name>Command.run(args)`
+  gets `belt <name> ...` (underscores in the file name become hyphens), listed under
+  "Plugin Commands" in `belt --help`. Discovery mirrors `GeneratorRegistry`
+  (`Belt::CLI::CommandRegistry`). Optional `.description` for help text and `.standalone?`
+  to run outside a Belt project. Built-in commands and terraform actions win on a name
+  clash. `belt help` / `belt --help` / `belt -h` now print usage and exit 0.
+
 - **Data migrations.** `db/migrate/<timestamp>_<name>.rb` files define `Belt::Migration`
   subclasses whose `up` runs in the booted app context (same as `belt console`).
   `belt deploy <env>` runs pending ones after terraform apply and the nested-env data copy

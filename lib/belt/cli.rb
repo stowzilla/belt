@@ -31,6 +31,7 @@ require_relative 'cli/logs_command'
 require_relative 'cli/doctor_command'
 require_relative 'cli/plugin_command'
 require_relative 'cli/explain_command'
+require_relative 'cli/command_registry'
 
 module Belt
   module CLI
@@ -56,7 +57,8 @@ module Belt
       'dns' => Belt::CLI::DnsCommand,
       'frontend' => Belt::CLI::FrontendEnvCommand,
       %w[server s] => Belt::CLI::ServerCommand,
-      %w[version --version -v] => ->(_args) { puts "Belt #{Belt::VERSION}" }
+      %w[version --version -v] => ->(_args) { puts "Belt #{Belt::VERSION}" },
+      %w[help --help -h] => ->(_args) { puts usage }
     }.freeze
 
     COMMANDS = COMMANDS_DEFINITION.each_with_object({}) do |(keys, handler), hash|
@@ -66,7 +68,7 @@ module Belt
     TERRAFORM_ACTIONS = Belt::CLI::TerraformCommand::ACTIONS
 
     # Commands that can run without being inside a Belt project
-    STANDALONE_COMMANDS = %w[new version --version -v doctor explain].freeze
+    STANDALONE_COMMANDS = %w[new version --version -v help --help -h doctor explain].freeze
 
     def self.start(args)
       command = args.shift
@@ -76,8 +78,10 @@ module Belt
         exit 1
       end
 
+      plugin = plugin_command(command)
+
       # For project-level commands, find and chdir to the project root
-      ensure_project_root!(command) unless STANDALONE_COMMANDS.include?(command)
+      ensure_project_root!(command) unless standalone?(command, plugin)
 
       # `belt destroy` is ambiguous: could be terraform destroy or belt destroy <generator>.
       return if command == 'destroy' && route_destroy_command(args)
@@ -85,7 +89,7 @@ module Belt
       # Terraform shorthand: belt init wups, belt plan wups, belt apply wups, belt destroy wups
       return Belt::CLI::TerraformCommand.run(command, args) if TERRAFORM_ACTIONS.include?(command)
 
-      handler = COMMANDS[command]
+      handler = COMMANDS[command] || plugin
 
       # If no built-in command matched, try running it as a rake task
       if handler.nil?
@@ -102,7 +106,43 @@ module Belt
       end
     end
 
+    # Returns the gem-provided command class for `name`, or nil. Built-in
+    # commands and terraform actions win on a name clash.
+    def self.plugin_command(name)
+      return nil if name.nil? || builtin_command?(name)
+
+      CommandRegistry.find(name)
+    end
+
+    def self.builtin_command?(name)
+      COMMANDS.key?(name) || TERRAFORM_ACTIONS.include?(name)
+    end
+
+    def self.standalone?(command, plugin)
+      return STANDALONE_COMMANDS.include?(command) unless plugin
+
+      plugin.respond_to?(:standalone?) && plugin.standalone?
+    end
+
     def self.usage
+      base_usage.sub("\nRake Tasks:\n", "#{plugin_usage}\nRake Tasks:\n")
+    end
+
+    # "Plugin Commands:" help section for gem-provided commands ("" when none).
+    def self.plugin_usage
+      names = CommandRegistry.command_names.reject { |name| builtin_command?(name) }.sort
+      return '' if names.empty?
+
+      lines = names.map do |name|
+        klass = CommandRegistry.find(name)
+        description = klass.respond_to?(:description) ? klass.description.to_s : ''
+        "  #{name.ljust(42)}  #{description}".rstrip
+      end
+
+      "\nPlugin Commands:\n#{lines.join("\n")}\n"
+    end
+
+    def self.base_usage
       <<~USAGE
         Usage: belt <command> [options]
 
@@ -151,6 +191,7 @@ module Belt
           destroy [environment] <env>                 terraform destroy for environment
           output [environment] <env>                  terraform output for environment
           --version                                   Show Belt version
+          help, --help, -h                            Show this help
 
         Rake Tasks:
           Any rake task from your Gemfile dependencies can be run directly:

@@ -45,6 +45,38 @@ Belt discovers plugins automatically when:
 
 Optional: `.destroy(args)` and `.description` for destroy path and help text.
 
+## Top-level Commands
+
+A plugin can also add its own `belt <name> ...` command, the way `belt-connect`
+adds `belt connect`:
+
+1. Gem has a file at `lib/belt/commands/<name>_command.rb`
+2. Class is `Belt::Commands::<Name>Command`
+3. Class implements `.run(args)` (required); `args` is everything after `<name>`
+
+Optional: `.description` (shown under "Plugin Commands" in `belt --help`) and
+`.standalone?` returning `true` to run outside a Belt project. Otherwise the
+command runs from the project root, like built-ins.
+
+Underscores in the file name become hyphens (`feature_flags_command.rb` →
+`belt feature-flags`). Built-in commands and terraform actions win on a name
+clash, so a plugin can't shadow `belt deploy`.
+
+```ruby
+# lib/belt/commands/connect_command.rb
+module Belt
+  module Commands
+    class ConnectCommand
+      def self.description = 'Connect widgets to your app'
+
+      def self.run(args)
+        # belt connect widget orders --env dev → args == ['widget', 'orders', '--env', 'dev']
+      end
+    end
+  end
+end
+```
+
 ## Generator Checklist
 
 A good plugin generator typically installs:
@@ -71,6 +103,8 @@ belt-messaging/
 │       │   ├── version.rb
 │       │   ├── controllers/           # Default controllers
 │       │   └── templates/             # ERB templates for generator
+│       ├── commands/
+│       │   └── messaging_command.rb   # ← optional `belt messaging`
 │       └── generators/
 │           └── messaging_generator.rb # ← auto-discovered
 └── spec/
