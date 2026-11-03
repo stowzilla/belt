@@ -9,6 +9,8 @@ module Belt
     class TablesCommand
       MODULE_DIR = 'infrastructure/modules/app'
       MODELS_DIR = 'lambda/models'
+      # Table blocks the drop check compares some other way (see #table_settings).
+      DERIVED_BLOCKS = %w[attribute global_secondary_index].freeze
 
       def self.run(args)
         # Environment argument accepted for backwards compatibility but unused —
@@ -99,7 +101,16 @@ module Belt
         # Deduplicate by index name
         indexes.uniq! { |idx| idx[:name] }
 
-        { name: model_name, indexes: indexes }
+        { name: model_name, indexes: indexes, ttl: extract_ttl_attribute(content) }
+      end
+
+      # `ttl_attribute :expires_at` (Belt::Models::TtlMacro). A symbol is camelCased the
+      # way ActiveItem writes it; a string is the DynamoDB attribute name verbatim.
+      def extract_ttl_attribute(content)
+        match = uncommented(content).match(/^\s*ttl_attribute[\s(]+(?::(\w+)|['"]([^'"]+)['"])/)
+        return nil unless match
+
+        match[1] ? Belt::Inflector.camelize_lower(match[1]) : match[2]
       end
 
       def extract_indexes(content)
@@ -180,6 +191,8 @@ module Belt
         if existing_content
           dropped = detect_dropped_infrastructure(existing_content, new_content)
           return if dropped.any? && !safe_to_overwrite?(dest, dropped)
+
+          warn_dropped_comments(dest, dropped_comments(existing_content, new_content))
         end
 
         File.write(dest, new_content)
@@ -215,9 +228,61 @@ module Belt
           old_gsis = gsi_names(existing_content, label)
           new_gsis = gsi_names(new_content, label)
           dropped.concat((old_gsis - new_gsis).map { |gsi| "GSI \"#{gsi}\" on table \"#{label}\"" })
+          dropped.concat(dropped_table_settings(existing_content, new_content, label))
         end
 
         dropped
+      end
+
+      # Nested blocks (`ttl`, `server_side_encryption`, …) and settings (`stream_enabled`,
+      # …) a table has today that the regenerated table wouldn't. A hand-added ttl block
+      # is the usual one — dropping it turns expiry off and rows quietly pile up.
+      def dropped_table_settings(existing_content, new_content, label)
+        old_settings = table_settings(table_block(existing_content, label))
+        new_settings = table_settings(table_block(new_content, label))
+
+        (old_settings.keys - new_settings.keys).map do |key|
+          "#{old_settings[key]} on table \"#{label}\""
+        end
+      end
+
+      # Map of identity → description for every top-level setting in a table body.
+      # `attribute` and `global_secondary_index` are compared separately (GSIs) or are
+      # derived from them (attributes), so they're left out here.
+      def table_settings(block)
+        return {} unless block
+
+        settings = {}
+        depth = 0
+        block.each_line do |line|
+          code = line.sub(/#.*/, '').strip
+          if depth.zero?
+            if (name = code[/\A(\w+)\s*\{/, 1])
+              settings.merge!(block_setting(name, block, line)) unless DERIVED_BLOCKS.include?(name)
+            elsif (name = code[/\A(\w+)\s*=/, 1])
+              settings[name] = "setting \"#{name}\""
+            end
+          end
+          depth += code.count('{') - code.count('}')
+        end
+        settings
+      end
+
+      def block_setting(name, block, line)
+        return { name => "block \"#{name}\"" } unless name == 'ttl'
+
+        body = block[block.index(line)..][/\{(.*?)\}/m, 1].to_s
+        attr = body[/attribute_name\s*=\s*"([^"]+)"/, 1]
+        { "ttl:#{attr}" => "ttl on \"#{attr}\"" }
+      end
+
+      # Hand-written comments can't be re-derived either. They're not infrastructure,
+      # so losing them doesn't block the write, but it shouldn't happen silently.
+      def dropped_comments(existing_content, new_content)
+        # The leading banner is Belt's own and changes between versions — skip it.
+        body = existing_content.lines.drop_while { |l| l.strip.empty? || l.lstrip.start_with?('#') }
+        body.map(&:strip).select { |l| l.start_with?('#', '//') } -
+          new_content.lines.map(&:strip)
       end
 
       # Resource labels for every aws_dynamodb_table block in the content.
@@ -280,9 +345,17 @@ module Belt
       def warn_dropped(dest, dropped)
         puts "\n⚠ Regenerating #{dest} would DROP infrastructure not derived from your models:"
         dropped.each { |d| puts "    • #{d}" }
-        puts "\n  This usually means a table or GSI was added to dynamodb.tf by hand."
-        puts '  Belt only tracks tables and indexes it can read from lambda/models/*.rb,'
+        puts "\n  This usually means a table, GSI, or setting (e.g. ttl) was added to dynamodb.tf by hand."
+        puts '  Belt only tracks what it can read from lambda/models/*.rb (indexes, belongs_to,'
+        puts '  cognito_authenticatable, ttl_attribute),'
         puts '  so a hand-added definition is invisible to the generator and gets overwritten.'
+      end
+
+      def warn_dropped_comments(dest, comments)
+        return if comments.empty?
+
+        puts "  ⚠ #{dest}: removed #{comments.size} hand-written comment line(s) " \
+             '(the file is regenerated — put notes on the model instead)'
       end
 
       def render_dynamodb(models)
@@ -291,8 +364,9 @@ module Belt
           "#\n" \
           "# Do NOT edit manually. `belt setup tables` overwrites this whole file from\n" \
           "# your models. Any table or GSI added here by hand (that a model doesn't\n" \
-          "# declare) will be DROPPED on the next regeneration. Define indexes on the\n" \
-          "# model via indexes(), belongs_to, or cognito_authenticatable instead.\n\n#{blocks.join("\n\n")}\n"
+          "# declare) will be DROPPED on the next regeneration, as will ttl blocks and\n" \
+          "# comments. Define indexes on the model via indexes(), belongs_to, or\n" \
+          "# cognito_authenticatable, and TTL via ttl_attribute, instead.\n\n#{blocks.join("\n\n")}\n"
       end
 
       def render_table(model)
@@ -357,6 +431,14 @@ module Belt
           lines << "    hash_key        = \"#{idx[:partition_key]}\""
           lines << "    range_key       = \"#{idx[:sort_key]}\"" if idx[:sort_key]
           lines << '    projection_type = "ALL"'
+          lines << '  }'
+        end
+
+        if model[:ttl]
+          lines << ''
+          lines << '  ttl {'
+          lines << "    attribute_name = \"#{model[:ttl]}\""
+          lines << '    enabled        = true'
           lines << '  }'
         end
 

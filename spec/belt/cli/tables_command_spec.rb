@@ -159,5 +159,92 @@ RSpec.describe Belt::CLI::TablesCommand do
       expect(tf_content).not_to include('"postId"')
       expect(tf_content).to include('hash_key        = "post_id"')
     end
+
+    it 'emits a ttl block for ttl_attribute' do
+      File.write(File.join(@project_dir, 'lambda/models/session.rb'), <<~RUBY)
+        class Session < ApplicationRecord
+          ttl_attribute :expires_at
+        end
+      RUBY
+      File.write(File.join(@project_dir, 'lambda/models/token.rb'), <<~RUBY)
+        class Token < ApplicationRecord
+          ttl_attribute 'expires_at_epoch'
+        end
+      RUBY
+
+      described_class.new(quiet: true).run
+
+      tf_content = File.read(File.join(@project_dir, 'infrastructure/modules/app/dynamodb.tf'))
+      expect(tf_content).to include("ttl {\n    attribute_name = \"expiresAt\"\n    enabled        = true\n  }")
+      expect(tf_content).to include('attribute_name = "expires_at_epoch"')
+    end
+
+    it 'ignores a commented-out ttl_attribute' do
+      File.write(File.join(@project_dir, 'lambda/models/session.rb'), <<~RUBY)
+        class Session < ApplicationRecord
+          # ttl_attribute :expires_at
+        end
+      RUBY
+
+      described_class.new(quiet: true).run
+
+      tf_content = File.read(File.join(@project_dir, 'infrastructure/modules/app/dynamodb.tf'))
+      expect(tf_content).not_to include('ttl {')
+    end
+
+    context 'when dynamodb.tf has a hand-added ttl block' do
+      let(:tf_path) { File.join(@project_dir, 'infrastructure/modules/app/dynamodb.tf') }
+
+      before do
+        File.write(File.join(@project_dir, 'lambda/models/session.rb'), <<~RUBY)
+          class Session < ApplicationRecord
+          end
+        RUBY
+        described_class.new(quiet: true).run
+        ttl_block = <<~HCL.gsub(/^/, '  ')
+          # expire stale sessions
+          ttl {
+            attribute_name = "expiresAt"
+            enabled        = true
+          }
+
+        HCL
+        anchor = '  point_in_time_recovery {'
+        File.write(tf_path, File.read(tf_path).sub(anchor, "#{ttl_block}#{anchor}"))
+      end
+
+      it 'refuses to drop it on a quiet (generator) sync' do
+        before = File.read(tf_path)
+
+        expect { described_class.new(quiet: true).run }.to output(/ttl on "expiresAt" on table "sessions"/).to_stdout
+        expect(File.read(tf_path)).to eq(before)
+      end
+
+      it 'drops it with --force, noting the removed comment' do
+        expect { described_class.new(force: true).run }.to output(/removed 1 hand-written comment line/).to_stdout
+        expect(File.read(tf_path)).not_to include('ttl {')
+      end
+
+      it 'regenerates cleanly once the model declares it' do
+        File.write(File.join(@project_dir, 'lambda/models/session.rb'), <<~RUBY)
+          class Session < ApplicationRecord
+            ttl_attribute :expires_at
+          end
+        RUBY
+
+        expect { described_class.new(quiet: true).run }.not_to output(/would DROP|skipped/).to_stdout
+        expect(File.read(tf_path)).to include('attribute_name = "expiresAt"')
+      end
+
+      it 'treats a different ttl attribute as a drop' do
+        File.write(File.join(@project_dir, 'lambda/models/session.rb'), <<~RUBY)
+          class Session < ApplicationRecord
+            ttl_attribute :purge_at
+          end
+        RUBY
+
+        expect { described_class.new(quiet: true).run }.to output(/ttl on "expiresAt"/).to_stdout
+      end
+    end
   end
 end

@@ -144,6 +144,26 @@ ActiveItem::Transaction.write do |tx|
 end
 ```
 
+## Time To Live (TTL)
+
+Let DynamoDB expire rows by declaring the TTL attribute on the model:
+
+```ruby
+class Session < ApplicationRecord
+  ttl_attribute :expires_at   # stored as expiresAt; must hold epoch seconds
+end
+```
+
+`belt setup tables` emits the matching `ttl { attribute_name = "expiresAt" }` block in
+`dynamodb.tf`. A symbol is camelCased the way ActiveItem writes it; pass a string
+(`ttl_attribute 'expires_at_epoch'`) to use the DynamoDB attribute name as-is.
+
+Don't add `ttl` (or any other block) to `dynamodb.tf` by hand. The generator overwrites
+the whole file from your models. If a regeneration would drop a hand-added table, GSI,
+`ttl` or other table setting, `belt setup tables` asks before overwriting, and a
+generator's auto-sync skips the file. Comments in the file are lost too (Belt prints a
+warning), so put notes on the model.
+
 ## Generating Models
 
 ```bash
