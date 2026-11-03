@@ -401,8 +401,9 @@ module Belt
           # Empty S3 buckets before destroy — terraform can't delete non-empty buckets
           empty_s3_buckets_in_state
 
-          # Run destroy with auto-approve (user already confirmed)
-          unless system('terraform', 'destroy', '-auto-approve')
+          # Run destroy with auto-approve (user already confirmed). -input=false
+          # keeps it from blocking on an interactive prompt in an automated run.
+          unless system('terraform', 'destroy', '-input=false', '-auto-approve')
             puts "\n✗ terraform destroy failed."
             puts '  Infrastructure may still be running. Fix and retry, or use --skip-terraform.'
             exit 1

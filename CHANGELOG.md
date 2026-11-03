@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.6.9
+
+### Fixed
+
+- **`belt deploy` no longer hangs forever on an interactive terraform prompt.**
+  `run_terraform_plan` shelled out to `terraform plan` via `Open3.popen3` with
+  no `-input=false` and left the child's stdin open. If terraform ever hit a
+  prompt (a missing variable, a backend/provider confirmation), it blocked on
+  `read()` from a pipe nobody was feeding — an unattended `belt deploy --auto`
+  could sit at 0% CPU indefinitely (observed: ~8 hours). The plan now runs with
+  `-input=false`, sets `TF_IN_AUTOMATION=1`, and closes the child's stdin so
+  terraform gets EOF instead of blocking. `terraform init`, the ACM-bootstrap
+  `terraform apply`, the final `terraform apply`, and the automated
+  `terraform destroy` all gained `-input=false` for the same reason. The
+  manual `belt init/plan/apply` subcommands (`terraform_command.rb`) stay
+  interactive — they inherit a real TTY on purpose.
+
 ## 0.6.8
 
 ### Added

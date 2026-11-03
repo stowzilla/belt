@@ -772,7 +772,9 @@ module Belt
 
       def run_init
         puts '━━━ terraform init ━━━'
-        success = system('terraform', 'init')
+        # -input=false: never block on an interactive prompt. In an automated
+        # deploy there is nobody at the keyboard, so a prompt would hang forever.
+        success = system('terraform', 'init', '-input=false')
         abort "\n✗ terraform init failed" unless success
         puts ''
       end
@@ -794,7 +796,17 @@ module Belt
         require 'open3'
         stderr_buffer = +''
 
-        Open3.popen3('terraform', 'plan', '-out=tfplan', *@extra_args) do |_stdin, stdout, stderr, wait_thr|
+        # -input=false makes terraform fail fast on any missing input instead of
+        # prompting. TF_IN_AUTOMATION trims interactive hints from the output.
+        # We also close stdin immediately below so that even if terraform tried
+        # to read from it, it gets EOF rather than blocking forever — this is
+        # what caused `belt deploy` to hang indefinitely on an unanswered prompt.
+        tf_env = { 'TF_IN_AUTOMATION' => '1' }
+        tf_cmd = ['terraform', 'plan', '-input=false', '-out=tfplan', *@extra_args]
+
+        Open3.popen3(tf_env, *tf_cmd) do |stdin, stdout, stderr, wait_thr|
+          stdin.close
+
           stdout_thread = Thread.new do
             while (line = stdout.gets)
               print line
@@ -838,7 +850,8 @@ module Belt
         puts ''
 
         # Phase 1: Create the certificate only
-        success = system('terraform', 'apply', '-target=module.app.aws_acm_certificate.app', '-auto-approve')
+        success = system('terraform', 'apply', '-input=false',
+                         '-target=module.app.aws_acm_certificate.app', '-auto-approve')
         unless success
           puts ''
           puts '  ✗ Certificate creation failed.'
@@ -881,7 +894,7 @@ module Belt
 
       def run_apply
         puts '━━━ terraform apply ━━━'
-        success = system('terraform', 'apply', 'tfplan')
+        success = system('terraform', 'apply', '-input=false', 'tfplan')
         cleanup_plan
         abort "\n✗ terraform apply failed" unless success
       end
