@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Added
+
+- **`ttl_attribute` model macro.** `ttl_attribute :expires_at` on a model makes
+  `belt setup tables` emit `ttl { attribute_name = "expiresAt", enabled = true }`
+  for its table. A string is used verbatim. `belt explain models`. (Fizzy #1796)
+
+### Fixed
+
+- **`belt setup tables` no longer silently drops `ttl` blocks.** A hand-added `ttl`,
+  or any other table block or setting the models don't produce (`stream_enabled`,
+  `server_side_encryption`, …), now counts as dropped infrastructure like a
+  hand-added GSI. Interactive runs prompt, and generator auto-syncs (`belt g policies`
+  and friends) skip the file. Hand-written comments the regen removes are now
+  reported instead of vanishing quietly. (Fizzy #1796)
+
 ## 0.6.7
 
 ### Changed

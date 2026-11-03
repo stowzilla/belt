@@ -57,6 +57,11 @@ belt apply <env>
 
 This creates: model, controller (with all CRUD actions), route entry, and DynamoDB schema.
 
+`infrastructure/modules/app/dynamodb.tf` is generated. Declare everything on the model:
+GSIs via `indexes(...)` / `belongs_to`, TTL via `ttl_attribute :expires_at`. Anything
+you add to the `.tf` by hand (a `ttl` block, a comment) gets dropped the next time it's
+regenerated.
+
 ### Add a model only (no API endpoint)
 
 ```bash
