@@ -8,23 +8,28 @@ module Belt
   # so that `belt routes` can parse routes.rb without external dependencies.
 
   class Route
-    attr_reader :method, :path, :auth, :lambda, :cors, :tables, :route_type,
+    attr_reader :method, :path, :auth, :lambda, :cors, :tables, :route_type, :route_key,
                 :controller, :action, :request_model, :response_model, :response_context, :throttle
 
     def initialize(method, path, options = {})
       @method = method.to_s.upcase
-      @path = normalize_path(path)
+      @route_type = options[:route_type] || :action
+      @route_key = options[:route_key]&.to_s
+      @path = websocket? ? @route_key : normalize_path(path)
       @auth = options[:auth]
       @lambda = options[:lambda]
       @cors = options.fetch(:cors, true)
       @throttle = self.class.normalize_throttle(options[:throttle])
       @tables = options[:tables] || []
-      @route_type = options[:route_type] || :action
       @controller = options[:controller]
       @action = options[:action]
       @request_model = options[:request_model]&.to_s
       @response_model = options[:response_model]&.to_s
       @response_context = options[:response_context]&.to_s
+    end
+
+    def websocket?
+      @route_type == :websocket
     end
 
     # Per-route API Gateway limit: `throttle: { rate: 2, burst: 5 }` (requests per
@@ -415,16 +420,27 @@ module Belt
   end
 
   class ApiGateway
-    attr_reader :name, :routes, :default_auth, :default_lambda, :default_cors, :default_tables
+    VALID_TYPES = %i[rest websocket].freeze
+
+    attr_reader :name, :routes, :type, :default_auth, :default_lambda, :default_cors, :default_tables
 
     def initialize(name, options = {})
       @name = name.to_s
       @routes = []
+      @type = options.fetch(:type, :rest).to_sym
+      unless VALID_TYPES.include?(@type)
+        raise ArgumentError, "gateway type must be :rest or :websocket (got #{@type.inspect})"
+      end
+
       @default_auth = options[:auth] || :none
       @default_lambda = options[:lambda] || name
-      @default_cors = options.fetch(:cors, true)
+      @default_cors = options.fetch(:cors, !websocket?)
       @default_tables = Array(options[:tables] || [])
       @current_lambda_context = nil
+    end
+
+    def websocket?
+      @type == :websocket
     end
 
     def lambda(name, &)
@@ -438,6 +454,12 @@ module Belt
       define_method(method) do |path, options = {}|
         add_route(method, path, options)
       end
+    end
+
+    def on(route_key, options = {})
+      key = normalize_route_key(route_key)
+      options = options.merge(action: key.delete_prefix('$')) unless options[:action] || options[:to]
+      add_route(:on, key, options.merge(route_type: :websocket, route_key: key))
     end
 
     def resources(name, options = {}, &)
@@ -496,6 +518,12 @@ module Belt
     private
 
     def add_route(method, path, options = {})
+      websocket_route = options[:route_type] == :websocket
+      if websocket? != websocket_route
+        expected = websocket? ? '`on` routes' : 'HTTP routes'
+        raise ArgumentError, "gateway :#{@name} only accepts #{expected}"
+      end
+
       lambda_to_use = options[:lambda] || @current_lambda_context || @default_lambda
       route_tables = Array(options[:tables] || [])
       merged_tables = (@default_tables + route_tables).uniq
@@ -516,6 +544,7 @@ module Belt
         cors: options.fetch(:cors, @default_cors),
         tables: merged_tables,
         route_type: options[:route_type] || :action,
+        route_key: options[:route_key],
         controller: controller,
         action: action,
         request_model: options[:request_model],
@@ -578,6 +607,16 @@ module Belt
       else
         default
       end
+    end
+
+    def normalize_route_key(route_key)
+      key = route_key.to_s
+      key = "$#{key}" if %w[connect disconnect default].include?(key)
+      unless key.match?(/\A(?:\$(?:connect|disconnect|default)|[A-Za-z0-9._-]+)\z/)
+        raise ArgumentError, "invalid WebSocket route key: #{route_key.inspect}"
+      end
+
+      key
     end
 
     def singularize(word)
@@ -726,6 +765,8 @@ module Belt
           @gateway.send(method, full_path, route_options)
         end
       end
+
+      def on(route_key, options = {}) = @gateway.on(route_key, apply_scope_to_route(options))
 
       # Rails-like `root` — defines a GET / route.
       #

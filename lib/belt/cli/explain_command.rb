@@ -63,7 +63,10 @@ module Belt
         'tests' => 'testing',
         'harness' => 'testing',
         'spec' => 'testing',
-        'specs' => 'testing'
+        'specs' => 'testing',
+        'live' => 'realtime',
+        'websocket' => 'realtime',
+        'websockets' => 'realtime'
       }.freeze
 
       def self.run(args)
@@ -128,6 +131,7 @@ module Belt
             db:copy, copy             → data_seeding
             migrate, db:migrate       → migrations
             e2e, test, harness        → testing
+            live, websocket           → realtime
 
           Examples:
             belt explain routing

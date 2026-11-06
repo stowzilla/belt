@@ -11,6 +11,7 @@ belt explain controllers  # Controller patterns and response helpers
 belt explain models       # ActiveItem (DynamoDB ORM)
 belt explain deployment   # Deploy lifecycle
 belt explain generators   # Scaffolding new resources
+belt explain realtime     # WebSocket push transport and fallback contract
 belt explain --help       # List all available topics
 ```
 
@@ -253,6 +254,26 @@ end
 - `success_response(data, status)` for explicit control
 - `error_response(message, status)` for error responses
 - `rescue_from` for exception handling
+
+## Realtime Push
+
+Install the optional transport with `gem "belt-live"` and `belt generate live`.
+WebSocket routes use a separate gateway:
+
+```ruby
+gateway :live, type: :websocket do
+  on :connect,    to: 'live_events#connect',    tables: [:live_connections]
+  on :disconnect, to: 'live_events#disconnect', tables: [:live_connections]
+  on :subscribe,  to: 'live_events#subscribe',  tables: [:live_connections]
+end
+```
+
+Treat each message as a nudge. Send a resource ID/version, then fetch authorized
+state through REST. Never move hidden or permission-filtered state into the push
+payload. Keep slow polling while connected and the normal polling cadence while
+disconnected. `$connect` authenticates the socket, but every subscription still
+needs channel authorization. Local `belt server` does not host sockets; an empty
+`VITE_LIVE_URL` must fall back to polling. See `belt explain realtime`.
 
 ## Deployment Flow
 

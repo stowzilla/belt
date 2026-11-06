@@ -47,7 +47,9 @@ module Belt
         if @options[:namespace]
           output_ruby(routes, @options[:namespace], routes_file)
         elsif @options[:format] == 'json'
-          output = { routes: routes }
+          websocket_routes, http_routes = routes.partition { |route| route[:route_type] == 'websocket' }
+          output = { routes: http_routes }
+          output[:websocket_routes] = websocket_routes if websocket_routes.any?
           models = load_schema_models(routes_file)
           output[:models] = models if models.any?
           puts JSON.pretty_generate(output)
@@ -121,7 +123,7 @@ module Belt
           gateway.routes.each do |route|
             routes << build_route_hash(route, gateway)
           end
-          inject_welcome_route!(routes, gateway) unless root_route?(gateway)
+          inject_welcome_route!(routes, gateway) unless gateway.websocket? || root_route?(gateway)
         end
         routes.sort_by { |r| route_specificity(r[:path], r[:verb]) }
       end
@@ -153,7 +155,7 @@ module Belt
         hash = {
           name: extract_route_name(route.path),
           verb: route.method,
-          path: normalize_path(route.path),
+          path: route.websocket? ? route.path : normalize_path(route.path),
           gateway: gateway.name,
           lambda: route.lambda.to_s,
           controller: infer_controller(route, gateway),
@@ -163,6 +165,10 @@ module Belt
           request_model: route.request_model.to_s,
           response_model: route.response_model.to_s
         }
+        if route.websocket?
+          hash[:route_type] = 'websocket'
+          hash[:route_key] = route.route_key
+        end
         rc = route.response_context.to_s
         hash[:response_context] = rc unless rc.empty?
         hash[:throttle] = route.throttle if route.throttle
@@ -172,6 +178,8 @@ module Belt
       def get_route_tables(route)
         if route.tables.any?
           route.tables.map(&:to_s)
+        elsif route.websocket?
+          []
         else
           @table_inference.infer_tables_from_route(route)
         end
@@ -182,7 +190,7 @@ module Belt
         return 'root' if segments.empty?
 
         segments.reject { |s| s.start_with?('{', ':') }
-                .map { |s| s.gsub('-', '_') }
+                .map { |s| s.delete_prefix('$').gsub('-', '_') }
                 .join('_')
       end
 
@@ -246,7 +254,13 @@ module Belt
           lines << "      action: #{route[:action].inspect},"
           lines << "      auth: #{route[:auth].inspect},"
           tables_syms = route[:tables].map { |t| ":#{t}" }.join(', ')
-          lines << "      tables: [#{tables_syms}]"
+          if route[:route_type] == 'websocket'
+            lines << "      tables: [#{tables_syms}],"
+            lines << '      route_type: :websocket,'
+            lines << "      route_key: #{route[:route_key].inspect}"
+          else
+            lines << "      tables: [#{tables_syms}]"
+          end
           lines << "    }#{',' if index < routes.length - 1}"
         end
 

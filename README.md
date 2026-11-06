@@ -803,6 +803,28 @@ end
 
 `api_get` / `api_post` / `api_put` / `api_patch` / `api_delete` (and `api_request`) accept `body:`, `claims:`, `token:`, `headers:`, and `query:`. The returned `Response` exposes `status`, `headers`, `body`, `json`, `ok?`, and `[]` (a top-level key from the parsed JSON body). Full details — the real-vs-seamed boundary, per-test clients, and keeping the tier out of your normal suite — in `belt explain testing`.
 
+## Realtime WebSocket Push
+
+The optional [`belt-live`](https://github.com/stowzilla/belt-live) plugin adds an
+API Gateway WebSocket transport without keeping an application server running:
+
+```ruby
+gateway :live, type: :websocket do
+  on :connect,    to: 'live_events#connect',    tables: [:live_connections]
+  on :disconnect, to: 'live_events#disconnect', tables: [:live_connections]
+  on :subscribe,  to: 'live_events#subscribe',  tables: [:live_connections]
+end
+```
+
+```ruby
+Belt::Live.publish(channel: "match:#{match.id}", payload: { stateID: match.version })
+```
+
+Messages are best-effort nudges. The client fetches current state through REST,
+keeps slow polling as a safety net, and returns to its normal poll cadence when
+the socket is down. Run `belt explain realtime` for routing, authorization,
+limits, frame shapes, and local-development behavior.
+
 ## Plugins
 
 Belt is designed to stay lean. Optional capabilities ship as **separate gems** that plug into the CLI and runtime the same way Rails engines and generators do.
@@ -811,6 +833,7 @@ Belt is designed to stay lean. Optional capabilities ship as **separate gems** t
 
 | Gem | Purpose | Status |
 |-----|---------|--------|
+| [`belt-live`](https://github.com/stowzilla/belt-live) | API Gateway WebSocket push nudges | Early (not production-hardened) |
 | [`belt-messaging`](https://github.com/stowzilla/belt-messaging) | Two-way SMS via AWS End User Messaging (Pinpoint) | Early (not production-hardened) |
 | [`belt-pay`](https://github.com/stowzilla/belt-pay) | Stripe payments & subscriptions | Early (not production-hardened) |
 

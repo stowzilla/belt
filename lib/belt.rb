@@ -57,4 +57,5 @@ end
 require_relative 'belt/authentication'
 require_relative 'belt/models/ttl_macro'
 require_relative 'belt_controller/base'
+require_relative 'belt/live_controller'
 require_relative 'belt/controllers/welcome_controller'

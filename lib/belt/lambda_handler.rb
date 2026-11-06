@@ -76,28 +76,12 @@ module Belt
           sns_topic_arn: ENV.fetch('ERROR_NOTIFICATION_TOPIC_ARN', nil)
         }
       ) do
-        logger.info('Lambda invoked',
-                    http_method: event['httpMethod'],
-                    path: event['path'],
-                    source_ip: event.dig('requestContext', 'identity', 'sourceIp'))
-
-        return { statusCode: 200, headers: cors_headers(event), body: '{}' } if event['httpMethod'] == 'OPTIONS'
-
-        body = parse_request_body(event)
-        return body if body.is_a?(Hash) && body[:statusCode]
-
-        begin
-          result = execute(path: event['path'], body: body, event: event)
-          logger.info('Request completed', status_code: result[:statusCode], path: event['path'])
-          result
-        rescue StandardError => e
-          handle_error_and_respond(e, 'Unhandled error during request processing',
-                                   { path: event['path'], method: event['httpMethod'] })
-        end
+        process_event(event)
       end
     rescue StandardError => e
+      error_path = websocket_event?(event) ? event&.dig('requestContext', 'routeKey') : event&.dig('path')
       Belt::Helpers::ErrorLogging.log_error(@logger, 'Unhandled Lambda error', e,
-                                            { phase: 'lambda_handler', path: event&.dig('path') })
+                                            { phase: 'lambda_handler', path: error_path })
 
       body = { error: 'Internal server error' }
       if verbose_errors_enabled?
@@ -110,6 +94,41 @@ module Belt
     end
 
     private
+
+    def process_event(event)
+      invocation = invocation_details(event)
+      logger.info('Lambda invoked', **invocation)
+
+      if !websocket_event?(event) && event['httpMethod'] == 'OPTIONS'
+        return { statusCode: 200, headers: cors_headers(event), body: '{}' }
+      end
+
+      body = parse_request_body(event)
+      return body if body.is_a?(Hash) && body[:statusCode]
+
+      path = websocket_event?(event) ? event.dig('requestContext', 'routeKey') : event['path']
+      result = execute(path: path, body: body, event: event)
+      logger.info('Request completed', status_code: result[:statusCode], **invocation)
+      result
+    rescue StandardError => e
+      handle_error_and_respond(e, 'Unhandled error during request processing', invocation || {})
+    end
+
+    def websocket_event?(event)
+      event && !event.dig('requestContext', 'connectionId').to_s.empty?
+    end
+
+    def invocation_details(event)
+      details = { source_ip: event.dig('requestContext', 'identity', 'sourceIp') }
+      if websocket_event?(event)
+        details.merge(
+          route_key: event.dig('requestContext', 'routeKey'),
+          connection_id: event.dig('requestContext', 'connectionId')
+        )
+      else
+        details.merge(http_method: event['httpMethod'], path: event['path'])
+      end
+    end
 
     def parse_request_body(event)
       raw_body = event['body'] || '{}'
