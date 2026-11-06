@@ -159,8 +159,30 @@ variables:
 - `CUSTOMER_APP_DOMAIN` — primary app domain
 - `OPS_APP_DOMAIN` — internal tools domain
 
+## WebSocket Controllers
+
+Controllers for `gateway ..., type: :websocket` inherit from
+`Belt::LiveController`. They keep the normal callbacks, `rescue_from`, response
+helpers, and merged `params`. They also expose `connection_id`, `route_key`,
+`query_params`, and the parsed JSON `frame`.
+
+```ruby
+class LiveEventsController < Belt::LiveController
+  def subscribe
+    channel = frame.fetch("channel")
+    authorize_channel!(channel)
+    head :ok
+  end
+end
+```
+
+A controller response is the API Gateway integration result. It is not sent as a
+WebSocket message. Use `Belt::Live.publish` from the `belt-live` plugin for server
+to client messages. See `belt explain realtime`.
+
 ## See Also
 
 - `belt explain routing` — how requests reach controllers
+- `belt explain realtime` — WebSocket push transport
 - `belt explain models` — ActiveItem ORM
 - `belt explain parameters` — strong parameters in detail

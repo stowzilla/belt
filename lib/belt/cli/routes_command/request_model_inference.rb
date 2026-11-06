@@ -26,6 +26,8 @@ module Belt
           return if contract_names[:request].empty? && contract_names[:response].empty?
 
           routes.each do |route|
+            next if route[:route_type] == 'websocket'
+
             infer_request_model_for!(route, contract_names[:request])
             infer_response_model_for!(route, contract_names[:response])
           end

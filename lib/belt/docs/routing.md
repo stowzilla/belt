@@ -236,8 +236,30 @@ end
 The router matches the incoming HTTP method + path against the manifest and
 dispatches to the appropriate controller and action.
 
+## WebSocket Gateways
+
+WebSocket routes use a separate gateway type and the `on` keyword:
+
+```ruby
+gateway :live, type: :websocket do
+  on :connect,    to: 'live_events#connect',    tables: [:live_connections]
+  on :disconnect, to: 'live_events#disconnect', tables: [:live_connections]
+  on :subscribe,  to: 'live_events#subscribe',  tables: [:live_connections]
+end
+```
+
+The lifecycle names become `$connect`, `$disconnect`, and `$default`. Custom
+route keys are matched exactly against API Gateway's `requestContext.routeKey`.
+Do not mix HTTP and WebSocket routes in one gateway.
+
+WebSocket entries appear under `websocket_routes` in JSON output so REST-only
+conveyor-belt releases ignore them safely. Use the `belt-live` plugin to install
+the API Gateway v2 infrastructure, connection store, publisher, and client helper.
+See `belt explain realtime`.
+
 ## See Also
 
 - `belt explain controllers` — how controllers handle requests
+- `belt explain realtime` — WebSocket push transport
 - `belt explain deployment` — how routes become infrastructure
 - `belt routes --help` — full CLI options

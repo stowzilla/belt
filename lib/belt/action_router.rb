@@ -24,6 +24,8 @@ module Belt
     end
 
     def route(event:, body:)
+      return route_websocket(event, body) if websocket_event?(event)
+
       method = event['httpMethod']
       full_path = event['path']
       match_path = strip_gateway_prefix(full_path)
@@ -50,7 +52,10 @@ module Belt
 
     def find_route(method, path)
       path_segments = path.split('/')
-      @routes.find { |r| r[:verb] == method && segments_match?(r[:segments], path_segments) }
+      @routes.find do |route|
+        route[:route_type] != :websocket && route[:verb] == method &&
+          segments_match?(route[:segments], path_segments)
+      end
     end
 
     def extract_path_params(pattern, actual_path)
@@ -66,6 +71,23 @@ module Belt
     end
 
     private
+
+    def websocket_event?(event)
+      !event.dig('requestContext', 'connectionId').to_s.empty?
+    end
+
+    def route_websocket(event, body)
+      route_key = event.dig('requestContext', 'routeKey').to_s
+      route_info = @routes.find do |route|
+        route[:route_type] == :websocket && route[:route_key] == route_key
+      end
+      unless route_info
+        Belt::Observability::Logger.instance&.warn('WebSocket route not found', route_key: route_key)
+        return error_response('Not found', 404, event)
+      end
+
+      dispatch_to_controller(route_info, event, body)
+    end
 
     def root_path?(path)
       path == '/' || path.empty?
@@ -96,10 +118,13 @@ module Belt
 
     def build_route_entry(route)
       pattern = route[:path] || route['path']
+      route_type = route[:route_type] || route['route_type']
       {
         verb: route[:verb] || route['verb'],
         pattern: pattern,
         segments: pattern.split('/'),
+        route_type: route_type&.to_sym,
+        route_key: route[:route_key] || route['route_key'],
         controller: route[:controller] || route['controller'],
         action: route[:action] || route['action']
       }

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.10
+
+### Added
+
+- **WebSocket event routing for optional realtime transports.** `gateway :live,
+  type: :websocket` accepts `on :connect`, `on :disconnect`, `on :default`, and
+  custom route keys. `Belt::LambdaHandler` recognizes API Gateway WebSocket
+  proxy events, `Belt::ActionRouter` dispatches their authoritative `routeKey`,
+  and `Belt::LiveController` exposes the connection ID, route key, query
+  parameters, and parsed frame. `belt routes` keeps WebSocket records in a
+  separate `websocket_routes` JSON array so current REST-only conveyor-belt
+  releases ignore them safely. See `belt explain realtime`. (Fizzy #1875)
+
 ## 0.6.9
 
 ### Fixed

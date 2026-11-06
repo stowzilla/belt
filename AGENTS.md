@@ -110,7 +110,7 @@ Docs live in `lib/belt/docs/*.md`. These are the single source of truth for:
 
 **When to update docs:** Any PR that changes CLI behavior, controller lifecycle, routing DSL, deployment flow, or observability features MUST update the corresponding `lib/belt/docs/*.md` file. If adding a new feature category, add a new doc file and register the topic alias in `cli/explain_command.rb`.
 
-Current topics: `routing`, `controllers`, `models`, `deployment`, `generators`, `lambda_handler`, `observability`, `console`, `backups`, `data_seeding`, `migrations`, `plugins`, `structure`, `frontend`, `testing`.
+Current topics: `routing`, `controllers`, `models`, `deployment`, `generators`, `lambda_handler`, `observability`, `console`, `backups`, `data_seeding`, `migrations`, `plugins`, `structure`, `frontend`, `testing`, `realtime`.
 
 ## Plugin / GeneratorRegistry contract
 
@@ -177,7 +177,8 @@ Do not confuse app `AGENTS.md` guidance (routing, models, deploy) with this file
 | Lambda entry / CORS / errors | `lib/belt/lambda_handler.rb`, helpers under `lib/belt/helpers/` |
 | Path gem packaging on deploy | `cli/path_gem_materializer.rb`, `cli/deploy_command.rb` |
 | Request model inference | `cli/routes_command/request_model_inference.rb` |
-| Route DSL (resources, scope, etc.) | `lib/belt/route_dsl.rb` |
+| Route DSL (resources, scope, WebSocket `on`, etc.) | `lib/belt/route_dsl.rb` |
+| WebSocket runtime dispatch | `lib/belt/lambda_handler.rb`, `lib/belt/action_router.rb`, `lib/belt/live_controller.rb` |
 
 ## Request model wiring
 

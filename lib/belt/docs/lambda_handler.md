@@ -23,24 +23,27 @@ end
 When a request arrives, `lambda_handler` automatically:
 
 1. **Initializes observability** — structured logging + CloudWatch metrics
-2. **Handles OPTIONS preflight** — returns CORS headers immediately
-3. **Parses the request body** — JSON string → Ruby hash
-4. **Calls your `execute` method** — with `path:`, `body:`, and `event:`
-5. **Catches unhandled errors** — returns a CORS-enabled error response
-6. **Emits metrics** — request count, latency, error count via EMF
+2. **Detects the protocol** — HTTP path/verb or WebSocket connection/route key
+3. **Handles HTTP OPTIONS preflight** — returns CORS headers immediately
+4. **Parses the request body or WebSocket frame** — JSON string → Ruby hash
+5. **Calls your `execute` method** — with `path:`, `body:`, and `event:`
+6. **Catches unhandled errors** — returns an API Gateway response
+7. **Emits metrics** — request count, latency, error count via EMF
 
 ## The `execute` Method
 
 You must define `execute` in your Lambda file. It receives:
 
-| Param | Description |
-|-------|-------------|
-| `path:` | The request path (e.g., `/posts/123`) |
-| `body:` | Parsed request body (Hash or nil) |
-| `event:` | Full API Gateway event (for headers, query params, auth context) |
+| Param | HTTP request | WebSocket event |
+|-------|--------------|-----------------|
+| `path:` | Request path, such as `/posts/123` | Selected route key, such as `$connect` or `subscribe` |
+| `body:` | Parsed JSON request body | Parsed JSON frame; `{}` for lifecycle events without a body |
+| `event:` | Full API Gateway REST event | Full API Gateway WebSocket proxy event |
 
-Return value should be a response hash: `{ statusCode:, headers:, body: }`.
-Typically you just call `ROUTER.route(...)` which returns the correct format.
+Return an API Gateway response hash: `{ statusCode:, headers:, body: }`.
+Typically you call `ROUTER.route(...)`, which dispatches either protocol from the
+same execute method. The handler never logs WebSocket frames or query parameters,
+because `$connect` query parameters may contain a short-lived credential.
 
 ## Multiple Lambdas
 
