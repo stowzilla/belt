@@ -166,6 +166,7 @@ module Belt
           dns show                                    Show root zone name servers for registrar
           frontend env <env> [--frontend NAME]        Write <frontend>/.env from terraform outputs
           frontend list                               List configured frontends
+          frontend prerender [--frontend NAME]        Build + SEO prerender a frontend locally
           routes [-g PATTERN] [-f json]               Show route definitions
           contracts [-g PATTERN] [-f json]            Show API request/response contracts
           lambda-config [-e ENV] [-f json|terraform]  Show merged lambda configuration

@@ -7,6 +7,7 @@ require_relative 'app_detection'
 require_relative 'env_resolver'
 require_relative 'environment_config'
 require_relative 'frontend_env_map'
+require_relative 'frontend_prerender'
 require_relative 'frontend_registry'
 require_relative 'terraform_command'
 
@@ -15,7 +16,7 @@ module Belt
     class FrontendDeployCommand
       include AppDetection
 
-      PAGES_MANIFEST = '.belt-pages.json'
+      PAGES_MANIFEST = FrontendPrerender::PAGES_MANIFEST
       # Uploaded with no-cache instead of the immutable header hashed assets get
       REVALIDATED_FILES = %w[*.html robots.txt sitemap.xml llms.txt].freeze
 
@@ -112,9 +113,10 @@ module Belt
         env = frontend_build_env
         puts "   Injecting env: #{env.keys.sort.join(', ')}" if env.any?
         run!(env, 'npm', 'run', 'build', chdir: @frontend.path)
+        FrontendPrerender.new(@frontend, env: env).run
       end
 
-      # BELT_ENV and VITE_SITE_URL drive the SEO prerender step (scripts/prerender.js):
+      # BELT_ENV and VITE_SITE_URL drive the SEO prerender step (FrontendPrerender):
       # only indexable environments get crawled, and canonical/sitemap URLs need the
       # site's origin. The env map or the shell can override either.
       def frontend_build_env
@@ -162,7 +164,7 @@ module Belt
         upload_prerendered_pages(dist, bucket, pages)
       end
 
-      # scripts/prerender.js writes dist/.belt-pages.json mapping each page's S3 key
+      # The prerender step writes dist/.belt-pages.json mapping each page's S3 key
       # to its file ({ "about" => "about.html" }). CloudFront has no directory
       # indexes, so /about must be an object named `about` served as text/html.
       def prerendered_pages(dist)

@@ -276,8 +276,8 @@ answer engines (`belt explain frontend`). When you add or change a public page:
   `localStorage` during render (use `useEffect`), and no content that only appears
   after an API call if crawlers need to see it.
 - Use one `<h1>` per page and real links (`<Link>`/`<a href>`), not click handlers.
-- Check `npm run build` output: `SEO: prerendered N page(s)` with no warnings, and
-  `dist/<page>.html` contains the content.
+- Run `belt frontend prerender`: expect `SEO: prerendered N page(s)` with no
+  warnings, and `frontend/dist/<page>.html` containing the content.
 
 Only `prod` is indexable; other environments ship `noindex`.
 

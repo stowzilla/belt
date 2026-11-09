@@ -1,10 +1,11 @@
 // SEO/AEO config — what search engines and AI answer engines (Google, Bing,
 // ChatGPT, Claude, Perplexity) see. Most of those crawlers don't run JavaScript,
-// so `npm run build` prerenders every page listed here to real HTML.
+// so `belt deploy frontend` prerenders every page listed here to real HTML.
 //
 // For each page the build writes static HTML with its own <title>, description,
 // canonical URL, Open Graph tags and JSON-LD, plus robots.txt, sitemap.xml and
-// llms.txt for the whole site (scripts/prerender.js).
+// llms.txt for the whole site. Preview locally with `belt frontend prerender`.
+// A public/robots.txt replaces the generated one in indexable environments.
 //
 // Rules of thumb:
 //   - Every public route gets an entry in `pages` with a specific title and a

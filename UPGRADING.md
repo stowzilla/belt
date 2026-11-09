@@ -5,6 +5,26 @@ change list, see [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## SEO prerender moved into belt (0.6.10)
+
+`belt deploy frontend` now runs the SEO prerender itself whenever a frontend has
+`src/seo.js` (`belt explain seo`). Nothing breaks: a 0.6.6–0.6.9 frontend whose
+`npm run build` still runs `scripts/prerender.js` is detected and left alone.
+
+To switch to the belt-owned step (and pick up future fixes without copying files):
+
+1. Set `"build": "vite build"` in `frontend/package.json`.
+2. Delete `frontend/scripts/prerender.js` and the `dist-ssr` line in `.gitignore`.
+3. `belt frontend prerender` and check for `SEO: prerendered N page(s)`.
+
+Frontends that never had prerendering (including non-React ones) opt in by adding
+`src/seo.js` and, for prerendered content, `src/entry-server.jsx` plus the
+hydrate-or-render `main.jsx` from [`lib/templates/frontend/react`](lib/templates/frontend/react).
+A `public/robots.txt` is now kept as-is in indexable environments instead of being
+replaced, so there's no need to delete it.
+
+---
+
 ## SEO/AEO prerendering for React frontends (0.6.6)
 
 Optional, but recommended for any app with public pages. New React frontends
