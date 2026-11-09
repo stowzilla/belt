@@ -4,6 +4,7 @@ require_relative 'app_detection'
 require_relative 'env_resolver'
 require_relative 'environment_config'
 require_relative 'frontend_env_map'
+require_relative 'frontend_prerender'
 require_relative 'frontend_registry'
 require_relative 'terraform_command'
 
@@ -11,6 +12,7 @@ module Belt
   module CLI
     # belt frontend env <environment> [--frontend NAME]
     # belt frontend list
+    # belt frontend prerender [--frontend NAME]
     #
     # Smart-merges terraform outputs into <frontend>/.env using the declarative map
     # (<frontend>/env.yml or .belt/frontend_env.yml for the default frontend).
@@ -25,6 +27,8 @@ module Belt
           run_env(args)
         when 'list', 'ls'
           run_list
+        when 'prerender'
+          run_prerender(args)
         when nil, '-h', '--help', 'help'
           puts usage
           exit(subcommand.nil? ? 1 : 0)
@@ -48,6 +52,19 @@ module Belt
           status = fe.exists? ? '' : '  missing'
           puts "  #{fe.name.ljust(16)} #{fe.path}/#{marker}#{status}"
         end
+      end
+
+      # Local check of the SEO prerender `belt deploy frontend` runs: builds the
+      # frontend and prerenders from src/seo.js. Not indexable unless BELT_ENV or
+      # SEO_INDEXABLE says so; VITE_SITE_URL from the shell sets canonical URLs.
+      def self.run_prerender(args)
+        name = FrontendRegistry.extract_flag!(args, '--frontend') || args.reject { |a| a.start_with?('-') }.first
+        frontend = FrontendRegistry.new.resolve!(name)
+        prerender = FrontendPrerender.new(frontend)
+        abort "No #{frontend.path}/src/seo.js — nothing to prerender. See `belt explain seo`." unless prerender.manifest
+
+        abort "\n✗ npm run build failed in #{frontend.path}/" unless system('npm', 'run', 'build', chdir: frontend.path)
+        prerender.run
       end
 
       def self.run_env(args)
@@ -88,6 +105,7 @@ module Belt
           Usage:
             belt frontend env <environment> [--frontend NAME]
             belt frontend list
+            belt frontend prerender [--frontend NAME]   Build + SEO prerender locally (src/seo.js)
             belt frontend --help
 
           Env map (optional, per frontend):

@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.6.10
+
+### Changed
+
+- **SEO prerender is a belt deploy step, not app code.** `belt deploy frontend`
+  now prerenders any frontend with a `src/seo.js` manifest after `npm run build`:
+  it builds `src/entry-server.*` with `vite build --ssr` (when present) and writes
+  per-page HTML (title, description, canonical, Open Graph, JSON-LD),
+  `robots.txt`, `sitemap.xml` and `llms.txt` into the build output, so the
+  `--delete` sync reproduces them on every deploy. The script ships in the gem
+  (`lib/belt/frontend/prerender.mjs`), so existing apps opt in with just a
+  manifest instead of copying `scripts/prerender.js`. New React frontends build
+  with plain `vite build`. Frontends whose build already prerenders (0.6.6–0.6.9
+  templates) are detected and skipped; frontends without `src/seo.js` deploy as
+  before. (Fizzy #1930)
+
+### Added
+
+- **`belt frontend prerender [--frontend NAME]`** builds a frontend and runs the
+  SEO prerender locally.
+- **`public/robots.txt` overrides the generated robots.txt** in indexable
+  environments. Non-indexable environments still get `Disallow: /`.
+
 ## 0.6.9
 
 ### Fixed

@@ -89,27 +89,47 @@ fallback. See the existing env-map behavior: only mapped keys are written into
 
 Search crawlers and AI answer engines (ChatGPT, Claude, Perplexity, Google AI)
 mostly don't run JavaScript, so an SPA that ships an empty `<div id="root">` is
-invisible to them. React frontends from `belt generate frontend react` prerender
-their public pages at build time:
+invisible to them. Belt prerenders public pages as part of `belt deploy frontend`.
+It's opt-in by manifest — the app owns the content, belt owns the mechanism:
 
 ```
-src/seo.js             # site name/description, public pages, private paths
-src/entry-server.jsx   # renders <App /> at a URL (build time only)
-scripts/prerender.js   # runs at the end of `npm run build`
+src/seo.js             # the manifest: site name/description, public pages, private paths
+src/entry-server.jsx   # optional: exports render(url) → HTML of <App /> at that URL
 ```
 
-For every entry in `seo.pages`, `npm run build` writes real HTML with the page's
-rendered content, `<title>`, meta description, canonical URL, Open Graph tags and
-JSON-LD. It also writes `robots.txt`, `sitemap.xml` (needs a site URL) and
-`llms.txt`. `belt deploy frontend` uploads each page to its extensionless S3 key
-(`/pricing` → `pricing`, served as `text/html`) and serves HTML and crawler files
-with `no-cache`.
+React frontends from `belt generate frontend react` ship both. Any other Vite
+frontend opts in by adding `src/seo.js` (same shape as the React template's). A
+frontend without one deploys exactly as before.
+
+After `npm run build`, belt builds `src/entry-server.*` with `vite build --ssr`
+(into `node_modules/.cache/belt-ssr`) and, for every entry in `seo.pages`, writes
+real HTML into the build output with the page's rendered content, `<title>`, meta
+description, canonical URL, Open Graph tags and JSON-LD. It also writes
+`robots.txt`, `sitemap.xml` (from the same page list; needs a site URL) and
+`llms.txt`. No SSR entry, or one that fails to build, still gets the tags,
+sitemap and robots — just no prerendered content. Because it all lands in the
+build output, every deploy's `s3 sync --delete` reproduces it; nothing is
+uploaded out of band. Each page goes to its extensionless S3 key (`/pricing` →
+`pricing`, served as `text/html`), and HTML and crawler files are served with
+`no-cache`.
+
+`robots.txt`: in indexable environments a project `public/robots.txt` is used
+verbatim; otherwise belt generates `Allow: /`, a `Disallow:` per private path and
+the `Sitemap:` line. Non-indexable environments always get `Disallow: /`.
+
+Preview locally with `belt frontend prerender [--frontend NAME]` (builds, then
+prerenders into `dist/`). Frontends scaffolded by belt 0.6.6–0.6.9 prerender inside
+`npm run build` (`scripts/prerender.js`); belt sees their `dist/.belt-pages.json`
+and skips its own step.
 
 **When you add a public route, add it to `seo.pages`** with a specific title and a
 one- or two-sentence description that says plainly what the page is. Login-gated
 routes go in `privatePaths`. Components on public pages must render without
 `window`/`document`/`localStorage` — touch those in `useEffect`. A page that throws
-during prerender still gets its tags, but no content, and the build warns.
+during prerender still gets its tags, but no content, and the deploy warns.
+The SSR build uses the app's `vite.config.js`, so a library that touches the
+browser at import time (Cognito/Amplify, analytics) can be stubbed with a plugin
+that only applies when `isSsrBuild` is true — public pages render signed-out.
 
 Only environments in `seo.indexableEnvironments` (default `['prod']`) are
 indexable; every other environment and local builds ship `Disallow: /` and
