@@ -181,6 +181,10 @@ can write `dist/.belt-routes.json` itself to say where its pages are:
 `objects` is only needed for a page that isn't stored at its own extensionless
 key.
 
+Published routes reach the edge within about a minute of the deploy. Check with
+`curl -s -o /dev/null -w '%{http_code}\n' https://<site>/no-such-page` (404) and
+the same for a route of the app (200).
+
 It fails open. Until a deploy has published routes, or if the store can't be
 read or written, every path behaves as it did before (index.html, 200). Paths
 with a file extension are never rewritten. Customize the 404 page's metadata
