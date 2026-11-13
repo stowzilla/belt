@@ -164,6 +164,17 @@ RSpec.describe 'frontend router (real 404s)' do
     end
   end
 
+  # Node accepts `parseInt(await x)` and `if ((await x) === y)`; CloudFront's engine
+  # fails the whole function with "await in arguments not supported", a 503 for
+  # every visitor (found on a live distribution, Fizzy #1985).
+  it 'keeps every await as its own statement, the only form CloudFront runs' do
+    code = File.readlines(Belt::CLI::FrontendRoutes::ROUTER_SOURCE).reject { |line| line.strip.start_with?('//') }
+    awaits = code.grep(/\bawait\b/)
+
+    expect(awaits).not_to be_empty
+    expect(awaits).to all(match(/\A\s*((const|let) \w+ = |if \([^()]*\) \w+ = )await [^()]*\([^()]*\);\s*\z/))
+  end
+
   it 'leaves every request alone until routes have been published' do
     served = run_router({}, [['viewer-request', '/nonsense'], ['viewer-request', '/projects/42']])
     statuses = run_router({}, [['viewer-response', '/nonsense']])
