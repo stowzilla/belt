@@ -41,7 +41,9 @@ module Belt
       # The KeyValueStore entries for a manifest: the chunk count under KEY and
       # the JSON split across KEY:0, KEY:1, ...
       def self.entries(manifest)
-        json = JSON.generate({ 'app' => Array(manifest['app']), 'pages' => Array(manifest['pages']) }, ascii_only: true)
+        routes = { 'app' => Array(manifest['app']), 'pages' => Array(manifest['pages']) }
+        routes['objects'] = manifest['objects'] if manifest['objects'].is_a?(Hash) && manifest['objects'].any?
+        json = JSON.generate(routes, ascii_only: true)
         chunks = json.scan(/.{1,#{CHUNK_SIZE}}/m)
         chunks.each_with_index.to_h { |chunk, i| ["#{KEY}:#{i}", chunk] }.merge(KEY => chunks.size.to_s)
       end

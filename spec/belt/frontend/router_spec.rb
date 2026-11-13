@@ -120,6 +120,50 @@ RSpec.describe 'frontend router (real 404s)' do
     expect(statuses).to eq([404, 404, 304, 200, 200, 200])
   end
 
+  context 'when the app build prerendered its own pages' do
+    def complete_routes!
+      create_file('dist/index.html', '<html><head><title>App</title></head><body><div id="root"></div></body></html>')
+      create_file('src/seo.js', "export default { siteName: 'Acme', description: 'x', privatePaths: ['/admin'] }")
+      create_file('src/App.jsx', '<Route path="/login" element={<Login />} /><Route path="/docs" element={<Docs />} />')
+      out, status = Open3.capture2e(
+        'node', Belt::CLI::FrontendPrerender::SCRIPT, '--routes-only',
+        '--manifest', File.join(tmpdir, 'src/seo.js'), '--dist', File.join(tmpdir, 'dist'),
+        '--src', File.join(tmpdir, 'src')
+      )
+      raise out unless status.success?
+
+      JSON.parse(File.read(File.join(tmpdir, 'dist', Belt::CLI::FrontendRoutes::MANIFEST)))
+    end
+
+    it 'adds the app routes and keeps where the build put each page, the home page included' do
+      create_file('dist/.belt-routes.json', JSON.generate(
+                                              'pages' => ['/docs'],
+                                              'objects' => { '/' => '/_pages/index.html',
+                                                             '/docs' => '/_pages/docs.html' }
+                                            ))
+      create_file('dist/404.html', 'the app wrote this')
+      routes = complete_routes!
+
+      expect(routes).to include('pages' => ['/docs'], 'app' => %w[/admin/** /login])
+      expect(File.read(File.join(tmpdir, 'dist/404.html'))).to eq('the app wrote this')
+      expect(File).not_to exist(File.join(tmpdir, 'dist/robots.txt'))
+
+      served = run_router(Belt::CLI::FrontendRoutes.entries(routes), [
+                            ['viewer-request', '/'], ['viewer-request', '/docs'], ['viewer-request', '/login'],
+                            ['viewer-request', '/nope']
+                          ])
+      expect(served).to eq(%w[/_pages/index.html /_pages/docs.html /index.html /404.html])
+    end
+
+    it 'takes the pages from a 0.6.6–0.6.9 build manifest and writes the missing 404 page' do
+      create_file('dist/.belt-pages.json', JSON.generate('pricing' => 'pricing.html'))
+      routes = complete_routes!
+
+      expect(routes).to include('pages' => ['/pricing'], 'app' => %w[/admin/** /docs /login])
+      expect(File.read(File.join(tmpdir, 'dist/404.html'))).to include('<h1>Page not found</h1>')
+    end
+  end
+
   it 'leaves every request alone until routes have been published' do
     served = run_router({}, [['viewer-request', '/nonsense'], ['viewer-request', '/projects/42']])
     statuses = run_router({}, [['viewer-response', '/nonsense']])

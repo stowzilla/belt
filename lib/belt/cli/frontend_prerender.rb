@@ -21,6 +21,7 @@ module Belt
       # existing apps don't grow an untracked build directory.
       SSR_OUT_DIR = 'node_modules/.cache/belt-ssr'
       PAGES_MANIFEST = '.belt-pages.json'
+      ROUTES_MANIFEST = '.belt-routes.json'
 
       def initialize(frontend, env: {})
         @frontend = frontend
@@ -32,34 +33,40 @@ module Belt
       end
 
       # Frontends scaffolded by belt 0.6.6–0.6.9 run their own scripts/prerender.js
-      # inside `npm run build`; their output is already in dist.
+      # inside `npm run build`, and an app can prerender its own way and say where
+      # its pages are in .belt-routes.json; either way the pages are already in dist.
       def prerendered_by_build?
-        File.file?(File.join(@frontend.dist_dir, PAGES_MANIFEST))
+        [PAGES_MANIFEST, ROUTES_MANIFEST].any? { |file| File.file?(File.join(@frontend.dist_dir, file)) }
       end
 
       # Returns true when it prerendered, false when the frontend didn't opt in.
-      def run
+      def run # rubocop:disable Naming/PredicateMethod
         return false unless manifest
 
         if prerendered_by_build?
-          puts '🔎 SEO: prerendered by the app build (scripts/prerender.js) — skipping belt prerender'
+          puts '🔎 SEO: prerendered by the app build — skipping belt prerender, adding the app routes for 404s'
+          run_script('--routes-only')
           return false
         end
 
         puts "🔎 SEO: prerendering pages from #{manifest}"
         ssr = build_ssr_bundle
+        run_script(*(ssr ? ['--ssr', ssr] : []))
+        true
+      end
+
+      private
+
+      def run_script(*extra)
         cmd = ['node', SCRIPT,
                '--manifest', File.expand_path(manifest, @frontend.path),
                '--dist', File.expand_path(@frontend.dist_dir),
                '--public', File.expand_path('public', @frontend.path),
-               '--src', File.expand_path('src', @frontend.path)]
-        cmd.push('--ssr', ssr) if ssr
-        return true if system(@env, *cmd, chdir: @frontend.path)
+               '--src', File.expand_path('src', @frontend.path), *extra]
+        return if system(@env, *cmd, chdir: @frontend.path)
 
         abort "\n✗ SEO prerender failed: #{cmd.shelljoin}"
       end
-
-      private
 
       # Builds the SSR bundle and returns its entry path, or nil when there's no
       # entry or it doesn't build (typically a module touching window/document at

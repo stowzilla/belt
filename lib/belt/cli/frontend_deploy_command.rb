@@ -19,7 +19,7 @@ module Belt
 
       PAGES_MANIFEST = FrontendPrerender::PAGES_MANIFEST
       # Uploaded with no-cache instead of the immutable header hashed assets get
-      REVALIDATED_FILES = %w[*.html robots.txt sitemap.xml llms.txt].freeze
+      REVALIDATED_FILES = %w[*.html robots.txt sitemap.xml llms.txt llms-full.txt].freeze
 
       def self.run(args)
         frontend_name = FrontendRegistry.extract_flag!(args, '--frontend')

@@ -173,6 +173,14 @@ nothing breaks in a browser: `404.html` loads the app, which routes to the real
 page. Only the HTTP status is wrong, so check `dist/.belt-routes.json` after
 adding a route in an unusual way.
 
+A frontend that prerenders its own way (its `npm run build` writes the pages, as
+the 0.6.6–0.6.9 templates did) still gets this: belt leaves its pages alone and
+only adds the app routes and, if the build wrote none, `404.html`. Such a build
+can write `dist/.belt-routes.json` itself to say where its pages are:
+`{ "pages": ["/docs"], "objects": { "/": "/_pages/index.html", "/docs": "/_pages/docs.html" } }`.
+`objects` is only needed for a page that isn't stored at its own extensionless
+key.
+
 It fails open. Until a deploy has published routes, or if the store can't be
 read or written, every path behaves as it did before (index.html, 200). Paths
 with a file extension are never rewritten. Customize the 404 page's metadata
