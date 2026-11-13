@@ -32,13 +32,19 @@ RSpec.describe Belt::CLI::FrontendPrerender do
     end
   end
 
-  context 'when the app build already prerendered (0.6.6–0.6.9 templates)' do
-    it 'skips its own step' do
-      create_file('src/seo.js', 'export default {}')
-      create_file('dist/.belt-pages.json', '{}')
-      expect(prerender).not_to receive(:system)
+  context 'when the app build already prerendered (0.6.6–0.6.9 templates, or its own way)' do
+    %w[.belt-pages.json .belt-routes.json].each do |built|
+      it "leaves the pages alone and only adds the app routes (#{built})" do
+        create_file('src/seo.js', 'export default {}')
+        create_file("dist/#{built}", '{}')
+        expect(prerender).to receive(:system) do |_env, *cmd, **_opts|
+          expect(cmd.first(2)).to eq(['node', described_class::SCRIPT])
+          expect(cmd.last).to eq('--routes-only')
+          true
+        end
 
-      expect { expect(prerender.run).to be(false) }.to output(/prerendered by the app build/).to_stdout
+        expect { expect(prerender.run).to be(false) }.to output(/prerendered by the app build/).to_stdout
+      end
     end
   end
 

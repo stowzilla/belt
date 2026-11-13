@@ -5,6 +5,7 @@ require 'erb'
 require_relative 'app_detection'
 require_relative 'env_resolver'
 require_relative 'frontend_registry'
+require_relative 'frontend_routes'
 
 module Belt
   module CLI
@@ -70,6 +71,7 @@ module Belt
       def run
         validate!
         generate_frontend_tf
+        install_router
         ensure_cloudfront_cors
         append_env_outputs
         return if @quiet
@@ -94,6 +96,12 @@ module Belt
         content = ERB.new(File.read(template_path), trim_mode: '-').result(binding)
         File.write(dest, content)
         puts "  create  #{dest}" unless @quiet
+      end
+
+      # The CloudFront function frontend.tf loads with file().
+      def install_router
+        dest = FrontendRoutes.install_router(MODULE_DIR)
+        puts "  create  #{dest}" if dest && !@quiet
       end
 
       def append_env_outputs

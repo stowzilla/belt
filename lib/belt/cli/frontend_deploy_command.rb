@@ -9,6 +9,7 @@ require_relative 'environment_config'
 require_relative 'frontend_env_map'
 require_relative 'frontend_prerender'
 require_relative 'frontend_registry'
+require_relative 'frontend_routes'
 require_relative 'terraform_command'
 
 module Belt
@@ -18,7 +19,7 @@ module Belt
 
       PAGES_MANIFEST = FrontendPrerender::PAGES_MANIFEST
       # Uploaded with no-cache instead of the immutable header hashed assets get
-      REVALIDATED_FILES = %w[*.html robots.txt sitemap.xml llms.txt].freeze
+      REVALIDATED_FILES = %w[*.html robots.txt sitemap.xml llms.txt llms-full.txt].freeze
 
       def self.run(args)
         frontend_name = FrontendRegistry.extract_flag!(args, '--frontend')
@@ -73,6 +74,7 @@ module Belt
         puts "━━━ #{@frontend.label} (#{@frontend.path}/) ━━━"
         build_frontend
         sync_to_s3
+        publish_routes
         invalidate_cloudfront
         url = fetch_frontend_url
         puts "\n✅ #{@frontend.label.capitalize} deployed to #{@env}!"
@@ -150,7 +152,7 @@ module Belt
         # excluded so --delete doesn't remove them before they're re-uploaded.
         run!('aws', 's3', 'sync', dist_prefix, "s3://#{bucket}", '--delete',
              '--size-only', '--cache-control', 'public, max-age=31536000, immutable',
-             *[*REVALIDATED_FILES, PAGES_MANIFEST].flat_map { |f| ['--exclude', f] },
+             *[*REVALIDATED_FILES, PAGES_MANIFEST, FrontendRoutes::MANIFEST].flat_map { |f| ['--exclude', f] },
              *pages.keys.flat_map { |key| ['--exclude', key] })
 
         index = File.join(dist, 'index.html')
@@ -189,8 +191,23 @@ module Belt
         end
       end
 
+      # Tells CloudFront which addresses exist, so anything else answers 404
+      # (FrontendRoutes). Before the invalidation, so the first uncached request
+      # already sees the new routes.
+      def publish_routes
+        return unless File.file?(File.join(@frontend.dist_dir, FrontendRoutes::MANIFEST))
+
+        FrontendRoutes.new(dist_dir: @frontend.dist_dir, distribution_id: distribution_id).publish
+      end
+
+      def distribution_id
+        return @distribution_id if defined?(@distribution_id)
+
+        @distribution_id = fetch_distribution_id
+      end
+
       def invalidate_cloudfront
-        dist_id = fetch_distribution_id
+        dist_id = distribution_id
         unless dist_id
           puts '⚠️  No CloudFront distribution found (skipping cache invalidation)'
           return

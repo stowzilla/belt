@@ -6,6 +6,7 @@ require_relative 'environment_config'
 require_relative 'frontend_env_map'
 require_relative 'frontend_prerender'
 require_relative 'frontend_registry'
+require_relative 'frontend_routes'
 require_relative 'terraform_command'
 
 module Belt
@@ -13,6 +14,7 @@ module Belt
     # belt frontend env <environment> [--frontend NAME]
     # belt frontend list
     # belt frontend prerender [--frontend NAME]
+    # belt frontend router
     #
     # Smart-merges terraform outputs into <frontend>/.env using the declarative map
     # (<frontend>/env.yml or .belt/frontend_env.yml for the default frontend).
@@ -29,6 +31,8 @@ module Belt
           run_list
         when 'prerender'
           run_prerender(args)
+        when 'router'
+          run_router
         when nil, '-h', '--help', 'help'
           puts usage
           exit(subcommand.nil? ? 1 : 0)
@@ -65,6 +69,18 @@ module Belt
 
         abort "\n✗ npm run build failed in #{frontend.path}/" unless system('npm', 'run', 'build', chdir: frontend.path)
         prerender.run
+      end
+
+      # Writes (or refreshes) the CloudFront router function next to the frontend
+      # terraform that loads it. For apps adopting real 404s, and after a belt
+      # upgrade that changes the function.
+      def self.run_router
+        module_dir = FrontendRoutes::MODULE_DIR
+        abort "Error: Module directory not found at #{module_dir}/." unless Dir.exist?(module_dir)
+
+        dest = FrontendRoutes.install_router(module_dir)
+        puts dest ? "  write   #{dest}" : "  current #{File.join(module_dir, FrontendRoutes::ROUTER_FILE)}"
+        puts "\nApply it with `belt deploy <environment>`. See `belt explain seo`, \"Real 404s\"."
       end
 
       def self.run_env(args)
@@ -106,6 +122,7 @@ module Belt
             belt frontend env <environment> [--frontend NAME]
             belt frontend list
             belt frontend prerender [--frontend NAME]   Build + SEO prerender locally (src/seo.js)
+            belt frontend router                        Write the CloudFront router function (real 404s)
             belt frontend --help
 
           Env map (optional, per frontend):

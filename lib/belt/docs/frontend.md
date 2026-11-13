@@ -140,6 +140,56 @@ the build; set `SEO_INDEXABLE=true|false` to override.
 After the first prod deploy, submit `https://<domain>/sitemap.xml` to Google
 Search Console and Bing Webmaster Tools.
 
+### Real 404s
+
+A single-page app on S3 + CloudFront classically answers every path with
+`index.html` and HTTP 200, because CloudFront can't tell which addresses the app
+has. Crawlers and agents then can't tell a missing page from a real one. A
+frontend with `src/seo.js` answers a real 404 instead:
+
+- **A public page** (`seo.pages`) is served from its prerendered file.
+- **A route of the app** is served `index.html`, as before.
+- **Anything else** gets `404.html` with HTTP 404. That page is the app's own
+  "not found" route (`<Route path="*">`) prerendered, with `noindex`.
+
+You don't keep a route list. The prerender step reads the app's routes from its
+`<Route path="/...">` declarations under `src/` (test files are skipped), adds
+`seo.privatePaths` as prefixes, and writes them to `dist/.belt-routes.json`.
+`belt deploy frontend` publishes that to a CloudFront KeyValueStore, and belt's
+router function (`infrastructure/modules/app/belt_frontend_router.js`, on the
+distribution's viewer-request and viewer-response events) reads it at the edge.
+The deploy prints what it published:
+
+```
+SEO: 14 app route(s) and 6 page(s) answer; any other address is a 404
+🧭 Published routes: 5 page(s), 14 app path(s); anything else answers 404
+```
+
+Belt only sees a route written as `<Route path="/literal/or/:param">`. A route
+declared another way — a nested `<Route path="settings">`, a `createBrowserRouter`
+config object, a path built at runtime — needs its prefix in `privatePaths`
+(`'/account'` covers `/account` and everything under it). If one is missed,
+nothing breaks in a browser: `404.html` loads the app, which routes to the real
+page. Only the HTTP status is wrong, so check `dist/.belt-routes.json` after
+adding a route in an unusual way.
+
+A frontend that prerenders its own way (its `npm run build` writes the pages, as
+the 0.6.6–0.6.9 templates did) still gets this: belt leaves its pages alone and
+only adds the app routes and, if the build wrote none, `404.html`. Such a build
+can write `dist/.belt-routes.json` itself to say where its pages are:
+`{ "pages": ["/docs"], "objects": { "/": "/_pages/index.html", "/docs": "/_pages/docs.html" } }`.
+`objects` is only needed for a page that isn't stored at its own extensionless
+key.
+
+Published routes reach the edge within about a minute of the deploy. Check with
+`curl -s -o /dev/null -w '%{http_code}\n' https://<site>/no-such-page` (404) and
+the same for a route of the app (200).
+
+It fails open. Until a deploy has published routes, or if the store can't be
+read or written, every path behaves as it did before (index.html, 200). Paths
+with a file extension are never rewritten. Customize the 404 page's metadata
+with `seo.notFound: { title, description }`.
+
 ## Infrastructure
 
 `belt setup frontend` (and `belt generate frontend`) writes S3 + CloudFront into
@@ -147,6 +197,9 @@ Search Console and Bing Webmaster Tools.
 `{name}_frontend.tf` with unique resource names and outputs
 (`ops_frontend_bucket_name`, …). Extra frontends get a CloudFront URL only —
 custom DNS stays on the default frontend unless you add records yourself.
+The generated distribution includes the router function and KeyValueStore for
+real 404s (above); `belt frontend router` rewrites `belt_frontend_router.js`
+after a belt upgrade changes it.
 
 CORS: each CloudFront domain is added to `frontend_urls` on the conveyor-belt
 resource so SPA → API calls work.

@@ -79,9 +79,22 @@ resource "aws_cloudfront_distribution" "<%= @tf_name %>" {
         forward = "none"
       }
     }
+
+    # Real 404s — see the router resources below.
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.<%= @tf_name %>_route_request.arn
+    }
+
+    function_association {
+      event_type   = "viewer-response"
+      function_arn = aws_cloudfront_function.<%= @tf_name %>_route_response.arn
+    }
   }
 
-  # SPA routing — serve index.html for 404/403
+  # SPA fallback — serve index.html for a missing object. The router function
+  # sends unknown addresses to /404.html itself; this is what a path gets before
+  # routes have been published, and what a missing file (/assets/gone.js) gets.
   custom_error_response {
     error_code         = 404
     response_code      = 200
@@ -112,6 +125,35 @@ resource "aws_cloudfront_distribution" "<%= @tf_name %>" {
     Environment = var.environment
     ManagedBy   = "Terraform"
   }
+}
+
+# Real 404s. `belt deploy frontend` publishes the app's routes (frontend
+# src/seo.js: `pages` and `privatePaths`) to this KeyValueStore, and the router
+# function serves a page from its prerendered object, an app route from
+# index.html, and anything else from /404.html with status 404. The same code
+# runs on both events; <%= Belt::CLI::FrontendRoutes::ROUTER_FILE %> is belt's (refresh it with
+# `belt frontend router`).
+resource "aws_cloudfront_key_value_store" "<%= @tf_name %>_routes" {
+  name    = "${var.app_name}-${var.environment}-<%= @bucket_slug %>-routes"
+  comment = "Routes published by belt deploy frontend"
+}
+
+resource "aws_cloudfront_function" "<%= @tf_name %>_route_request" {
+  name                         = "${var.app_name}-${var.environment}-<%= @bucket_slug %>-route-req"
+  runtime                      = "cloudfront-js-2.0"
+  comment                      = "Send each address to its page, the app, or the 404 page"
+  publish                      = true
+  key_value_store_associations = [aws_cloudfront_key_value_store.<%= @tf_name %>_routes.arn]
+  code                         = file("${path.module}/<%= Belt::CLI::FrontendRoutes::ROUTER_FILE %>")
+}
+
+resource "aws_cloudfront_function" "<%= @tf_name %>_route_response" {
+  name                         = "${var.app_name}-${var.environment}-<%= @bucket_slug %>-route-res"
+  runtime                      = "cloudfront-js-2.0"
+  comment                      = "Answer 404 for the 404 page"
+  publish                      = true
+  key_value_store_associations = [aws_cloudfront_key_value_store.<%= @tf_name %>_routes.arn]
+  code                         = file("${path.module}/<%= Belt::CLI::FrontendRoutes::ROUTER_FILE %>")
 }
 
 # S3 bucket policy — CloudFront OAC access only

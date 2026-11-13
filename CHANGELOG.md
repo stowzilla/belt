@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.6.11
+
+### Added
+
+- **Frontends answer HTTP 404 for an address that doesn't exist.** A single-page
+  app on S3 + CloudFront answered every path with `index.html` and 200, so
+  crawlers and agents couldn't tell a missing page from a real one. For a
+  frontend with `src/seo.js`, the prerender step now writes `404.html` (the app's
+  own "not found" route, `noindex`) and `.belt-routes.json`: the public pages plus
+  the app's routes, read from its `<Route path="/...">` declarations and
+  `seo.privatePaths`, so there is no second route list to keep in sync.
+  `belt deploy frontend` publishes the routes to a CloudFront KeyValueStore, and
+  a router function on the distribution serves pages from their prerendered
+  files, app routes from `index.html`, and anything else from `404.html` with
+  status 404. It fails open: before routes are published, or if the store can't
+  be read, every path behaves as before. Generated `frontend.tf` includes the
+  store and function; existing apps opt in via UPGRADING.md. (Fizzy #1985)
+- A frontend whose own build prerenders its pages gets real 404s too: belt
+  leaves the pages alone and adds the app routes (and `404.html` if the build
+  wrote none). The build can write `.belt-routes.json` with `pages` and
+  `objects` to say where its pages are stored.
+- `llms-full.txt` is uploaded `no-cache`, like `llms.txt`.
+- **`belt frontend router`** writes or refreshes
+  `infrastructure/modules/app/belt_frontend_router.js`.
+- The React template has a `NotFound` page on `<Route path="*">`.
+
 ## 0.6.10
 
 ### Changed
