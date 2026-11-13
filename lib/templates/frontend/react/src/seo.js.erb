@@ -11,6 +11,10 @@
 //   - Every public route gets an entry in `pages` with a specific title and a
 //     one- or two-sentence description that says plainly what the page is.
 //   - Login-gated or app-only routes go in `privatePaths` (disallowed in robots.txt).
+//   - An address that is neither a page here nor a route of the app answers HTTP
+//     404 with the app's "not found" page. The app's routes are read from its
+//     <Route path="/..."> declarations; a route declared any other way needs its
+//     prefix in `privatePaths` too, or a fresh load of it answers 404.
 //   - Only `indexableEnvironments` are indexable. Every other environment, and
 //     local builds, ship `Disallow: /` and <meta name="robots" content="noindex">
 //     so dev and ephemeral environments never end up in search results.

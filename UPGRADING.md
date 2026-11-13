@@ -5,6 +5,70 @@ change list, see [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## Real 404s for frontends (0.6.11)
+
+A frontend with `src/seo.js` can now answer HTTP 404 for an address that is
+neither a public page nor a route of the app, instead of `index.html` with 200
+(`belt explain seo`, "Real 404s"). New frontends get it. An existing app deploys
+exactly as before until its CloudFront distribution has belt's router, which is
+three steps:
+
+1. `belt frontend router` writes `infrastructure/modules/app/belt_frontend_router.js`.
+2. Add the router to `infrastructure/modules/app/frontend.tf` (use your
+   frontend's resource name in place of `frontend`):
+
+   ```hcl
+   resource "aws_cloudfront_key_value_store" "frontend_routes" {
+     name    = "${var.app_name}-${var.environment}-frontend-routes"
+     comment = "Routes published by belt deploy frontend"
+   }
+
+   resource "aws_cloudfront_function" "frontend_route_request" {
+     name                         = "${var.app_name}-${var.environment}-frontend-route-req"
+     runtime                      = "cloudfront-js-2.0"
+     publish                      = true
+     key_value_store_associations = [aws_cloudfront_key_value_store.frontend_routes.arn]
+     code                         = file("${path.module}/belt_frontend_router.js")
+   }
+
+   resource "aws_cloudfront_function" "frontend_route_response" {
+     name                         = "${var.app_name}-${var.environment}-frontend-route-res"
+     runtime                      = "cloudfront-js-2.0"
+     publish                      = true
+     key_value_store_associations = [aws_cloudfront_key_value_store.frontend_routes.arn]
+     code                         = file("${path.module}/belt_frontend_router.js")
+   }
+   ```
+
+   and inside the distribution's `default_cache_behavior`:
+
+   ```hcl
+   function_association {
+     event_type   = "viewer-request"
+     function_arn = aws_cloudfront_function.frontend_route_request.arn
+   }
+
+   function_association {
+     event_type   = "viewer-response"
+     function_arn = aws_cloudfront_function.frontend_route_response.arn
+   }
+   ```
+
+   Leave the `custom_error_response` blocks as they are: they serve before routes
+   are first published. The AWS provider needs to be 5.32 or newer
+   (`terraform init -upgrade` if the lock file pins an older one). A behavior
+   takes one function per event, so if yours already has a viewer-request or
+   viewer-response function, fold it into the router file's handler instead.
+3. Give the app a "not found" route (`<Route path="*" element={<NotFound />} />`)
+   so `404.html` has something to show, then `belt deploy <env>`.
+
+The deploy prints `🧭 Published routes: …`. Check `frontend/dist/.belt-routes.json`
+once: every route of the app should be covered by an `app` pattern. Routes
+written as `<Route path="/...">` are found automatically; anything declared
+another way needs its prefix in `seo.privatePaths`.
+
+---
+
 ## SEO prerender moved into belt (0.6.10)
 
 `belt deploy frontend` now runs the SEO prerender itself whenever a frontend has

@@ -167,6 +167,7 @@ module Belt
           frontend env <env> [--frontend NAME]        Write <frontend>/.env from terraform outputs
           frontend list                               List configured frontends
           frontend prerender [--frontend NAME]        Build + SEO prerender a frontend locally
+          frontend router                             Write the CloudFront router function (real 404s)
           routes [-g PATTERN] [-f json]               Show route definitions
           contracts [-g PATTERN] [-f json]            Show API request/response contracts
           lambda-config [-e ENV] [-f json|terraform]  Show merged lambda configuration

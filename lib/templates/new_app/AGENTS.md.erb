@@ -272,6 +272,11 @@ answer engines (`belt explain frontend`). When you add or change a public page:
 - Add it to `frontend/src/seo.js` → `pages` with a specific `title` and a one- or
   two-sentence `description` that names what the page is and who it's for.
 - Put login-gated routes in `privatePaths` (they're disallowed in `robots.txt`).
+- An address that is neither a page nor a route of the app answers HTTP 404. Belt
+  reads the app's routes from `<Route path="/...">` in `frontend/src`, so a normal
+  new route needs nothing. A route declared another way (nested relative path,
+  router config object) needs its prefix in `privatePaths`, or a fresh load of it
+  answers 404; `frontend/dist/.belt-routes.json` shows what belt found.
 - Keep the page's content in the rendered markup — no `window`/`document`/
   `localStorage` during render (use `useEffect`), and no content that only appears
   after an API call if crawlers need to see it.

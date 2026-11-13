@@ -51,7 +51,8 @@ module Belt
         cmd = ['node', SCRIPT,
                '--manifest', File.expand_path(manifest, @frontend.path),
                '--dist', File.expand_path(@frontend.dist_dir),
-               '--public', File.expand_path('public', @frontend.path)]
+               '--public', File.expand_path('public', @frontend.path),
+               '--src', File.expand_path('src', @frontend.path)]
         cmd.push('--ssr', ssr) if ssr
         return true if system(@env, *cmd, chdir: @frontend.path)
 
