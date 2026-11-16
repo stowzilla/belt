@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require 'socket'
 
 RSpec.describe Belt::Authentication::TokenVerifier do
   let(:issuer) { 'https://cognito-idp.us-east-1.amazonaws.com/us-east-1_pool' }
@@ -173,6 +174,31 @@ RSpec.describe Belt::Authentication::TokenVerifier do
       allow(Process).to receive(:clock_gettime).and_return(now + described_class::REFETCH_INTERVAL + 1)
 
       expect(verify(new_token)).to include('sub' => 'user-sub')
+    end
+
+    # The real request path, against a throwaway local server: fetch, JWK → RSA key,
+    # verify. Nothing here is stubbed.
+    it 'verifies against a JWKS served over HTTP' do
+      body = JSON.generate('keys' => [jwk(pool_key, kid)])
+      server = TCPServer.new('127.0.0.1', 0)
+      thread = Thread.new do
+        client = server.accept
+        request_line = client.gets
+        nil until client.gets.strip.empty?
+        client.write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n" \
+                     "Content-Length: #{body.bytesize}\r\nConnection: close\r\n\r\n#{body}")
+        client.close
+        request_line
+      end
+      local_issuer = "http://127.0.0.1:#{server.addr[1]}/us-east-1_pool"
+
+      token = signed_token(claims('iss' => local_issuer))
+
+      expect(verify(token, issuer: local_issuer)).to include('sub' => 'user-sub')
+      expect(thread.value).to start_with('GET /us-east-1_pool/.well-known/jwks.json ')
+    ensure
+      server&.close
+      thread&.kill
     end
 
     it 'is nil when the key set cannot be fetched' do
