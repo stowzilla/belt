@@ -5,6 +5,60 @@ change list, see [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## Bearer header tokens are verified (0.6.12)
+
+Security fix. On a route **without** an API Gateway authorizer, Belt used to
+base64-decode whatever was in `Authorization: Bearer` and treat it as the caller's
+Cognito claims, with no signature check. Anyone could write a token naming another
+user's `sub` and the admin group, and `current_user`, `cognito_admin?` and
+`authenticate_user!` believed it. Routes declared `auth: :cognito` were never
+affected: the gateway rejects such a token before your code runs.
+
+From 0.6.12 a header token is an identity only if Belt can verify it: RS256
+signature against your pool's JWKS, plus `exp`, `iss`, `token_use == 'id'` and
+`aud`, all required. If the Lambda doesn't know the pool and the app client, the
+token is ignored (`current_user` is nil).
+
+**Do you need to do anything?**
+
+- Every route that uses `current_user` is behind `auth: :cognito`: no. Bump the gem.
+- You read `current_user` on a route with no authorizer (a public page that shows
+  more when someone is signed in, say): give the Lambda the pool and client ids, or
+  those requests become anonymous.
+
+In `config/lambda/api.yml` (and any other function that serves such routes):
+
+```yaml
+default: &default
+  env_vars:
+    COGNITO_USER_POOL_ID: ref(cognito_user_pool_id)
+    COGNITO_CLIENT_ID: ref(cognito_client_id)
+```
+
+In `infrastructure/modules/app/main.tf`, inside the `conveyor_belt` resource:
+
+```hcl
+lambda_env_refs = merge(var.lambda_env_refs, {
+  cognito_user_pool_id = aws_cognito_user_pool.main.id
+  cognito_client_id    = aws_cognito_user_pool_client.main.id
+})
+```
+
+A pool with several app clients (web and mobile): set `COGNITO_CLIENT_ID` to a
+comma-separated list, or `config.authentication.client_ids = [...]`. The Lambda
+fetches `<issuer>/.well-known/jwks.json` once per container, so it needs outbound
+internet access (the default unless you put it in a VPC without a NAT).
+
+If you wrote your own verification around `Belt::Authentication::Claims.decode`, it
+keeps working: `decode` is unchanged and still does not check signatures. You can
+drop the workaround once the two variables are set.
+
+Check after deploying: call one of those routes with a real ID token and confirm you
+are signed in; call it with a token whose signature you have altered and confirm you
+are not.
+
+---
+
 ## Real 404s for frontends (0.6.11)
 
 A frontend with `src/seo.js` can now answer HTTP 404 for an address that is

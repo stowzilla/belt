@@ -3,6 +3,7 @@
 require_relative 'errors'
 require_relative 'configuration'
 require_relative 'authentication/configuration'
+require_relative 'authentication/token_verifier'
 require_relative 'authentication/claims'
 require_relative 'authentication/cognito_authenticatable'
 require_relative 'authentication/model_macro'
