@@ -13,6 +13,10 @@ module Belt
         'routes' => 'routing',
         'route' => 'routing',
         'router' => 'routing',
+        'throttle' => 'routing',
+        'throttling' => 'routing',
+        'rate_limit' => 'routing',
+        'waf' => 'routing',
         'controller' => 'controllers',
         'model' => 'models',
         'activeitem' => 'models',
@@ -114,6 +118,7 @@ module Belt
 
           Aliases:
             routes, route, router     → routing
+            throttle, rate_limit, waf → routing
             controller                → controllers
             model, activeitem         → models
             deploy, terraform         → deployment

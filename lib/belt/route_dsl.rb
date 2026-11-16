@@ -30,9 +30,10 @@ module Belt
     # Per-route API Gateway limit: `throttle: { rate: 2, burst: 5 }` (requests per
     # second, token bucket). Emitted by `belt routes -f json` and applied by the
     # conveyor-belt provider (0.0.20+) as stage method settings; it wins over the
-    # Lambda's `throttle:` in config/lambda/<fn>.yml. Returns nil when unset.
+    # Lambda's `throttle:` in config/lambda/<fn>.yml. Returns nil when unset or
+    # `false` (a route opting out of an inherited gateway/scope throttle).
     def self.normalize_throttle(raw)
-      return nil if raw.nil?
+      return nil if raw.nil? || raw == false
 
       unless raw.is_a?(Hash)
         raise ArgumentError, "throttle must be a Hash like { rate: 2, burst: 5 } (got #{raw.inspect})"
@@ -116,7 +117,7 @@ module Belt
                                                  inherited_controller: controller_name,
                                                  inherited_lambda: @inherited_lambda,
                                                  scope_module: @scope_module)
-      nested_builder.instance_eval(&block)
+      @gateway.with_throttle(options) { nested_builder.instance_eval(&block) }
     end
 
     # Singular resource inside nested context (e.g. resource :billing inside resources :projects)
@@ -200,7 +201,7 @@ module Belt
       @inherited_tables = (@inherited_tables + Array(options[:tables] || [])).uniq
       @inherited_controller = options[:controller]&.to_s || @inherited_controller
 
-      instance_eval(&) if block_given?
+      @gateway.with_throttle(options) { instance_eval(&) } if block_given?
 
       @prefix = previous_prefix
       @collection_prefix = previous_collection_prefix
@@ -415,7 +416,7 @@ module Belt
   end
 
   class ApiGateway
-    attr_reader :name, :routes, :default_auth, :default_lambda, :default_cors, :default_tables
+    attr_reader :name, :routes, :default_auth, :default_lambda, :default_cors, :default_tables, :default_throttle
 
     def initialize(name, options = {})
       @name = name.to_s
@@ -424,7 +425,24 @@ module Belt
       @default_lambda = options[:lambda] || name
       @default_cors = options.fetch(:cors, true)
       @default_tables = Array(options[:tables] || [])
+      @default_throttle = Belt::Route.normalize_throttle(options[:throttle])
       @current_lambda_context = nil
+      @throttle_context = nil
+    end
+
+    # Runs the block with `options[:throttle]` as the throttle for every route it
+    # adds that doesn't set its own (scope, namespace, function, nested resources).
+    # `throttle: false` opts the block out of the gateway default.
+    def with_throttle(options)
+      return yield unless options.key?(:throttle)
+
+      previous = @throttle_context
+      @throttle_context = Belt::Route.normalize_throttle(options[:throttle]) || false
+      begin
+        yield
+      ensure
+        @throttle_context = previous
+      end
     end
 
     def lambda(name, &)
@@ -467,7 +485,7 @@ module Belt
                                                  inherited_auth: inherited_auth,
                                                  inherited_controller: inherited_controller,
                                                  inherited_lambda: inherited_lambda)
-      nested_builder.instance_eval(&)
+      with_throttle(options) { nested_builder.instance_eval(&) }
     end
 
     def resource(name, options = {})
@@ -521,10 +539,18 @@ module Belt
         request_model: options[:request_model],
         response_model: options[:response_model],
         response_context: options[:response_context],
-        throttle: options[:throttle]
+        throttle: resolve_throttle(options)
       }
 
       @routes << Belt::Route.new(method, path, route_options)
+    end
+
+    # Route's own `throttle:` (false opts out) → enclosing scope/resource block → gateway default.
+    def resolve_throttle(options)
+      return options[:throttle] if options.key?(:throttle)
+      return @throttle_context unless @throttle_context.nil?
+
+      @default_throttle
     end
 
     def auto_infer_tables(resource_name, options)
@@ -678,7 +704,7 @@ module Belt
         @scope_tables = (@scope_tables + Array(options[:tables] || [])).uniq
         @scope_controller = options[:controller] || @scope_controller
 
-        instance_eval(&) if block_given?
+        @gateway.with_throttle(options) { instance_eval(&) } if block_given?
 
         @scope_prefix = previous_prefix
         @scope_module = previous_module
@@ -712,7 +738,7 @@ module Belt
         @scope_auth = options[:auth] if options[:auth]
         @scope_tables = (@scope_tables + Array(options[:tables] || [])).uniq
 
-        instance_eval(&) if block_given?
+        @gateway.with_throttle(options) { instance_eval(&) } if block_given?
 
         @lambda_target = previous_lambda
         @scope_auth = previous_auth
@@ -780,8 +806,8 @@ module Belt
         auth_override = options[:auth]
         route_definitions = mountable.respond_to?(:routes) ? mountable.routes : []
 
-        route_definitions.each do |route_def|
-          mount_route(route_def, prefix, extra_tables, auth_override)
+        @gateway.with_throttle(options) do
+          route_definitions.each { |route_def| mount_route(route_def, prefix, extra_tables, auth_override) }
         end
       end
 
@@ -913,7 +939,7 @@ module Belt
                                                    inherited_auth: inherited_auth,
                                                    inherited_controller: controller,
                                                    inherited_lambda: @lambda_target)
-        nested_builder.instance_eval(&)
+        @gateway.with_throttle(options) { nested_builder.instance_eval(&) }
       end
 
       def build_scoped_resource(name, options)

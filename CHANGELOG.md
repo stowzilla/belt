@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **`throttle:` cascades in routes.rb.** `gateway :api, throttle: { rate:, burst: }`
+  sets a default for every route; `scope`, `namespace`, `function` and
+  `resources` blocks pass theirs down to the routes inside (nested resources,
+  `member` / `collection` included). The nearest one wins, and `throttle: false`
+  on a route or block opts out. A bad value now fails on the line that declares
+  it. A gateway default is a route-level throttle, so it wins over
+  `config/lambda/<fn>.yml` `throttle:` and the provider's stage `throttle`.
+  (Fizzy #2010)
+- `belt explain routing` has a Throttling section. It explains that API Gateway
+  limits are per route, not per caller, and includes a WAF rate-based-rule recipe
+  (REGIONAL web ACL, scoped down to the routes that cost money, attached through
+  conveyor-belt's `waf_web_acl_arn`) for per-IP limits. `belt explain throttle`,
+  `rate_limit` and `waf` open it.
+
 ## 0.6.11
 
 ### Added

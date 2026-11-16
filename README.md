@@ -209,12 +209,13 @@ end
 
 **Key point:** `namespace` and `scope` are purely organizational — they affect URL paths and controller module resolution but never change which Lambda handles the request. Use `function` when you need routes to go to a different Lambda.
 
-**Per-route throttling:** any route or resource accepts `throttle: { rate:, burst: }` (steady-state requests per second plus the burst the token bucket absorbs). `belt routes -f json` emits it and the conveyor-belt provider (0.0.20+) applies it as API Gateway stage method settings. A route's `throttle` wins over the serving Lambda's `throttle:` in `config/lambda/<fn>.yml`, which in turn wins over the provider's stage-level `throttle` block.
+**Per-route throttling:** any route, `resources`, `scope`, `namespace`, `function` or the `gateway` itself accepts `throttle: { rate:, burst: }` (steady-state requests per second plus the burst the token bucket absorbs). Routes inherit it from the nearest enclosing block; `throttle: false` opts a route out. `belt routes -f json` emits it and the conveyor-belt provider (0.0.20+) applies it as API Gateway stage method settings. A route-level `throttle` (including one inherited from the gateway) wins over the serving Lambda's `throttle:` in `config/lambda/<fn>.yml`, which in turn wins over the provider's stage-level `throttle` block. The limit is per route for all callers together, not per caller; `belt explain routing` has a WAF rate-rule recipe for per-IP limits.
 
 ```ruby
-gateway :api, auth: :none do
+gateway :api, auth: :none, throttle: { rate: 50, burst: 100 } do
   post '/connect/chat', to: 'chat#create', throttle: { rate: 2, burst: 5 }
   resources :leads, only: [:create], throttle: { rate: 1, burst: 3 }
+  get '/health', to: 'health#show', throttle: false
 end
 ```
 
