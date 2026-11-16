@@ -134,7 +134,7 @@ module Belt
       end
 
       def inject_welcome_route!(routes, gateway)
-        routes << {
+        welcome = {
           name: 'root',
           verb: 'GET',
           path: '/',
@@ -147,6 +147,8 @@ module Belt
           request_model: '',
           response_model: ''
         }
+        welcome[:throttle] = gateway.default_throttle if gateway.default_throttle
+        routes << welcome
       end
 
       def build_route_hash(route, gateway)

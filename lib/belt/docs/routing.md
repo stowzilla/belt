@@ -339,13 +339,14 @@ resource "conveyor_belt" "main" {
 
 - **Scope the rule down** to the routes that cost money (public writes). An
   unscoped rule counts every request, including page loads and polling.
-- **Key on `IP`** when clients call the gateway directly. Only if a CloudFront
-  distribution you control sits in front of the API, use
-  `aggregate_key_type = "FORWARDED_IP"` with a
-  `forwarded_ip_config { header_name = "X-Forwarded-For", fallback_behavior = "MATCH" }`.
-  Otherwise every request counts against CloudFront's handful of edge IPs. Without
-  CloudFront in front, clients can set `X-Forwarded-For` to anything, so don't
-  trust it.
+- **Key on `IP`.** That is the address that connected to whatever the ACL is
+  attached to. If clients call the gateway directly, attach a REGIONAL ACL to the
+  stage as above. If a CloudFront distribution sits in front of the API, a
+  regional ACL only sees CloudFront's edge addresses. Attach a `CLOUDFRONT`-scope
+  ACL (created in us-east-1) to the distribution instead, still keyed on `IP`.
+  Don't key on `X-Forwarded-For` (`FORWARDED_IP`): WAF takes the first address in
+  that header, and the client chooses it, so a script can rotate it to get around
+  the limit.
 - **Watch the path WAF sees.** On the `execute-api` URL the path starts with the
   stage name (`/dev/reports`), and on a custom domain it doesn't. `ENDS_WITH` matches
   both.
