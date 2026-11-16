@@ -55,8 +55,30 @@ RSpec.describe Belt::Authentication::Configuration do
     end
   end
 
+  describe '#client_ids' do
+    it 'is empty without COGNITO_CLIENT_ID' do
+      ENV.delete('COGNITO_CLIENT_ID')
+
+      expect(config.client_ids).to eq([])
+    end
+
+    it 'reads a comma-separated list from the environment' do
+      ENV['COGNITO_CLIENT_ID'] = 'web-client, mobile-client'
+
+      expect(config.client_ids).to eq(%w[web-client mobile-client])
+    end
+
+    it 'can be set explicitly, as one id or several' do
+      config.client_id = 'web-client'
+      expect(config.client_ids).to eq(%w[web-client])
+
+      config.client_ids = %w[web-client mobile-client]
+      expect(config.client_ids).to eq(%w[web-client mobile-client])
+    end
+  end
+
   describe '#issuer' do
-    it 'is nil without a user pool, which disables the issuer check' do
+    it 'is nil without a user pool' do
       ENV.delete('COGNITO_USER_POOL_ID')
 
       expect(config.issuer).to be_nil

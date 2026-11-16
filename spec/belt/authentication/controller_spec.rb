@@ -67,6 +67,59 @@ RSpec.describe Belt::Authentication::Controller do
     end
   end
 
+  # A route without an API Gateway authorizer has nothing in front of it. A token the
+  # caller made up — right issuer, right client, admin group — must not be believed.
+  describe 'a forged Bearer token on a route with no authorizer' do
+    let(:issuer) { 'https://cognito-idp.us-east-1.amazonaws.com/us-east-1_pool' }
+    let(:pool_key) { OpenSSL::PKey::RSA.new(2048) }
+    let(:claims) do
+      { 'sub' => 'victim-sub', 'email' => 'victim@example.com', 'cognito:groups' => ['admins'],
+        'iss' => issuer, 'aud' => 'client-1', 'token_use' => 'id', 'exp' => Time.now.to_i + 600 }
+    end
+
+    before do
+      Belt.configuration.authentication.issuer = issuer
+      Belt.configuration.authentication.client_ids = ['client-1']
+      Belt::Authentication::TokenVerifier.store_keys(issuer, 'kid-1' => pool_key.public_key)
+    end
+
+    after { Belt::Authentication::TokenVerifier.reset! }
+
+    def token(signature)
+      header = Base64.urlsafe_encode64('{"alg":"RS256","kid":"kid-1"}', padding: false)
+      payload = Base64.urlsafe_encode64(JSON.generate(claims), padding: false)
+      "#{header}.#{payload}.#{Base64.urlsafe_encode64(signature.call("#{header}.#{payload}"), padding: false)}"
+    end
+
+    def header_event(token)
+      { 'headers' => { 'Authorization' => "Bearer #{token}" } }
+    end
+
+    it 'is nobody: no claims, no user, no admin, and nothing written to the model' do
+      expect(SpecControllerUser).not_to receive(:sync_from_claims!)
+      subject = controller(header_event(token(->(_signed) { 'made-up-signature' })))
+
+      expect(subject.cognito_claims).to be_nil
+      expect(subject.current_user).to be_nil
+      expect(subject).not_to be_cognito_admin
+      expect { subject.authenticate_user! }.to raise_error(Belt::Authentication::NotAuthenticated)
+    end
+
+    it 'is nobody when the app has no pool configured, even with a real signature' do
+      Belt.configuration.authentication.issuer = nil
+      subject = controller(header_event(token(->(signed) { pool_key.sign('SHA256', signed) })))
+
+      expect(subject.current_user).to be_nil
+      expect(subject).not_to be_cognito_admin
+    end
+
+    it "is the user when the token really was signed by the app's pool" do
+      subject = controller(header_event(token(->(signed) { pool_key.sign('SHA256', signed) })))
+
+      expect(subject.current_user.claims).to include(sub: 'victim-sub', admin: true)
+    end
+  end
+
   describe '#cognito_admin?' do
     it 'is true for a member of the configured staff group' do
       subject = controller(authorizer_event('sub' => 'abc', 'cognito:groups' => 'admins'))

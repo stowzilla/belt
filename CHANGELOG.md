@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.6.12
+
+### Security
+
+- **An unsigned `Authorization: Bearer` token is no longer believed.** On a route
+  without an API Gateway authorizer, `Belt::Authentication::Claims.from_event`
+  base64-decoded the header token and returned its payload as the caller's
+  claims with no signature check, so a made-up token naming any `sub` and the
+  admin group made `current_user`, `cognito_admin?` and `authenticate_user!`
+  treat the caller as that user (and wrote the forged email, name and role to
+  their row). Header tokens are now verified by
+  `Belt::Authentication::TokenVerifier`: RS256 only, key by `kid` from the pool's
+  JWKS (cached per container), and `exp`, `iss`, `token_use == 'id'` and `aud`
+  all required. A token that can't be verified, including when no pool or
+  client id is configured, yields no claims. Routes behind `auth: :cognito`
+  were not affected and are unchanged. (Fizzy #2002)
+
+### Added
+
+- `config.authentication.client_ids` (default: `COGNITO_CLIENT_ID`,
+  comma-separated): the app client ids a header token may be issued for.
+
+### Changed
+
+- Apps that read `current_user` on a route with no authorizer must set
+  `COGNITO_USER_POOL_ID` and `COGNITO_CLIENT_ID` on the Lambda, or those
+  requests become anonymous. See UPGRADING.md.
+- `Claims.decode` is unchanged (payload parsing, no signature check) but is no
+  longer used to establish identity.
+
 ## 0.6.11
 
 ### Added

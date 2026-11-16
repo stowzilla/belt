@@ -150,6 +150,7 @@ Belt.configure do |config|
   config.authentication.user_class   = 'Account'  # default: 'User'
   config.authentication.admin_groups = %w[staff]  # default: ['admins'], or ADMIN_COGNITO_GROUPS
   config.authentication.issuer       = '...'      # default: derived from COGNITO_USER_POOL_ID
+  config.authentication.client_ids   = %w[...]    # default: COGNITO_CLIENT_ID (comma-separated)
 end
 ```
 
@@ -168,12 +169,46 @@ A route can be authenticated either way, and both are handled:
 1. **API Gateway Cognito authorizer** — claims arrive pre-verified under
    `requestContext.authorizer.claims`, with every value flattened to a string
    (`"true"`, `"[admins, members]"`).
-2. **A raw `Authorization: Bearer <id token>` header** — the Lambda decodes it.
+2. **A raw `Authorization: Bearer <id token>` header**, on a route with no
+   authorizer — nothing has checked it, so Belt does.
 
-Case 2 is signature-unverified by design: where an authorizer is attached, the gateway
-already checked the signature and an unsigned token never reaches your code. What can
-still be checked cheaply is checked — structure, expiry, issuer, and `token_use` (an
-access token is rejected; it carries no email or name).
+For case 2 Belt verifies the token itself and returns no claims unless every check
+passes:
+
+- signed with RS256 by a key in your pool's JWKS (looked up by `kid`, fetched once per
+  Lambda container)
+- `exp` present and in the future
+- `iss` is your pool
+- `token_use` is `id` (an access token carries no email or name)
+- `aud` is one of your app client ids
+
+So a token someone made up is not an identity: `current_user` is nil,
+`cognito_admin?` is false and `authenticate_user!` answers 401.
+
+The Lambda needs to know the pool and the client to verify against. Add both to the
+function's environment (`config/lambda/api.yml`):
+
+```yaml
+env_vars:
+  COGNITO_USER_POOL_ID: ref(cognito_user_pool_id)
+  COGNITO_CLIENT_ID: ref(cognito_client_id)   # comma-separated for several clients
+```
+
+and supply the refs in `infrastructure/modules/app/main.tf`:
+
+```hcl
+lambda_env_refs = merge(var.lambda_env_refs, {
+  cognito_user_pool_id = aws_cognito_user_pool.main.id
+  cognito_client_id    = aws_cognito_user_pool_client.main.id
+})
+```
+
+Without them a header token is never believed — Belt fails closed rather than return
+claims it could not verify. Routes declared `auth: :cognito` need neither variable:
+the gateway has already done the checking.
+
+`Belt::Authentication::Claims.decode` still parses a token's payload without checking
+its signature. It is not an identity check; don't use it as one.
 
 Anything that isn't a Cognito ID token — including your own API key scheme sharing the
 same header — reads as "no Cognito identity" rather than an error, so

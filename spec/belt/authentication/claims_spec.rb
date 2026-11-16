@@ -23,20 +23,56 @@ RSpec.describe Belt::Authentication::Claims do
       expect(claims).to eq('sub' => 'abc')
     end
 
-    it 'decodes the Authorization header when there is no authorizer' do
-      token = id_token('sub' => 'xyz', 'email' => 'a@b.com')
+    context 'with a Bearer header and no authorizer' do
+      let(:issuer) { 'https://cognito-idp.us-east-1.amazonaws.com/us-east-1_pool' }
+      let(:pool_key) { OpenSSL::PKey::RSA.new(2048) }
+      let(:token_claims) do
+        { 'sub' => 'xyz', 'email' => 'a@b.com', 'iss' => issuer, 'aud' => 'client-1',
+          'token_use' => 'id', 'exp' => Time.now.to_i + 600 }
+      end
 
-      claims = described_class.from_event(event(headers: { 'Authorization' => "Bearer #{token}" }))
+      before { Belt::Authentication::TokenVerifier.store_keys(issuer, 'kid-1' => pool_key.public_key) }
+      after { Belt::Authentication::TokenVerifier.reset! }
 
-      expect(claims['sub']).to eq('xyz')
-    end
+      def signed_token(claims)
+        header = Base64.urlsafe_encode64('{"alg":"RS256","kid":"kid-1"}', padding: false)
+        payload = Base64.urlsafe_encode64(JSON.generate(claims), padding: false)
+        signature = Base64.urlsafe_encode64(pool_key.sign('SHA256', "#{header}.#{payload}"), padding: false)
+        "#{header}.#{payload}.#{signature}"
+      end
 
-    it 'accepts a lowercased header name' do
-      token = id_token('sub' => 'xyz')
+      def from_header(token, name: 'Authorization', **options)
+        described_class.from_event(event(headers: { name => "Bearer #{token}" }), **options)
+      end
 
-      claims = described_class.from_event(event(headers: { 'authorization' => "Bearer #{token}" }))
+      it "returns the claims of a token signed by the app's pool" do
+        claims = from_header(signed_token(token_claims), issuer: issuer, client_ids: ['client-1'])
 
-      expect(claims['sub']).to eq('xyz')
+        expect(claims['sub']).to eq('xyz')
+      end
+
+      it 'accepts a lowercased header name' do
+        token = signed_token(token_claims)
+        claims = from_header(token, name: 'authorization', issuer: issuer, client_ids: ['client-1'])
+
+        expect(claims['sub']).to eq('xyz')
+      end
+
+      # Anyone can write a three-part token. Without the pool's signature it is not
+      # an identity, however plausible its claims.
+      it 'returns nil for an unsigned token' do
+        expect(from_header(id_token(token_claims), issuer: issuer, client_ids: ['client-1'])).to be_nil
+      end
+
+      # No pool configured means nothing to verify against: fail closed, even for a
+      # token that would otherwise verify.
+      it 'returns nil when no pool or client is configured' do
+        token = signed_token(token_claims)
+
+        expect(from_header(token)).to be_nil
+        expect(from_header(token, issuer: issuer)).to be_nil
+        expect(from_header(token, client_ids: ['client-1'])).to be_nil
+      end
     end
 
     it 'returns nil with no identity at all' do
@@ -52,6 +88,7 @@ RSpec.describe Belt::Authentication::Claims do
     end
   end
 
+  # Payload parsing only — .from_event never trusts it. See TokenVerifier.
   describe '.decode' do
     it 'rejects an expired token' do
       token = id_token('sub' => 'x', 'exp' => Time.now.to_i - 60)
