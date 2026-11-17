@@ -108,7 +108,16 @@ module Belt
         Belt::HttpStatus.resolve(status)
       end
 
+      # Whether an error response carries the exception class, message and backtrace.
+      # A deployed stack is on the internet whatever it is called, so inside Lambda
+      # this is off unless BELT_VERBOSE_ERRORS=true. Outside Lambda (belt server,
+      # specs) it follows the environment name. BELT_VERBOSE_ERRORS=false turns it
+      # off everywhere. The details are always in the logs.
       def verbose_errors_enabled?
+        setting = ENV['BELT_VERBOSE_ERRORS'].to_s.strip.downcase
+        return setting == 'true' unless setting.empty?
+        return false if ENV.key?('AWS_LAMBDA_FUNCTION_NAME')
+
         env = ENV['ENVIRONMENT']&.downcase || ''
         env.start_with?('dev') || env == 'local' || env == 'test'
       end
