@@ -209,6 +209,152 @@ Declare which DynamoDB tables a route accesses (used by Terraform for IAM):
 resources :posts, tables: [:posts, :comments]
 ```
 
+## Throttling
+
+Cap how many requests API Gateway lets through to a route with `throttle:`:
+`rate` is the steady requests per second, `burst` is how many it absorbs at once.
+Over the limit, callers get a `429` before the Lambda runs.
+
+```ruby
+gateway :api, auth: :none, throttle: { rate: 50, burst: 100 } do  # default for every route
+  post "/reports", to: "reports#create", throttle: { rate: 5, burst: 10 }
+  get "/health", to: "health#show", throttle: false             # opt out of the default
+
+  scope path: "family", throttle: { rate: 1, burst: 2 } do       # scope, namespace, function
+    resources :devices, only: [:create]                         # and nested resources inherit
+  end
+end
+```
+
+A route's own `throttle:` wins, then the nearest enclosing `scope` / `namespace` /
+`function` / `resources` block, then the gateway's. `throttle: false` means "no
+route-level throttle". `belt routes -f json` puts the result on each route, and the
+conveyor-belt provider (0.0.20+) applies it as API Gateway stage method settings.
+
+Where routes.rb sets no throttle, the provider falls back to the serving Lambda's
+`throttle:` in `config/lambda/<fn>.yml`, then to the provider's stage-level
+`throttle` block. Note that a **gateway-level default in routes.rb is a route-level
+throttle**: it beats both of those. Use `throttle: false` on a route if the Lambda
+YAML should decide it.
+
+**Throttles are per route, not per caller.** API Gateway keeps one bucket per
+route, shared by everyone. `throttle: { rate: 5, burst: 10 }` on `POST /reports`
+stops a script from running up the bill, but that same script also uses up the
+limit for real players. For per-caller limits (what Rails' controller
+`rate_limit to:, within:` gives you), put a WAF rate-based rule in front of the
+gateway (see below).
+
+Throttling is approximate, so expect a few requests either side of the limit.
+Method settings override the stage's `*/*` setting. Anything that throttles "the
+whole stage" by patching only `*/*` (an emergency kill switch, for example) no
+longer covers routes that have their own `throttle`. It has to patch those
+method settings too, or cut Lambda concurrency instead.
+
+### Per-caller limits: WAF rate rule recipe
+
+WAF counts requests per client IP over a window and blocks an IP that goes over.
+Attach a REGIONAL web ACL to the gateway stage with the provider's
+`waf_web_acl_arn`. WAF bills per web ACL, per rule and per million requests,
+so one ACL with a few rules is the usual shape.
+
+```hcl
+# infrastructure/modules/app/waf.tf
+resource "aws_wafv2_web_acl" "api" {
+  name  = "${var.app_name}-${var.environment}-api"
+  scope = "REGIONAL" # API Gateway stage; CLOUDFRONT scope is only for distributions (us-east-1)
+
+  default_action {
+    allow {}
+  }
+
+  # 20 POST /reports per IP per minute
+  rule {
+    name     = "reports-per-ip"
+    priority = 1
+
+    action {
+      block {}
+    }
+
+    statement {
+      rate_based_statement {
+        limit                 = 20  # requests per window, minimum 10
+        evaluation_window_sec = 60  # 60, 120, 300 or 600
+        aggregate_key_type    = "IP"
+
+        scope_down_statement {
+          and_statement {
+            statement {
+              byte_match_statement {
+                search_string         = "/reports"
+                positional_constraint = "ENDS_WITH"
+                field_to_match {
+                  uri_path {}
+                }
+                text_transformation {
+                  priority = 0
+                  type     = "NONE"
+                }
+              }
+            }
+            statement {
+              byte_match_statement {
+                search_string         = "POST"
+                positional_constraint = "EXACTLY"
+                field_to_match {
+                  method {}
+                }
+                text_transformation {
+                  priority = 0
+                  type     = "NONE"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "reports-per-ip"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  visibility_config {
+    cloudwatch_metrics_enabled = true
+    metric_name                = "${var.app_name}-${var.environment}-api"
+    sampled_requests_enabled   = true
+  }
+}
+```
+
+```hcl
+resource "conveyor_belt" "main" {
+  # ...
+  waf_web_acl_arn = aws_wafv2_web_acl.api.arn
+}
+```
+
+- **Scope the rule down** to the routes that cost money (public writes). An
+  unscoped rule counts every request, including page loads and polling.
+- **Key on `IP`.** That is the address that connected to whatever the ACL is
+  attached to. If clients call the gateway directly, attach a REGIONAL ACL to the
+  stage as above. If a CloudFront distribution sits in front of the API, a
+  regional ACL only sees CloudFront's edge addresses. Attach a `CLOUDFRONT`-scope
+  ACL (created in us-east-1) to the distribution instead, still keyed on `IP`.
+  Don't key on `X-Forwarded-For` (`FORWARDED_IP`): WAF takes the first address in
+  that header, and the client chooses it, so a script can rotate it to get around
+  the limit.
+- **Watch the path WAF sees.** On the `execute-api` URL the path starts with the
+  stage name (`/dev/reports`), and on a custom domain it doesn't. `ENDS_WITH` matches
+  both.
+- Try a new rule with `action { count {} }` first, check the CloudWatch metric, then
+  switch to `block {}`.
+- Keep the route `throttle:` as well. WAF stops one noisy IP, and the throttle caps
+  the total when many IPs push at once.
+
 ## Inspecting Routes
 
 ```bash
