@@ -5,6 +5,19 @@ change list, see [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## Deployed stacks don't return exception details (unreleased)
+
+Security hardening. A 500 from a deployed stack whose `ENVIRONMENT` started with
+`dev` used to carry the exception class, message and backtrace. Now a function
+running in Lambda returns only the error message, whatever the environment is
+called. `belt server` and specs behave as before.
+
+**Do you need to do anything?** No. Read the details with `belt logs <env>`. If
+you want them back in responses on one stack, add `BELT_VERBOSE_ERRORS: "true"`
+to that environment's `env_vars` in `config/lambda/api.yml`. Leave it off prod.
+
+---
+
 ## Bearer header tokens are verified (0.6.12)
 
 Security fix. On a route **without** an API Gateway authorizer, Belt used to

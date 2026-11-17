@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Security
+
+- **A deployed stack no longer puts exception details in error responses.** A
+  500 from a stack whose `ENVIRONMENT` started with `dev` carried the exception
+  class, message and backtrace in the body. A deployed dev stack is as public as
+  prod, and that output hands a stranger file paths, gem versions and internal
+  messages. Inside Lambda the details now stay in the logs (`belt logs`) unless
+  the function sets `BELT_VERBOSE_ERRORS=true`. Outside Lambda (`belt server`,
+  specs) nothing changes: `dev*`, `local` and `test` are still verbose.
+  `BELT_VERBOSE_ERRORS=false` turns the details off everywhere. See UPGRADING.md.
+
 ## 0.6.12
 
 ### Security

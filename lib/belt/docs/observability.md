@@ -85,7 +85,8 @@ belt logs worker -e prod   # specific environment
 | `BELT_METRICS_NAMESPACE` | CloudWatch metrics namespace (default: `Belt`) |
 | `ACTION` | Service name in log entries (falls back to function name) |
 | `ERROR_NOTIFICATION_TOPIC_ARN` | SNS topic for error alerts |
-| `ENVIRONMENT` | Controls verbose errors (`dev*`/`local`/`test` = verbose) |
+| `ENVIRONMENT` | Outside Lambda (`belt server`, specs), `dev*`/`local`/`test` put the exception class, message and backtrace in error responses |
+| `BELT_VERBOSE_ERRORS` | `true` puts those details in error responses on a deployed stack (off by default: a dev stack is public too); `false` turns them off everywhere |
 
 ## See Also
 

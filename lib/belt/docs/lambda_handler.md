@@ -91,7 +91,8 @@ Belt::Observability::Metrics.track_event("OrderCreated", model: "Order")
 
 | Variable | Purpose |
 |----------|---------|
-| `ENVIRONMENT` | Controls error verbosity (`dev*`, `local`, `test` = verbose) |
+| `ENVIRONMENT` | Outside Lambda, `dev*`, `local`, `test` = verbose error responses |
+| `BELT_VERBOSE_ERRORS` | `true` = verbose error responses on a deployed stack (off by default); `false` = off everywhere |
 | `BELT_METRICS_NAMESPACE` | CloudWatch namespace (default: `Belt`) |
 | `ACTION` | Service name for logging |
 | `ERROR_NOTIFICATION_TOPIC_ARN` | SNS topic for error alerts |

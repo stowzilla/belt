@@ -91,4 +91,46 @@ RSpec.describe Belt::Helpers::Response do
       expect(JSON.parse(result[:body])).to eq('ok' => true)
     end
   end
+
+  # Exception details in a response are for a developer's own machine. A deployed
+  # stack is public whatever its environment is called.
+  describe '#handle_error_and_respond' do
+    let(:host) do
+      Class.new do
+        include Belt::Helpers::Response
+
+        def log_error(*); end
+      end.new
+    end
+    let(:error) do
+      RuntimeError.new('table users-dev01 not found').tap { |e| e.set_backtrace(['app/models/user.rb:12']) }
+    end
+
+    def details_for(env)
+      stub_const('ENV', ENV.to_h.except('BELT_VERBOSE_ERRORS', 'AWS_LAMBDA_FUNCTION_NAME').merge(env))
+      JSON.parse(host.handle_error_and_respond(error, 'Something went wrong')[:body])['details']
+    end
+
+    it 'includes the exception outside Lambda in a dev environment' do
+      expect(details_for('ENVIRONMENT' => 'dev'))
+        .to include('type' => 'RuntimeError', 'backtrace' => ['app/models/user.rb:12'])
+    end
+
+    it 'leaves it out outside Lambda in prod' do
+      expect(details_for('ENVIRONMENT' => 'prod')).to be_nil
+    end
+
+    it 'leaves it out on a deployed dev stack' do
+      expect(details_for('ENVIRONMENT' => 'dev01', 'AWS_LAMBDA_FUNCTION_NAME' => 'app-dev01-api')).to be_nil
+    end
+
+    it 'includes it on a deployed stack that sets BELT_VERBOSE_ERRORS=true' do
+      env = { 'ENVIRONMENT' => 'dev01', 'AWS_LAMBDA_FUNCTION_NAME' => 'app-dev01-api', 'BELT_VERBOSE_ERRORS' => 'true' }
+      expect(details_for(env)).to include('message' => 'table users-dev01 not found')
+    end
+
+    it 'leaves it out everywhere when BELT_VERBOSE_ERRORS=false' do
+      expect(details_for('ENVIRONMENT' => 'dev', 'BELT_VERBOSE_ERRORS' => 'false')).to be_nil
+    end
+  end
 end
