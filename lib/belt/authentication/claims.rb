@@ -11,13 +11,13 @@ module Belt
     #
     #   1. API Gateway Cognito authorizer — claims arrive pre-verified under
     #      requestContext.authorizer.claims, with every value flattened to a String.
-    #   2. A raw `Authorization: Bearer <id token>` header — the Lambda decodes it.
+    #   2. A raw `Authorization: Bearer <id token>` header, on a route with no
+    #      authorizer — nothing has checked it, so TokenVerifier does: signature
+    #      against the pool's JWKS, then expiry, issuer, token use and audience.
     #
-    # Case 2 is signature-unverified by design: when a Cognito authorizer is attached,
-    # the gateway has already checked the signature and an unsigned token never reaches
-    # us. What we can still check cheaply is checked (structure, expiry, issuer, token
-    # use), which is what stops an expired or foreign token from being waved through on
-    # routes that read the header directly.
+    # A header token that can't be verified — forged, expired, foreign, or the app has
+    # no pool configured to verify against — is no identity at all. Unverified claims
+    # are never returned from #from_event.
     module Claims
       # Cognito sends `cognito:groups` as a JSON array in the raw token, but API
       # Gateway flattens it to a string — "[admins, members]" or "admins,members".
@@ -27,19 +27,19 @@ module Belt
 
       class << self
         # Claims for this request, or nil if there is no usable Cognito identity.
-        def from_event(event, issuer: nil)
+        def from_event(event, issuer: nil, client_ids: nil)
           authorizer = event.dig('requestContext', 'authorizer', 'claims')
           return authorizer if authorizer
 
           token = bearer_token(event)
           return nil unless token
 
-          decode(token, issuer: issuer)
+          TokenVerifier.verify(token, issuer: issuer, client_ids: client_ids)
         end
 
         # The raw Bearer credential, whatever it is. Callers that only want Cognito
-        # tokens rely on #decode rejecting anything that isn't one — an app's own API
-        # key scheme can share the header without special-casing here.
+        # tokens rely on TokenVerifier rejecting anything that isn't one — an app's own
+        # API key scheme can share the header without special-casing here.
         def bearer_token(event)
           header = authorization_header(event)
           return nil unless header&.start_with?('Bearer ')
@@ -53,9 +53,13 @@ module Belt
           headers['Authorization'] || headers['authorization']
         end
 
-        # Decode a Cognito ID token's payload, rejecting it unless it is one.
-        # Returns nil rather than raising: a bad token means "no identity", and every
-        # caller here is deciding whether an identity exists.
+        # Parse a Cognito ID token's payload, rejecting it unless it is shaped like one.
+        #
+        # NOT an identity: the signature is not checked, so anyone can write a token
+        # that decodes. Use it only on a token something else has already verified.
+        # #from_event does not call this — it goes through TokenVerifier.
+        #
+        # Returns nil rather than raising for a token that doesn't parse.
         def decode(token, issuer: nil)
           payload = payload_segment(token)
           return nil unless payload

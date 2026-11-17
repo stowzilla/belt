@@ -31,12 +31,15 @@ module Belt
         Claims.bearer_token(event)
       end
 
-      # The Cognito claims on this request, or nil if there aren't any. Memoized
-      # including the nil, so a request decodes at most once.
+      # The Cognito claims on this request, or nil if there aren't any. Always
+      # verified: by the API Gateway authorizer, or — for a Bearer header on a route
+      # without one — by TokenVerifier against the pool's keys. Memoized including the
+      # nil, so a request verifies at most once.
       def cognito_claims
         return @cognito_claims if defined?(@cognito_claims)
 
-        @cognito_claims = Claims.from_event(event, issuer: belt_authentication_config.issuer)
+        config = belt_authentication_config
+        @cognito_claims = Claims.from_event(event, issuer: config.issuer, client_ids: config.client_ids)
       end
 
       def cognito_sub

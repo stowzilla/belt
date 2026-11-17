@@ -22,9 +22,12 @@ module Belt
         @user_class = nil
         @admin_groups = nil
         @issuer = nil
+        @client_ids = nil
       end
 
-      attr_writer :admin_groups, :issuer
+      attr_writer :admin_groups, :issuer, :client_ids
+
+      alias client_id= client_ids=
 
       # Accepts a class or a name. Stored as a name and resolved on demand so the
       # setting can be declared before the model file is loaded.
@@ -52,9 +55,10 @@ module Belt
         configured.empty? ? DEFAULT_ADMIN_GROUPS : configured
       end
 
-      # Expected `iss` claim. Derived from the Cognito env vars Belt's Terraform module
-      # already exports, so apps don't restate it. Nil disables the issuer check —
-      # which is the right behaviour locally and in tests, where there is no pool.
+      # Expected `iss` claim, and where the pool's signing keys are fetched from.
+      # Derived from COGNITO_USER_POOL_ID. Nil means there is no pool to verify a
+      # Bearer header token against, so such a token is never an identity. Routes
+      # behind an API Gateway authorizer don't need it.
       def issuer
         return @issuer if @issuer
 
@@ -63,6 +67,15 @@ module Belt
 
         region = ENV['COGNITO_REGION'] || ENV['AWS_REGION'] || 'us-east-1'
         "https://cognito-idp.#{region}.amazonaws.com/#{pool_id}"
+      end
+
+      # App client ids a Bearer header token may be issued for (its `aud` claim).
+      # From COGNITO_CLIENT_ID, comma-separated when the pool has several clients
+      # (web and mobile, say). Empty means header tokens are never an identity.
+      def client_ids
+        return Array(@client_ids).map(&:to_s) if @client_ids
+
+        ENV.fetch('COGNITO_CLIENT_ID', '').to_s.split(',').map(&:strip).reject(&:empty?)
       end
     end
   end
