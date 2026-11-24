@@ -53,6 +53,29 @@ RSpec.describe Belt::CLI::ApexDnsSync do
     end
   end
 
+  describe '#extract_cloudfront_target' do
+    it 'treats an empty cloudfront_domain_name output as missing' do
+      targets = {}
+      sync.send(:extract_cloudfront_target, { 'cloudfront_domain_name' => { 'value' => '' } }, targets)
+      expect(targets).not_to have_key(:cloudfront)
+    end
+  end
+
+  describe '#warn_missing_cloudfront_output' do
+    let(:sync) do
+      s = described_class.allocate
+      s.instance_variable_set(:@env, 'prod')
+      s.instance_variable_set(:@quiet, false)
+      s.instance_variable_set(:@dns_config, nil)
+      s
+    end
+
+    it 'names the domain left without an A record' do
+      expect { sync.send(:warn_missing_cloudfront_output, 'app.example.com') }
+        .to output(/app\.example\.com has no A record/).to_stdout
+    end
+  end
+
   describe '#while_applying' do
     let(:sync) do
       s = described_class.allocate

@@ -15,6 +15,16 @@
 
 ### Fixed
 
+- **A prod deploy with a custom domain now actually makes the domain resolve.**
+  The apex sync copies the apex, `www` and `api` alias records into the root zone
+  using the env's `cloudfront_domain_name` and `api_gateway_*` outputs, but the
+  generated environment `outputs.tf` never forwarded them from `module.app`. The
+  sync skipped the records without a word and still printed "Apex DNS synced",
+  leaving a deployed site at NXDOMAIN. New environments get the outputs, and a
+  missing output is now a warning naming the domain. Existing projects: add the
+  four outputs from `lib/templates/environment/outputs.tf.erb` to each env's
+  `outputs.tf` and run `belt deploy prod`.
+
 - **The first prod deploy with a custom domain no longer hangs on certificate
   validation.** Prod uses the apex domain, so ACM can only see the validation
   CNAME in the root zone. Terraform writes it to the prod zone, and belt copied

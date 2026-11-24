@@ -37,3 +37,27 @@ output "frontend_url" {
   description = "Frontend URL"
   value       = try(module.app.frontend_url, "")
 }
+
+# --- Apex DNS sync outputs ---
+# `belt deploy prod` reads these to copy the apex, www and api alias records into
+# the root zone. Without them the records never reach the zone the registrar sees.
+
+output "cloudfront_domain_name" {
+  description = "CloudFront distribution domain name (for DNS alias)"
+  value       = try(module.app.cloudfront_domain_name, "")
+}
+
+output "cloudfront_hosted_zone_id" {
+  description = "CloudFront hosted zone ID"
+  value       = try(module.app.cloudfront_hosted_zone_id, "")
+}
+
+output "api_gateway_domain_name" {
+  description = "API Gateway custom domain regional domain name"
+  value       = try(module.app.api_gateway_domain_name, "")
+}
+
+output "api_gateway_hosted_zone_id" {
+  description = "API Gateway custom domain hosted zone ID"
+  value       = try(module.app.api_gateway_hosted_zone_id, "")
+}

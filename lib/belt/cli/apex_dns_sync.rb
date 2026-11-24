@@ -71,6 +71,8 @@ module Belt
         sync_dkim_cnames(root_zone_id, targets[:domain])
 
         # Sync A alias records
+        return warn_missing_cloudfront_output(targets[:domain]) unless targets[:cloudfront]
+
         sync_alias_records(root_zone_id, targets)
 
         puts '  ✓ Apex DNS synced to root zone' unless @quiet
@@ -216,12 +218,12 @@ module Belt
 
       def extract_cloudfront_target(data, targets)
         cf_domain = data.dig('cloudfront_domain_name', 'value')
-        return unless cf_domain
+        return if cf_domain.nil? || cf_domain.empty?
 
         cf_zone = data.dig('cloudfront_hosted_zone_id', 'value')
         targets[:cloudfront] = {
           domain_name: cf_domain,
-          hosted_zone_id: cf_zone || 'Z2FDTNDATAQYW2' # CloudFront's fixed zone ID
+          hosted_zone_id: cf_zone.to_s.empty? ? 'Z2FDTNDATAQYW2' : cf_zone # CloudFront's fixed zone ID
         }
       end
 
@@ -255,6 +257,15 @@ module Belt
         return nil unless status.success?
 
         parse_json(output)
+      end
+
+      # Without the alias records the domain doesn't resolve at all, so this is
+      # a loud warning rather than a silent skip.
+      def warn_missing_cloudfront_output(domain)
+        return if @quiet
+
+        puts "    ⚠ No cloudfront_domain_name output in #{@env}/outputs.tf — #{domain} has no A record"
+        puts '      Forward the cloudfront_* and api_gateway_* outputs from module.app, then redeploy'
       end
 
       def sync_alias_records(root_zone_id, targets)
