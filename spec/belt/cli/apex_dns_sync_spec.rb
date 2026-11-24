@@ -52,4 +52,69 @@ RSpec.describe Belt::CLI::ApexDnsSync do
       expect(sync.send(:fetch_dkim_tokens, 'featureparity.dev')).to eq([])
     end
   end
+
+  describe '#while_applying' do
+    let(:sync) do
+      s = described_class.allocate
+      s.instance_variable_set(:@env_config, nil)
+      s.instance_variable_set(:@dns_config, nil)
+      s.instance_variable_set(:@quiet, true)
+      s
+    end
+
+    let(:record) { { name: '_abc.example.com.', type: 'CNAME', value: '_xyz.acm-validations.aws.' } }
+
+    before { stub_const("#{described_class}::ACM_WATCH_INTERVAL", 0.01) }
+
+    it 'just runs the block for non-apex envs' do
+      allow(sync).to receive(:needs_sync?).and_return(false)
+      allow(Belt::CLI::AcmPendingValidation).to receive(:records)
+
+      expect(sync.while_applying { :applied }).to eq(:applied)
+      expect(Belt::CLI::AcmPendingValidation).not_to have_received(:records)
+    end
+
+    it 'publishes the pending validation CNAME to the root zone once, while the block runs' do
+      allow(sync).to receive_messages(needs_sync?: true, env_tfvars_domain: 'example.com', fetch_root_zone_id: 'Z123')
+      allow(Belt::CLI::AcmPendingValidation).to receive(:records).with('example.com', {}).and_return([record])
+      upserts = Queue.new
+      allow(sync).to receive(:upsert_validation_cnames) do |zone, changes|
+        upserts << [zone, changes]
+        true
+      end
+
+      result = sync.while_applying do
+        upserts.pop(timeout: 2).tap { sleep 0.05 } # let the watcher poll a few more times
+      end
+
+      zone, changes = result
+      expect(zone).to eq('Z123')
+      expect(changes).to eq([{ Action: 'UPSERT',
+                               ResourceRecordSet: { Name: '_abc.example.com.', Type: 'CNAME', TTL: 300,
+                                                    ResourceRecords: [{ Value: '_xyz.acm-validations.aws.' }] } }])
+      expect(sync).to have_received(:upsert_validation_cnames).once
+    end
+
+    it 'keeps polling until ACM has a record, and stops when the block returns' do
+      allow(sync).to receive_messages(needs_sync?: true, env_tfvars_domain: 'example.com', fetch_root_zone_id: 'Z123')
+      calls = 0
+      allow(Belt::CLI::AcmPendingValidation).to receive(:records) { (calls += 1) < 3 ? [] : [record] }
+      published = Queue.new
+      allow(sync).to receive(:upsert_validation_cnames) { published << true }
+
+      sync.while_applying { published.pop(timeout: 2) }
+
+      expect(calls).to be >= 3
+      expect(sync).to have_received(:upsert_validation_cnames).once
+    end
+
+    it 'does not watch when the root zone ID is unavailable' do
+      allow(sync).to receive_messages(needs_sync?: true, env_tfvars_domain: 'example.com', fetch_root_zone_id: nil)
+      allow(Belt::CLI::AcmPendingValidation).to receive(:records)
+
+      sync.while_applying { :applied }
+
+      expect(Belt::CLI::AcmPendingValidation).not_to have_received(:records)
+    end
+  end
 end

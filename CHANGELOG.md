@@ -13,6 +13,20 @@
   specs) nothing changes: `dev*`, `local` and `test` are still verbose.
   `BELT_VERBOSE_ERRORS=false` turns the details off everywhere. See UPGRADING.md.
 
+### Fixed
+
+- **The first prod deploy with a custom domain no longer hangs on certificate
+  validation.** Prod uses the apex domain, so ACM can only see the validation
+  CNAME in the root zone. Terraform writes it to the prod zone, and belt copied
+  it to the root zone only after `terraform apply` finished. The apply was
+  waiting on that record, so it ran out its 75-minute timeout and aborted.
+  The rerun hit the same wait. `belt deploy prod` now polls ACM during the apply
+  and publishes the CNAME to the root zone as soon as ACM issues it.
+- **`belt dns sync-validation prod` finds the certificate in apps without a
+  `certificate_arn` output.** It read only that output, which the app template
+  doesn't define and which is empty until a first apply finishes. It now falls
+  back to asking ACM for pending certs on the domain.
+
 ## 0.6.12
 
 ### Security

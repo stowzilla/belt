@@ -3,6 +3,7 @@
 require 'json'
 require 'open3'
 require_relative 'environment_config'
+require_relative 'acm_pending_validation'
 
 module Belt
   module CLI
@@ -17,6 +18,7 @@ module Belt
     # Gateway) to the root zone, and ensure ACM validation CNAMEs are there too.
     class ApexDnsSync
       DNS_DIR = 'infrastructure/dns'
+      ACM_WATCH_INTERVAL = 15 # seconds between ACM checks during an apply
 
       def initialize(env, infra_dir:, quiet: false)
         @env = env
@@ -74,7 +76,73 @@ module Belt
         puts '  ✓ Apex DNS synced to root zone' unless @quiet
       end
 
+      # Run the block (terraform apply) while publishing this env's ACM
+      # validation CNAMEs to the root zone as soon as ACM issues them.
+      #
+      # aws_acm_certificate_validation blocks the apply until ACM can resolve
+      # the CNAME. On an apex env Terraform writes it to the env's own zone,
+      # which the internet can't see, and #run only syncs it after the apply.
+      # Without this the first apex deploy waits out the 75-minute timeout.
+      # Returns the block's value.
+      def while_applying
+        watcher = start_acm_validation_watcher
+        yield
+      ensure
+        if watcher
+          @watch_stop << true
+          watcher.join
+        end
+      end
+
       private
+
+      def start_acm_validation_watcher
+        return nil unless needs_sync?
+
+        domain = env_tfvars_domain
+        return nil unless domain
+
+        root_zone_id = fetch_root_zone_id
+        unless root_zone_id
+          # Usually an expired SSO session on the dns profile. Say so now: the
+          # apply will sit on cert validation until this is fixed.
+          puts '  ⚠ Could not read the root zone ID from infrastructure/dns (is its AWS profile logged in?). ' \
+               'ACM validation CNAMEs will not be published during this apply.'
+          return nil
+        end
+
+        @watch_stop = Queue.new
+        Thread.new { watch_acm_validation(root_zone_id, domain) }
+      end
+
+      def watch_acm_validation(root_zone_id, domain)
+        published = []
+        loop do
+          published.concat(publish_pending_validation(root_zone_id, domain, published))
+          break if @watch_stop.pop(timeout: ACM_WATCH_INTERVAL)
+        end
+      rescue StandardError => e
+        puts "    ⚠ ACM validation watcher stopped: #{e.message}" unless @quiet
+      end
+
+      # Upserts pending validation CNAMEs not yet published. Returns their names.
+      def publish_pending_validation(root_zone_id, domain, published)
+        records = AcmPendingValidation.records(domain, aws_env_for(@env_config))
+                                      .reject { |r| published.include?(r[:name]) }
+        return [] if records.empty?
+
+        options = records.map { |r| { 'resource_record_name' => r[:name], 'resource_record_value' => r[:value] } }
+        return [] unless upsert_validation_cnames(root_zone_id, build_validation_changes(options))
+
+        records.map { |r| r[:name] }
+      end
+
+      def env_tfvars_domain
+        tfvars_path = File.join(@infra_dir, @env, 'terraform.tfvars')
+        return nil unless File.exist?(tfvars_path)
+
+        File.read(tfvars_path)[/^\s*domain\s*=\s*"([^"]+)"/, 1]
+      end
 
       def dns_dir_exists?
         dns_path = File.join(@project_root, DNS_DIR)
@@ -179,18 +247,14 @@ module Belt
       def fetch_root_zone_id
         return nil unless dns_dir_exists?
 
-        Dir.chdir(dns_dir_path) do
-          env = aws_env_for(@dns_config)
+        # chdir: rather than Dir.chdir, so this is safe to call while the deploy
+        # is inside its own Dir.chdir block.
+        output, status = Open3.capture2e(aws_env_for(@dns_config),
+                                         'terraform', 'output', '-json', 'root_zone_id',
+                                         chdir: dns_dir_path)
+        return nil unless status.success?
 
-          output, status = Open3.capture2e(env, 'terraform', 'output', '-json', 'root_zone_id')
-          return nil unless status.success?
-
-          begin
-            JSON.parse(output)
-          rescue JSON::ParserError
-            nil
-          end
-        end
+        parse_json(output)
       end
 
       def sync_alias_records(root_zone_id, targets)
@@ -288,7 +352,7 @@ module Belt
         changes
       end
 
-      def upsert_validation_cnames(root_zone_id, changes)
+      def upsert_validation_cnames(root_zone_id, changes) # rubocop:disable Naming/PredicateMethod
         change_batch = {
           Comment: 'Belt ACM validation sync',
           Changes: changes
@@ -307,6 +371,7 @@ module Belt
         else
           puts '    ⚠ Failed to sync ACM validation CNAME' unless @quiet
         end
+        status.success?
       end
 
       # Publish the SES Easy-DKIM CNAMEs for the apex email domain into the root

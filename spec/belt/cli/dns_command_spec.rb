@@ -404,4 +404,26 @@ RSpec.describe Belt::CLI::DnsCommand do
       end
     end
   end
+
+  describe '#fetch_pending_acm_validation' do
+    let(:dns_command) { described_class.new(quiet: true) }
+    let(:env_config) { instance_double(Belt::CLI::EnvironmentConfig, aws_profile?: true, aws_profile: 'prod') }
+    let(:record) { { name: '_abc.example.com.', type: 'CNAME', value: '_xyz.acm-validations.aws.' } }
+
+    before do
+      FileUtils.mkdir_p('infrastructure/prod')
+      FileUtils.mkdir_p('infrastructure/dns')
+      File.write('infrastructure/dns/terraform.tfvars', %(domain = "example.com"\n))
+    end
+
+    it 'asks ACM for pending certs on the domain when the app has no certificate_arn output' do
+      no_output = instance_double(Process::Status, success?: false)
+      allow(Open3).to receive(:capture2e).and_return(['Output "certificate_arn" not found', no_output])
+      allow(Belt::CLI::AcmPendingValidation).to receive(:records).and_return([record])
+
+      expect(dns_command.send(:fetch_pending_acm_validation, 'prod', env_config)).to eq([record])
+      expect(Belt::CLI::AcmPendingValidation).to have_received(:records)
+        .with('example.com', 'AWS_PROFILE' => 'prod')
+    end
+  end
 end
