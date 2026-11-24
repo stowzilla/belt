@@ -67,6 +67,12 @@ The Conveyor Belt Terraform provider reads your Ruby DSL and creates:
 5. **DynamoDB tables** — from your schema definition
 6. **Custom domain** — if configured (Route53 + ACM certificate)
 
+On prod, the app lives at the apex domain, so the ACM validation CNAME has to be
+in the root zone (`infrastructure/dns`), which is the zone the registrar points
+at. `belt deploy prod` publishes it there while `terraform apply` waits on the
+certificate, so the first prod deploy validates without any manual Route53 work.
+If it ever gets stuck, `belt dns sync-validation prod` does the same step by hand.
+
 ## Lambda Packaging
 
 Belt packages the `lambda/` directory plus vendored gems. For `path:` gems

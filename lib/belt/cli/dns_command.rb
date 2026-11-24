@@ -6,6 +6,7 @@ require 'json'
 require_relative 'app_detection'
 require_relative 'environment_config'
 require_relative 'setup_command'
+require_relative 'acm_pending_validation'
 
 module Belt
   module CLI
@@ -858,7 +859,12 @@ module Belt
           Open3.capture2e(env, 'terraform', 'output', '-raw', 'certificate_arn')
         end
 
-        return nil unless arn_status.success? && !arn_output.strip.empty?
+        # No certificate_arn output: either the app's outputs.tf doesn't define
+        # one, or a first apply is still waiting on validation. Ask ACM for
+        # pending certs on the apex domain instead.
+        unless arn_status.success? && !arn_output.strip.empty?
+          return AcmPendingValidation.records(read_domain_from_tfvars, env)
+        end
 
         cert_arn = arn_output.strip
 

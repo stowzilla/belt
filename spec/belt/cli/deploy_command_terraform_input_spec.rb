@@ -63,8 +63,10 @@ RSpec.describe Belt::CLI::DeployCommand, 'non-interactive terraform invocations'
         true
       end
       allow(cmd).to receive(:cleanup_plan)
+      apex_sync = instance_double(Belt::CLI::ApexDnsSync)
+      allow(apex_sync).to receive(:while_applying).and_yield
 
-      cmd.send(:run_apply)
+      cmd.send(:run_apply, apex_sync)
 
       expect(captured).to eq(['terraform', 'apply', '-input=false', 'tfplan'])
     end

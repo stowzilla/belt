@@ -188,12 +188,15 @@ module Belt
         run_backups unless @skip_backup
         build_zip_artifacts!
 
+        # Built before the chdir: it resolves paths from @infra_dir, which is relative.
+        apex_sync = ApexDnsSync.new(@env, infra_dir: File.expand_path(@infra_dir))
+
         Dir.chdir(env_dir) do
           run_init
           run_plan
           return unless confirm_apply?
 
-          run_apply
+          run_apply(apex_sync)
         end
 
         # Sync apex DNS records to root zone (if this is a prod/apex environment)
@@ -892,9 +895,13 @@ module Belt
         false
       end
 
-      def run_apply
+      def run_apply(apex_sync)
         puts '━━━ terraform apply ━━━'
-        success = system('terraform', 'apply', '-input=false', 'tfplan')
+        # Apex envs (prod) publish ACM validation CNAMEs to the root zone while
+        # the apply runs, so the cert validation wait can finish.
+        success = apex_sync.while_applying do
+          system('terraform', 'apply', '-input=false', 'tfplan')
+        end
         cleanup_plan
         abort "\n✗ terraform apply failed" unless success
       end
