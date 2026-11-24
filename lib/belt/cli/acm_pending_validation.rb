@@ -13,8 +13,9 @@ module Belt
     # and aws_acm_certificate_validation blocks the apply until the CNAME is
     # published. Reading ACM lets `belt deploy` publish the CNAME mid-apply.
     module AcmPendingValidation
-      # Belt's module uses one cert for CloudFront and API Gateway. CloudFront
-      # only accepts certs from us-east-1, so that's where it always lives.
+      # Belt's module uses one cert for CloudFront and API Gateway. The cert is
+      # created in the env's aws_region, but CloudFront only accepts us-east-1
+      # certs, so any env with a working custom domain has it there.
       REGION = 'us-east-1'
 
       module_function
